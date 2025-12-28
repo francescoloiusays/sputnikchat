@@ -10,7 +10,27 @@
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     
     <style>
-        body { margin: 0; overflow: hidden; font-family: Planewalker.woff; background: #111; }
+        /* 1. DEFINIZIONE FONT */
+        @font-face {
+            font-family: 'Planewalker';
+            src: url('./Planewalker.woff') format('woff');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        /* 2. APPLICAZIONE GLOBALE */
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: 'Planewalker', sans-serif; /* Fallback a sans-serif se manca il file */
+            background: #111; 
+        }
+
+        /* Forza il font anche su input e bottoni (spesso i browser usano il default di sistema) */
+        button, input, select, textarea {
+            font-family: 'Planewalker', sans-serif;
+        }
+
         canvas { display: block; }
         
         .ui-layer { position: absolute; pointer-events: none; width: 100%; height: 100%; top: 0; left: 0; }
@@ -22,20 +42,24 @@
             background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 100; color: white;
         }
-        #nickname-input { padding: 10px; font-size: 18px; border-radius: 5px; border: none; text-align: center; }
-        #play-btn { margin-top: 20px; padding: 10px 30px; font-size: 20px; cursor: pointer; background: #ff6600; color: white; border: none; border-radius: 5px; font-weight: bold; }
+        #nickname-input { padding: 10px; font-size: 24px; border-radius: 5px; border: none; text-align: center; }
+        #play-btn { 
+            margin-top: 20px; padding: 10px 30px; font-size: 24px; cursor: pointer; 
+            background: #ff6600; color: white; border: none; border-radius: 5px; 
+            text-transform: uppercase; letter-spacing: 1px;
+        }
         
         /* UI Top Left */
         #ui-top-left {
             position: absolute; top: 10px; left: 10px; z-index: 20;
             background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; color: white;
-            display: flex; flex-direction: column; gap: 8px; width: 200px;
+            display: flex; flex-direction: column; gap: 8px; width: 220px;
         }
-        select { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; width: 100%; }
+        select { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; width: 100%; font-size: 16px; }
         
         /* Bottoni UI */
         .ui-btn {
-            background: #333; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; text-align: center;
+            background: #333; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; text-align: center;
         }
         .ui-btn.active { background: #00cc00; }
         .ui-btn.music-on { background: #0066cc; }
@@ -44,6 +68,7 @@
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: white; background: rgba(0, 0, 0, 0.7); padding: 20px;
             text-align: center; cursor: pointer; border-radius: 10px; z-index: 10; user-select: none; display: none;
+            font-size: 20px;
         }
 
         /* Chat Box */
@@ -52,35 +77,35 @@
             background: rgba(0, 0, 0, 0.5); border-radius: 8px; z-index: 50;
             display: flex; flex-direction: column; padding: 10px; pointer-events: auto;
         }
-        #chat-messages { flex-grow: 1; overflow-y: auto; color: white; font-size: 14px; margin-bottom: 5px; text-shadow: 1px 1px 1px black; }
-        .chat-name { font-weight: bold; color: #ffaa00; margin-right: 5px; }
-        #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 93%; }
+        #chat-messages { flex-grow: 1; overflow-y: auto; color: white; font-size: 18px; margin-bottom: 5px; text-shadow: 1px 1px 1px black; }
+        .chat-name { color: #ffaa00; margin-right: 5px; }
+        #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 93%; font-size: 16px; }
 
-        #status { position: absolute; bottom: 10px; left: 10px; color: yellow; font-family: monospace; z-index: 20; text-shadow: 1px 1px 0 #000; font-size: 14px; }
+        #status { position: absolute; bottom: 10px; left: 10px; color: yellow; z-index: 20; text-shadow: 1px 1px 0 #000; font-size: 16px; }
     </style>
 </head>
 <body>
 
     <div id="login-overlay" class="pointer-auto">
-        <h1>BENVENUTO</h1>
-        <p style="font-size: 0.8em; color: #ccc;">Consenti l'uso del microfono quando richiesto</p>
+        <h1 style="font-size: 60px; margin-bottom: 10px;">BENVENUTO</h1>
+        <p style="font-size: 1.2em; color: #ccc;">Consenti l'uso del microfono quando richiesto</p>
         <input id="nickname-input" type="text" placeholder="Scegli Nickname" maxlength="12">
         <button id="play-btn">ENTRA NEL GIOCO</button>
     </div>
 
     <div id="ui-top-left" class="pointer-auto">
         <!-- Skin Selector -->
-        <div><label>Skin:</label><select id="avatarSelect"></select></div>
+        <div><label style="font-size: 18px;">Skin:</label><select id="avatarSelect"></select></div>
         
         <!-- Camera Mode -->
-        <div style="font-size:0.9em; color:#ccc;" id="cam-mode">Visuale: 1a Persona</div>
+        <div style="font-size:16px; color:#ccc; margin-top: 5px;" id="cam-mode">Visuale: 1a Persona</div>
         
         <!-- Mic Button -->
         <button id="mic-btn" class="ui-btn" style="background: #cc0000;">Microfono: OFF (Premi M)</button>
         
         <!-- Music Player -->
         <div style="border-top: 1px solid #555; margin-top: 5px; padding-top: 5px;">
-            <div style="font-size:0.8em; color:#ccc; margin-bottom: 4px;">Brano: <span id="music-name" style="color:white;">Nessuno</span></div>
+            <div style="font-size:16px; color:#ccc; margin-bottom: 4px;">Brano: <span id="music-name" style="color:white;">Nessuno</span></div>
             <button id="music-btn" class="ui-btn">Musica: OFF (Premi B)</button>
         </div>
     </div>
@@ -88,7 +113,7 @@
     <div id="status">Connecting...</div>
 
     <div id="instructions">
-        <h1>Clicca per Giocare</h1>
+        <h1 style="font-size: 40px;">Clicca per Giocare</h1>
         <p>Muoviti: <b>WASD</b> + <b>SPAZIO</b><br>Chat: <b>INVIO</b><br>Voce: <b>M</b> | Musica: <b>B</b><br>Guarda: <b>MOUSE</b></p>
     </div>
 
@@ -290,7 +315,13 @@
         }
 
         async function toggleMusic() {
-            if(!bgMusic) return;
+            // Se bgMusic non esiste, riprova a crearlo (sicurezza)
+            if(!bgMusic) {
+                 bgMusic = new Audio(MUSIC_FILE);
+                 bgMusic.loop = true;
+                 bgMusic.volume = 0.3;
+            }
+
             const btn = document.getElementById('music-btn');
             isMusicOn = !isMusicOn;
             
@@ -302,6 +333,7 @@
                 } catch(e) {
                     isMusicOn = false;
                     console.warn("Autoplay bloccato", e);
+                    alert("Impossibile avviare musica. Controlla il file su GitHub.");
                 }
             } else {
                 bgMusic.pause();
