@@ -128,6 +128,7 @@
 
     <script type="module">
         import * as THREE from 'three';
+        import { Minimap } from './minimap.js'; // <--- AGGIUNGI QUESTO
 
         // --- URL SERVER ---
         const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
@@ -136,7 +137,7 @@
         const MUSIC_FILE = "./soundtrack.mp3"; 
         const MUSIC_TITLE = "Soundtrack";
 
-        let scene, camera, renderer, loader, socket;
+        let scene, camera, renderer, loader, socket, minimap;
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         let canJump = false, isLocked = false, isThirdPerson = false;
         let playerGroup, avatarMesh, theta = 0, phi = 0;
@@ -301,6 +302,8 @@
                 camera.updateProjectionMatrix();
                 renderer.setSize(window.innerWidth, window.innerHeight);
             });
+minimap = new Minimap(scene, playerGroup, remotePlayers);
+
         }
 
         // --- MUSIC ---
@@ -524,6 +527,7 @@
         }
         function animate() {
             requestAnimationFrame(animate);
+            if(minimap) minimap.update();
             if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
             const t = performance.now() * 0.001;
             torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
