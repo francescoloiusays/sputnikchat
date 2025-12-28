@@ -281,10 +281,10 @@
                 const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
                 const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
 
-                if(moveForward) velocity.add(fwd.clone().multiplyScalar(400 * dt));
-                if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-400 * dt));
-                if(moveLeft) velocity.add(right.clone().multiplyScalar(-400 * dt));
-                if(moveRight) velocity.add(right.clone().multiplyScalar(400 * dt));
+                if(moveForward) velocity.add(fwd.clone().multiplyScalar(150 * dt));
+                if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-150 * dt));
+                if(moveLeft) velocity.add(right.clone().multiplyScalar(-150 * dt));
+                if(moveRight) velocity.add(right.clone().multiplyScalar(150 * dt));
 
                 const dx = velocity.x * dt; playerGroup.position.x += dx;
                 if(checkCol(playerGroup.position)) { playerGroup.position.x -= dx; velocity.x = 0; }
