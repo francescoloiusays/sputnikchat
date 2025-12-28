@@ -4,96 +4,150 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Castle 3D MMO</title>
-    <!-- GIFLER per texture animate -->
     <script src="https://unpkg.com/gifler@0.1.0/gifler.min.js"></script>
-    <!-- SOCKET.IO CLIENT -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #111; }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #111; }
         canvas { display: block; }
         
-        #ui-container {
+        /* UI container generico */
+        .ui-layer { position: absolute; pointer-events: none; width: 100%; height: 100%; top: 0; left: 0; }
+        .pointer-auto { pointer-events: auto; }
+
+        /* Login Overlay */
+        #login-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100; color: white;
+        }
+        #nickname-input { padding: 10px; font-size: 18px; border-radius: 5px; border: none; text-align: center; }
+        #play-btn { 
+            margin-top: 20px; padding: 10px 30px; font-size: 20px; cursor: pointer; 
+            background: #ff6600; color: white; border: none; border-radius: 5px; font-weight: bold;
+        }
+        #play-btn:hover { background: #ff8533; }
+
+        /* Menu in alto */
+        #ui-top-left {
             position: absolute; top: 10px; left: 10px; z-index: 20;
             background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; color: white;
-            pointer-events: auto;
         }
         select { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; }
         
-        #status {
-            position: absolute; bottom: 10px; left: 10px; color: yellow; font-family: monospace; z-index: 20;
-            text-shadow: 1px 1px 0 #000; font-size: 14px;
-        }
-        
+        /* Istruzioni Centro */
         #instructions {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: white; background: rgba(0, 0, 0, 0.7); padding: 20px;
             text-align: center; cursor: pointer; border-radius: 10px; z-index: 10; user-select: none;
+            display: none; /* Nascosto all'inizio, appare dopo il login */
+        }
+
+        /* CHAT BOX */
+        #chat-container {
+            position: absolute; bottom: 20px; right: 20px; width: 320px; height: 250px;
+            background: rgba(0, 0, 0, 0.5); border-radius: 8px; z-index: 50;
+            display: flex; flex-direction: column; padding: 10px;
+            pointer-events: auto; /* Importante per poter cliccare */
+        }
+        #chat-messages {
+            flex-grow: 1; overflow-y: auto; color: white; font-size: 14px; margin-bottom: 5px;
+            text-shadow: 1px 1px 1px black; scrollbar-width: thin;
+        }
+        #chat-messages div { margin-bottom: 4px; line-height: 1.4; word-wrap: break-word; }
+        .chat-name { font-weight: bold; color: #ffaa00; margin-right: 5px; }
+        #chat-input {
+            background: rgba(255,255,255,0.1); border: 1px solid #555; color: white;
+            padding: 8px; border-radius: 4px; width: 93%;
+        }
+        #chat-input:focus { outline: none; border-color: #ff6600; background: rgba(0,0,0,0.8); }
+
+        #status {
+            position: absolute; bottom: 10px; left: 10px; color: yellow; font-family: monospace; z-index: 20;
+            text-shadow: 1px 1px 0 #000; font-size: 14px;
         }
     </style>
 </head>
 <body>
 
-    <div id="ui-container">
+    <!-- Login -->
+    <div id="login-overlay" class="pointer-auto">
+        <h1>BENVENUTO</h1>
+        <input id="nickname-input" type="text" placeholder="Scegli Nickname" maxlength="12">
+        <button id="play-btn">ENTRA NEL GIOCO</button>
+    </div>
+
+    <!-- UI di gioco -->
+    <div id="ui-top-left" class="pointer-auto">
         <div><label>Skin:</label><select id="avatarSelect"></select></div>
         <div style="margin-top:5px; font-size:0.9em" id="cam-mode">Visuale: 1a Persona</div>
     </div>
     
-    <div id="status">Connecting to server...</div>
+    <div id="status">Connecting...</div>
 
     <div id="instructions">
-        <h1>Clicca per Entrare</h1>
-        <p>Muoviti: <b>WASD</b> + <b>SPAZIO</b><br>Visuale: <b>V</b><br>Guarda: <b>MOUSE</b><br>(ESC per Menu)</p>
+        <h1>Clicca per Giocare</h1>
+        <p>Muoviti: <b>WASD</b> + <b>SPAZIO</b><br>Chat: <b>INVIO</b> per scrivere<br>Guarda: <b>MOUSE</b><br>(ESC per Menu)</p>
+    </div>
+
+    <!-- CHAT -->
+    <div id="chat-container">
+        <div id="chat-messages"></div>
+        <input id="chat-input" type="text" placeholder="Premi invio per scrivere..." autocomplete="off">
     </div>
 
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
     </script>
 
     <script type="module">
         import * as THREE from 'three';
 
-        // --- CONFIGURAZIONE ---
-        // URL DEL TUO SERVER RENDER
+        // --- URL SERVER ---
         const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
 
-        // --- GLOBALS ---
         let scene, camera, renderer, loader, socket;
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         let canJump = false, isLocked = false, isThirdPerson = false;
-
-        // Local Player
         let playerGroup, avatarMesh, theta = 0, phi = 0;
         let velocity = new THREE.Vector3();
         const GRAVITY = 30.0;
-        let mySkin = "plebeo.png"; // Default skin
-
-        // Multiplayer
-        const remotePlayers = {}; // { socketId: Mesh }
         
-        // Environment
+        let mySkin = "plebeo.png";
+        let myName = "Anonimo";
+
+        const remotePlayers = {}; 
         const wallMeshes = [], colliders = [], torchLights = [];
         let wallTexture, floorTexture, torchAnimatedTexture;
         const cameraRaycaster = new THREE.Raycaster();
 
-        // Opzioni Avatar
         const avatarOptions = [
             { label: "Fan", file: "Fan.png" },
             { label: "Alessandro", file: "Alessandro.png" },
             { label: "Plebeo", file: "plebeo.png" }
         ];
 
-        init();
-        initSocket(); 
-        animate();
+        // START
+        setupLogin();
+
+        function setupLogin() {
+            const btn = document.getElementById('play-btn');
+            const input = document.getElementById('nickname-input');
+            
+            btn.addEventListener('click', () => {
+                const val = input.value.trim();
+                if(val.length > 0) myName = val;
+                
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('instructions').style.display = 'block';
+                
+                init();
+                initSocket(); 
+                animate();
+            });
+        }
 
         function init() {
-            // SCENA
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x111111);
             scene.fog = new THREE.Fog(0x111111, 0, 50);
@@ -101,7 +155,6 @@
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             scene.add(camera);
 
-            // TEXTURES
             loader = new THREE.TextureLoader();
             const loadTex = (p) => loader.load(p, (t) => t.colorSpace = THREE.SRGBColorSpace);
             
@@ -116,14 +169,11 @@
             torchAnimatedTexture.minFilter = THREE.NearestFilter;
             try { window.gifler('./torcia.gif').animate(gifCanvas); } catch(e){}
 
-            // LOCAL PLAYER SETUP
             playerGroup = new THREE.Group();
             scene.add(playerGroup);
 
             const avatarGeo = new THREE.PlaneGeometry(0.8, 1.7);
-            const avatarMat = new THREE.MeshStandardMaterial({ 
-                transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 
-            });
+            const avatarMat = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 });
             avatarMesh = new THREE.Mesh(avatarGeo, avatarMat);
             avatarMesh.position.set(0, 0.85, 0); 
             avatarMesh.visible = false;
@@ -132,16 +182,14 @@
             setupAvatarMenu();
             buildLevel();
 
-            // LUCI
             const ambient = new THREE.AmbientLight(0xffffff, 0.2);
             scene.add(ambient);
 
-            // RENDERER
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // EVENTI INPUT
+            // INPUTS
             const instructions = document.getElementById('instructions');
             instructions.addEventListener('click', () => document.body.requestPointerLock());
             
@@ -150,17 +198,44 @@
                 instructions.style.display = isLocked ? 'none' : 'block';
             });
 
-            // GESTIONE MOUSE (CORRETTA: Phi += per invertire asse Y)
             document.addEventListener('mousemove', (e) => {
                 if(!isLocked) return;
-                theta -= e.movementX * 0.002; // Rotazione orizzontale
-                phi -= e.movementY * 0.002;   // Rotazione verticale (Mouse SU = Guarda SU)
-                
-                // Limite visuale verticale (per non ribaltarsi)
+                theta -= e.movementX * 0.002;
+                phi -= e.movementY * 0.002; // Asse invertito
                 phi = Math.max(-1.5, Math.min(1.5, phi));
             });
 
+            // Chat Input Logic
+            const chatInput = document.getElementById('chat-input');
+            
+            // Quando si preme tasti in generale
             document.addEventListener('keydown', (e) => {
+                // Se stiamo scrivendo in chat, IGNORA i comandi di movimento
+                if (document.activeElement === chatInput) {
+                    if (e.code === 'Enter') {
+                        const txt = chatInput.value.trim();
+                        if (txt.length > 0 && socket) {
+                            socket.emit('chatMessage', txt);
+                            chatInput.value = '';
+                        }
+                        // Togli focus dopo invio per tornare a muoversi? 
+                        // O meglio lasciare focus per scrivere ancora? 
+                        // Di solito si lascia focus. Per uscire: ESC o click fuori.
+                    }
+                    if (e.code === 'Escape') {
+                         chatInput.blur(); // Esci dalla chat
+                         document.body.requestPointerLock(); // Rientra nel gioco
+                    }
+                    return; // STOP qui, non eseguire WASD
+                }
+
+                // Tasto Invio per entrare in chat
+                if (e.code === 'Enter') {
+                    document.exitPointerLock(); // Sblocca mouse
+                    chatInput.focus(); // Entra nel campo
+                    return;
+                }
+
                 switch(e.code) {
                     case 'KeyW': moveForward = true; break;
                     case 'KeyS': moveBackward = true; break;
@@ -174,6 +249,7 @@
                         break;
                 }
             });
+
             document.addEventListener('keyup', (e) => {
                 switch(e.code) {
                     case 'KeyW': moveForward = false; break;
@@ -182,6 +258,7 @@
                     case 'KeyD': moveRight = false; break;
                 }
             });
+            
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
@@ -189,18 +266,13 @@
             });
         }
 
-        // --- SOCKET.IO ---
+        // --- SOCKET ---
         function initSocket() {
             socket = io(SOCKET_URL);
 
             socket.on('connect', () => {
-                document.getElementById('status').innerText = "Online: " + socket.id;
+                document.getElementById('status').innerText = "Online: " + myName;
                 document.getElementById('status').style.color = "lime";
-            });
-
-            socket.on('connect_error', () => {
-                document.getElementById('status').innerText = "Errore Connessione";
-                document.getElementById('status').style.color = "red";
             });
 
             socket.on('currentPlayers', (players) => {
@@ -224,12 +296,35 @@
                 if (p) updateRemoteSkin(p, data.skin);
             });
 
+            // RICEZIONE CHAT
+            socket.on('chatMessage', (data) => {
+                addChatMessage(data.name, data.text);
+            });
+
             socket.on('playerDisconnected', (id) => {
                 if (remotePlayers[id]) {
                     scene.remove(remotePlayers[id]);
                     delete remotePlayers[id];
                 }
             });
+        }
+
+        function addChatMessage(name, text) {
+            const container = document.getElementById('chat-messages');
+            const msgDiv = document.createElement('div');
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'chat-name';
+            nameSpan.innerText = name + ":";
+            
+            const textSpan = document.createElement('span');
+            textSpan.innerText = " " + text;
+            
+            msgDiv.appendChild(nameSpan);
+            msgDiv.appendChild(textSpan);
+            
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight; // Auto-scroll
         }
 
         function addRemotePlayer(id, data) {
@@ -250,10 +345,8 @@
             });
         }
 
-        // --- GAME LOGIC ---
         function animate() {
             requestAnimationFrame(animate);
-            
             if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
             const t = performance.now() * 0.001;
             torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
@@ -261,41 +354,29 @@
             if(isLocked) {
                 const dt = 0.016; 
                 velocity.y -= GRAVITY * dt;
-                
-                // Attrito movimento
                 velocity.x -= velocity.x * 10.0 * dt;
                 velocity.z -= velocity.z * 10.0 * dt;
 
-                // Calcolo vettori direzione
                 const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
                 const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
-
-                // VELOCITA' RIDOTTA (150 invece di 400)
-                const speed = 30.0;
+                const speed = 150.0;
 
                 if(moveForward) velocity.add(fwd.clone().multiplyScalar(speed * dt));
                 if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-speed * dt));
                 if(moveLeft) velocity.add(right.clone().multiplyScalar(-speed * dt));
                 if(moveRight) velocity.add(right.clone().multiplyScalar(speed * dt));
 
-                // Integrazione posizione
                 const dx = velocity.x * dt; playerGroup.position.x += dx;
                 if(checkCol(playerGroup.position)) { playerGroup.position.x -= dx; velocity.x = 0; }
-                
                 const dz = velocity.z * dt; playerGroup.position.z += dz;
                 if(checkCol(playerGroup.position)) { playerGroup.position.z -= dz; velocity.z = 0; }
-
                 playerGroup.position.y += velocity.y * dt;
                 if(playerGroup.position.y < 0) { playerGroup.position.y = 0; velocity.y = 0; canJump = true; }
 
-                // Invio al server
                 if (socket && socket.connected) {
                     socket.emit('playerMove', {
-                        x: playerGroup.position.x,
-                        y: playerGroup.position.y + 0.85, 
-                        z: playerGroup.position.z,
-                        theta: theta,
-                        skin: mySkin
+                        x: playerGroup.position.x, y: playerGroup.position.y + 0.85, z: playerGroup.position.z,
+                        theta: theta, skin: mySkin, name: myName
                     });
                 }
             }
@@ -307,15 +388,8 @@
         function updateCamera() {
             const headPos = new THREE.Vector3().copy(playerGroup.position).add(new THREE.Vector3(0, 1.6, 0));
             let targetDist = isThirdPerson ? 3.5 : 0.1;
-            
-            const camOffset = new THREE.Vector3(
-                Math.sin(theta) * Math.cos(phi),
-                Math.sin(phi),
-                Math.cos(theta) * Math.cos(phi)
-            ).multiplyScalar(targetDist);
-
+            const camOffset = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.sin(phi), Math.cos(theta) * Math.cos(phi)).multiplyScalar(targetDist);
             const idealCamPos = headPos.clone().add(camOffset);
-
             if (isThirdPerson) {
                 const rayDir = new THREE.Vector3().subVectors(idealCamPos, headPos).normalize();
                 cameraRaycaster.set(headPos, rayDir);
@@ -324,7 +398,6 @@
                 if(hits.length > 0) idealCamPos.copy(headPos).add(rayDir.multiplyScalar(hits[0].distance - 0.2));
                 avatarMesh.rotation.y = theta + Math.PI;
             }
-
             camera.position.copy(idealCamPos);
             if (isThirdPerson) camera.lookAt(headPos);
             else {
@@ -352,18 +425,14 @@
                 avatarMesh.material.map = t;
                 avatarMesh.material.needsUpdate = true;
             });
-            if(socket && socket.connected) {
-                socket.emit('skinChange', file);
-            }
+            if(socket && socket.connected) socket.emit('skinChange', file);
         }
-
         function checkCol(pos) {
             const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5);
             const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5);
             const box = new THREE.Box3(min, max);
             return colliders.some(c => box.intersectsBox(c));
         }
-        
         function createWall(x,y,z,w,h,d) {
             const geo = new THREE.BoxGeometry(w,h,d);
             const tex = wallTexture ? wallTexture.clone() : null;
@@ -372,15 +441,6 @@
             const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z);
             scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh);
         }
-
-        function createTorch(x,y,z,rot) {
-            const geo = new THREE.PlaneGeometry(0.8, 0.8);
-            const mat = new THREE.MeshBasicMaterial({ map: torchAnimatedTexture, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
-            const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
-            const l = new THREE.PointLight(0xff6600, 1, 10); l.position.set(x + Math.sin(rot)*0.2, y, z + Math.cos(rot)*0.2); scene.add(l);
-            torchLights.push({ light: l, speed: 2+Math.random()*3 });
-        }
-
         function buildLevel() {
             createWall(0, 5, 5, 10, 10, 1); createWall(-5, 5, 0, 1, 10, 10); createWall(5, 5, 0, 1, 10, 10);
             createWall(-3.5, 5, -5, 4, 10, 1); createWall(3.5, 5, -5, 4, 10, 1);
@@ -391,6 +451,15 @@
             const floorGeo = new THREE.PlaneGeometry(100, 100);
             const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture });
             const floor = new THREE.Mesh(floorGeo, floorMat); floor.rotation.x = -Math.PI/2; scene.add(floor);
+            
+            // Torce
+            const createTorch = (x,y,z,rot) => {
+                const geo = new THREE.PlaneGeometry(0.8, 0.8);
+                const mat = new THREE.MeshBasicMaterial({ map: torchAnimatedTexture, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+                const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
+                const l = new THREE.PointLight(0xff6600, 1, 10); l.position.set(x + Math.sin(rot)*0.2, y, z + Math.cos(rot)*0.2); scene.add(l);
+                torchLights.push({ light: l, speed: 2+Math.random()*3 });
+            };
             createTorch(0, 2.5, 4.4, 0); createTorch(-4.4, 2.5, 0, Math.PI/2); createTorch(4.4, 2.5, 0, -Math.PI/2);
             createTorch(-1.4, 2.5, -10, Math.PI/2); createTorch(1.4, 2.5, -10, -Math.PI/2);
             createTorch(-1.4, 2.5, -20, Math.PI/2); createTorch(1.4, 2.5, -20, -Math.PI/2);
