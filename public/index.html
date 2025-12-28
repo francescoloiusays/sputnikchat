@@ -271,7 +271,7 @@
                 const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
 
                 // VELOCITA' RIDOTTA (150 invece di 400)
-                const speed = 80.0;
+                const speed = 30.0;
 
                 if(moveForward) velocity.add(fwd.clone().multiplyScalar(speed * dt));
                 if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-speed * dt));
