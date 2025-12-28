@@ -483,7 +483,7 @@
 
                 const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
                 const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
-                const speed = 150.0;
+                const speed = 30.0;
 
                 if(moveForward) velocity.add(fwd.clone().multiplyScalar(speed * dt));
                 if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-speed * dt));
