@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Castle 3D MMO + Voice</title>
+    <title>Castle 3D MMO + Voice + Music</title>
     <!-- Librerie -->
     <script src="https://unpkg.com/gifler@0.1.0/gifler.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <!-- SimplePeer per Voice Chat -->
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     
     <style>
@@ -30,15 +29,16 @@
         #ui-top-left {
             position: absolute; top: 10px; left: 10px; z-index: 20;
             background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; color: white;
-            display: flex; flex-direction: column; gap: 5px;
+            display: flex; flex-direction: column; gap: 8px; width: 200px;
         }
-        select { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; }
+        select { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; width: 100%; }
         
-        /* Tasto Mic */
-        #mic-btn {
-            background: #cc0000; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center;
+        /* Bottoni UI */
+        .ui-btn {
+            background: #333; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; text-align: center;
         }
-        #mic-btn.active { background: #00cc00; }
+        .ui-btn.active { background: #00cc00; }
+        .ui-btn.music-on { background: #0066cc; }
 
         #instructions {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -69,16 +69,27 @@
     </div>
 
     <div id="ui-top-left" class="pointer-auto">
+        <!-- Skin Selector -->
         <div><label>Skin:</label><select id="avatarSelect"></select></div>
-        <div style="font-size:0.9em" id="cam-mode">Visuale: 1a Persona</div>
-        <button id="mic-btn">Microfono: OFF (Premi M)</button>
+        
+        <!-- Camera Mode -->
+        <div style="font-size:0.9em; color:#ccc;" id="cam-mode">Visuale: 1a Persona</div>
+        
+        <!-- Mic Button -->
+        <button id="mic-btn" class="ui-btn" style="background: #cc0000;">Microfono: OFF (Premi M)</button>
+        
+        <!-- Music Player -->
+        <div style="border-top: 1px solid #555; margin-top: 5px; padding-top: 5px;">
+            <div style="font-size:0.8em; color:#ccc; margin-bottom: 4px;">Brano: <span id="music-name" style="color:white;">Nessuno</span></div>
+            <button id="music-btn" class="ui-btn">Musica: OFF (Premi B)</button>
+        </div>
     </div>
     
     <div id="status">Connecting...</div>
 
     <div id="instructions">
         <h1>Clicca per Giocare</h1>
-        <p>Muoviti: <b>WASD</b> + <b>SPAZIO</b><br>Chat: <b>INVIO</b><br>Voce: <b>M</b><br>Guarda: <b>MOUSE</b></p>
+        <p>Muoviti: <b>WASD</b> + <b>SPAZIO</b><br>Chat: <b>INVIO</b><br>Voce: <b>M</b> | Musica: <b>B</b><br>Guarda: <b>MOUSE</b></p>
     </div>
 
     <div id="chat-container">
@@ -93,8 +104,12 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- URL DEL TUO SERVER ---
+        // --- URL SERVER ---
         const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
+        
+        // --- FILE MUSICA ---
+        const MUSIC_FILE = "./soundtrack.mp3"; 
+        const MUSIC_TITLE = "Soundtrack";
 
         let scene, camera, renderer, loader, socket;
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -111,10 +126,14 @@
         const cameraRaycaster = new THREE.Raycaster();
         let wallTexture, floorTexture, torchAnimatedTexture;
 
-        // --- VARIABILI VOICE CHAT ---
+        // WebRTC
         let localStream;
-        const peers = {}; // Contiene le connessioni WebRTC con gli altri giocatori
+        const peers = {}; 
         let isMicActive = false;
+        
+        // Music
+        let bgMusic = null;
+        let isMusicOn = false;
 
         const avatarOptions = [
             { label: "Fan", file: "Fan.png" },
@@ -132,16 +151,16 @@
                 const val = input.value.trim();
                 if(val.length > 0) myName = val;
                 
-                // Richiedi Accesso Microfono SUBITO
+                // Mic setup
                 try {
                     localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-                    // Disattiva mic all'avvio
                     localStream.getAudioTracks()[0].enabled = false;
-                    console.log("Microfono acquisito!");
                 } catch (err) {
-                    console.warn("Microfono negato o non trovato:", err);
-                    alert("Attenzione: Impossibile accedere al microfono. La chat vocale non funzionerà.");
+                    console.warn("Microfono negato.");
                 }
+
+                // Music setup
+                setupMusic();
 
                 document.getElementById('login-overlay').style.display = 'none';
                 document.getElementById('instructions').style.display = 'block';
@@ -207,7 +226,7 @@
             document.addEventListener('mousemove', (e) => {
                 if(!isLocked) return;
                 theta -= e.movementX * 0.002;
-                phi += e.movementY * 0.002; // Invertito su richiesta
+                phi += e.movementY * 0.002; 
                 phi = Math.max(-1.5, Math.min(1.5, phi));
             });
 
@@ -227,8 +246,8 @@
 
                 if (e.code === 'Enter') { document.exitPointerLock(); chatInput.focus(); return; }
                 
-                // Toggle Mic con M
                 if (e.code === 'KeyM') toggleMic();
+                if (e.code === 'KeyB') toggleMusic();
 
                 switch(e.code) {
                     case 'KeyW': moveForward = true; break;
@@ -259,6 +278,39 @@
             });
         }
 
+        // --- MUSIC ---
+        function setupMusic() {
+            bgMusic = new Audio(MUSIC_FILE);
+            bgMusic.loop = true;
+            bgMusic.volume = 0.3;
+            document.getElementById('music-name').innerText = MUSIC_TITLE;
+            
+            const btn = document.getElementById('music-btn');
+            btn.addEventListener('click', toggleMusic);
+        }
+
+        async function toggleMusic() {
+            if(!bgMusic) return;
+            const btn = document.getElementById('music-btn');
+            isMusicOn = !isMusicOn;
+            
+            if(isMusicOn) {
+                try {
+                    await bgMusic.play();
+                    btn.innerText = "Musica: ON";
+                    btn.classList.add('music-on');
+                } catch(e) {
+                    isMusicOn = false;
+                    console.warn("Autoplay bloccato", e);
+                }
+            } else {
+                bgMusic.pause();
+                btn.innerText = "Musica: OFF (Premi B)";
+                btn.classList.remove('music-on');
+            }
+        }
+
+        // --- MIC ---
         function setupMicButton() {
             const btn = document.getElementById('mic-btn');
             btn.addEventListener('click', toggleMic);
@@ -288,35 +340,29 @@
                 document.getElementById('status').style.color = "lime";
             });
 
-            // 1. Un nuovo giocatore (TU) ricevi la lista di chi c'è già
             socket.on('currentPlayers', (players) => {
                 Object.keys(players).forEach((id) => {
                     if (id !== socket.id) {
                         addRemotePlayer(id, players[id]);
-                        // Crea un Peer per ogni giocatore esistente (Tu sei l'initiator)
                         createPeer(id, socket.id, localStream);
                     }
                 });
             });
 
-            // 2. Un nuovo giocatore entra (Lui è l'initiator, tu aspetti segnale)
             socket.on('newPlayer', (data) => {
                 addRemotePlayer(data.id, data.player);
             });
 
-            // WebRTC: Ricevi segnale da chi vuole connettersi
             socket.on('userJoined', payload => {
                 const peer = addPeer(payload.signal, payload.callerID, localStream);
                 peers[payload.callerID] = peer;
             });
 
-            // WebRTC: Ricevi risposta finale per stabilire connessione
             socket.on('receivingReturnedSignal', payload => {
                 const item = peers[payload.id];
                 if(item) item.signal(payload.signal);
             });
 
-            // Gestione dati gioco standard
             socket.on('playerMoved', (data) => {
                 const p = remotePlayers[data.id];
                 if (p) { p.position.set(data.x, data.y, data.z); p.rotation.y = data.theta + Math.PI; }
@@ -331,51 +377,26 @@
 
             socket.on('playerDisconnected', (id) => {
                 if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }
-                if (peers[id]) { peers[id].destroy(); delete peers[id]; } // Distruggi connessione audio
+                if (peers[id]) { peers[id].destroy(); delete peers[id]; } 
             });
         }
 
-        // Crea Peer (Tu chiami)
         function createPeer(userToSignal, callerID, stream) {
-            const peer = new SimplePeer({
-                initiator: true,
-                trickle: false,
-                stream: stream
-            });
-
-            peer.on("signal", signal => {
-                socket.emit("sendingSignal", { userToSignal, callerID, signal });
-            });
-
-            peer.on("stream", stream => {
-                addAudioElement(userToSignal, stream);
-            });
-
+            const peer = new SimplePeer({ initiator: true, trickle: false, stream: stream });
+            peer.on("signal", signal => { socket.emit("sendingSignal", { userToSignal, callerID, signal }); });
+            peer.on("stream", stream => { addAudioElement(userToSignal, stream); });
             peers[userToSignal] = peer;
         }
 
-        // Aggiungi Peer (Tu ricevi chiamata)
         function addPeer(incomingSignal, callerID, stream) {
-            const peer = new SimplePeer({
-                initiator: false,
-                trickle: false,
-                stream: stream
-            });
-
-            peer.on("signal", signal => {
-                socket.emit("returningSignal", { signal, callerID });
-            });
-
-            peer.on("stream", stream => {
-                addAudioElement(callerID, stream);
-            });
-
+            const peer = new SimplePeer({ initiator: false, trickle: false, stream: stream });
+            peer.on("signal", signal => { socket.emit("returningSignal", { signal, callerID }); });
+            peer.on("stream", stream => { addAudioElement(callerID, stream); });
             peer.signal(incomingSignal);
             return peer;
         }
 
         function addAudioElement(id, stream) {
-            // Crea un elemento audio invisibile per sentire l'altro giocatore
             const audio = document.createElement('audio');
             audio.srcObject = stream;
             audio.autoplay = true;
@@ -444,7 +465,7 @@
             if(tex) { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(Math.max(w,d)/4, h/4); tex.needsUpdate = true; }
             const mat = new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0x888888 });
             const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z);
-            scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh));
+            scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh);
         }
         function buildLevel() {
             createWall(0, 5, 5, 10, 10, 1); createWall(-5, 5, 0, 1, 10, 10); createWall(5, 5, 0, 1, 10, 10);
@@ -483,7 +504,7 @@
 
                 const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
                 const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
-                const speed = 30.0;
+                const speed = 150.0;
 
                 if(moveForward) velocity.add(fwd.clone().multiplyScalar(speed * dt));
                 if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-speed * dt));
