@@ -201,7 +201,7 @@
             document.addEventListener('mousemove', (e) => {
                 if(!isLocked) return;
                 theta -= e.movementX * 0.002;
-                phi -= e.movementY * 0.002; // Asse invertito
+                phi += e.movementY * 0.002; // Asse invertito
                 phi = Math.max(-1.5, Math.min(1.5, phi));
             });
 
