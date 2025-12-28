@@ -81,7 +81,7 @@
         let wallTexture, floorTexture, torchAnimatedTexture;
         const cameraRaycaster = new THREE.Raycaster();
 
-        // Opzioni Avatar (Devono corrispondere ai file caricati)
+        // Opzioni Avatar
         const avatarOptions = [
             { label: "Fan", file: "Fan.png" },
             { label: "Alessandro", file: "Alessandro.png" },
@@ -144,16 +144,22 @@
             // EVENTI INPUT
             const instructions = document.getElementById('instructions');
             instructions.addEventListener('click', () => document.body.requestPointerLock());
+            
             document.addEventListener('pointerlockchange', () => {
                 isLocked = (document.pointerLockElement === document.body);
                 instructions.style.display = isLocked ? 'none' : 'block';
             });
+
+            // GESTIONE MOUSE (CORRETTA: Phi += per invertire asse Y)
             document.addEventListener('mousemove', (e) => {
                 if(!isLocked) return;
-                theta += e.movementX * 0.002;
-                phi -= e.movementY * 0.002;
+                theta -= e.movementX * 0.002; // Rotazione orizzontale
+                phi -= e.movementY * 0.002;   // Rotazione verticale (Mouse SU = Guarda SU)
+                
+                // Limite visuale verticale (per non ribaltarsi)
                 phi = Math.max(-1.5, Math.min(1.5, phi));
             });
+
             document.addEventListener('keydown', (e) => {
                 switch(e.code) {
                     case 'KeyW': moveForward = true; break;
@@ -185,39 +191,26 @@
 
         // --- SOCKET.IO ---
         function initSocket() {
-            console.log("Tentativo connessione a:", SOCKET_URL);
-            
-            // Connessione al server Render
             socket = io(SOCKET_URL);
 
             socket.on('connect', () => {
-                console.log("Connesso! ID:", socket.id);
                 document.getElementById('status').innerText = "Online: " + socket.id;
                 document.getElementById('status').style.color = "lime";
             });
 
-            socket.on('connect_error', (err) => {
-                console.error("Errore connessione:", err);
-                document.getElementById('status').innerText = "Errore Connessione (vedi console)";
+            socket.on('connect_error', () => {
+                document.getElementById('status').innerText = "Errore Connessione";
                 document.getElementById('status').style.color = "red";
             });
 
-            // Ricevi lista giocatori esistenti
             socket.on('currentPlayers', (players) => {
                 Object.keys(players).forEach((id) => {
-                    if (id !== socket.id) {
-                        addRemotePlayer(id, players[id]);
-                    }
+                    if (id !== socket.id) addRemotePlayer(id, players[id]);
                 });
             });
 
-            // Nuovo giocatore entra
-            socket.on('newPlayer', (data) => {
-                console.log("Nuovo giocatore:", data.id);
-                addRemotePlayer(data.id, data.player);
-            });
+            socket.on('newPlayer', (data) => addRemotePlayer(data.id, data.player));
 
-            // Movimento altrui
             socket.on('playerMoved', (data) => {
                 const p = remotePlayers[data.id];
                 if (p) {
@@ -226,13 +219,11 @@
                 }
             });
 
-            // Cambio skin altrui
             socket.on('playerSkinChanged', (data) => {
                 const p = remotePlayers[data.id];
                 if (p) updateRemoteSkin(p, data.skin);
             });
 
-            // Disconnessione
             socket.on('playerDisconnected', (id) => {
                 if (remotePlayers[id]) {
                     scene.remove(remotePlayers[id]);
@@ -242,16 +233,11 @@
         }
 
         function addRemotePlayer(id, data) {
-            // Crea mesh per l'altro giocatore
             const geo = new THREE.PlaneGeometry(0.8, 1.7);
-            const mat = new THREE.MeshStandardMaterial({ 
-                transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 
-            });
+            const mat = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 });
             const mesh = new THREE.Mesh(geo, mat);
             mesh.position.set(data.x, data.y, data.z);
-            
             updateRemoteSkin(mesh, data.skin || "plebeo.png");
-
             scene.add(mesh);
             remotePlayers[id] = mesh;
         }
@@ -275,17 +261,24 @@
             if(isLocked) {
                 const dt = 0.016; 
                 velocity.y -= GRAVITY * dt;
+                
+                // Attrito movimento
                 velocity.x -= velocity.x * 10.0 * dt;
                 velocity.z -= velocity.z * 10.0 * dt;
 
+                // Calcolo vettori direzione
                 const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
                 const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
 
-                if(moveForward) velocity.add(fwd.clone().multiplyScalar(150 * dt));
-                if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-150 * dt));
-                if(moveLeft) velocity.add(right.clone().multiplyScalar(-150 * dt));
-                if(moveRight) velocity.add(right.clone().multiplyScalar(150 * dt));
+                // VELOCITA' RIDOTTA (150 invece di 400)
+                const speed = 150.0;
 
+                if(moveForward) velocity.add(fwd.clone().multiplyScalar(speed * dt));
+                if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-speed * dt));
+                if(moveLeft) velocity.add(right.clone().multiplyScalar(-speed * dt));
+                if(moveRight) velocity.add(right.clone().multiplyScalar(speed * dt));
+
+                // Integrazione posizione
                 const dx = velocity.x * dt; playerGroup.position.x += dx;
                 if(checkCol(playerGroup.position)) { playerGroup.position.x -= dx; velocity.x = 0; }
                 
@@ -295,9 +288,8 @@
                 playerGroup.position.y += velocity.y * dt;
                 if(playerGroup.position.y < 0) { playerGroup.position.y = 0; velocity.y = 0; canJump = true; }
 
-                // INVIA POSIZIONE AL SERVER
+                // Invio al server
                 if (socket && socket.connected) {
-                    // Inviamo solo se ci siamo mossi significativamente o ogni tot frame per ottimizzare (qui semplice)
                     socket.emit('playerMove', {
                         x: playerGroup.position.x,
                         y: playerGroup.position.y + 0.85, 
