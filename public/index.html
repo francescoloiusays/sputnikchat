@@ -3,37 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Castle 3D - Fixed</title>
-    <!-- Libreria GIFLER per GIF animate -->
+    <title>Castle 3D MMO</title>
+    <!-- GIFLER per texture animate -->
     <script src="https://unpkg.com/gifler@0.1.0/gifler.min.js"></script>
+    <!-- SOCKET.IO CLIENT -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #000; }
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #111; }
         canvas { display: block; }
         
-        #instructions {
-            position: absolute;
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: white; background: rgba(0, 0, 0, 0.7); padding: 20px;
-            text-align: center; cursor: pointer; border-radius: 10px; z-index: 10; user-select: none;
-        }
         #ui-container {
             position: absolute; top: 10px; left: 10px; z-index: 20;
             background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; color: white;
             pointer-events: auto;
         }
         select { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; }
+        
+        #status {
+            position: absolute; bottom: 10px; left: 10px; color: yellow; font-family: monospace; z-index: 20;
+            text-shadow: 1px 1px 0 #000; font-size: 14px;
+        }
+        
+        #instructions {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; background: rgba(0, 0, 0, 0.7); padding: 20px;
+            text-align: center; cursor: pointer; border-radius: 10px; z-index: 10; user-select: none;
+        }
     </style>
 </head>
 <body>
 
     <div id="ui-container">
-        <div><label>Avatar:</label><select id="avatarSelect"></select></div>
+        <div><label>Skin:</label><select id="avatarSelect"></select></div>
         <div style="margin-top:5px; font-size:0.9em" id="cam-mode">Visuale: 1a Persona</div>
     </div>
+    
+    <div id="status">Connecting to server...</div>
 
     <div id="instructions">
-        <h1>Clicca per Giocare</h1>
-        <p>Muoviti: <b>WASD</b> + <b>SPAZIO</b><br>Visuale: <b>V</b><br>Guarda: <b>MOUSE</b><br>(ESC per uscire)</p>
+        <h1>Clicca per Entrare</h1>
+        <p>Muoviti: <b>WASD</b> + <b>SPAZIO</b><br>Visuale: <b>V</b><br>Guarda: <b>MOUSE</b><br>(ESC per Menu)</p>
     </div>
 
     <script type="importmap">
@@ -48,31 +58,30 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- GLOBAL VARS ---
-        let scene, camera, renderer, loader;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let canJump = false;
-        let isLocked = false;
-        let isThirdPerson = false;
+        // --- CONFIGURAZIONE ---
+        // URL DEL TUO SERVER RENDER
+        const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
 
-        // Player & Camera
-        let playerGroup; 
-        let avatarMesh;
-        let theta = 0; // Rotazione Orizzontale
-        let phi = 0;   // Rotazione Verticale
-        
-        // Physics
+        // --- GLOBALS ---
+        let scene, camera, renderer, loader, socket;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canJump = false, isLocked = false, isThirdPerson = false;
+
+        // Local Player
+        let playerGroup, avatarMesh, theta = 0, phi = 0;
         let velocity = new THREE.Vector3();
         const GRAVITY = 30.0;
+        let mySkin = "plebeo.png"; // Default skin
+
+        // Multiplayer
+        const remotePlayers = {}; // { socketId: Mesh }
         
-        // Arrays
-        const wallMeshes = []; 
-        const colliders = [];
-        const torchLights = [];
-        
+        // Environment
+        const wallMeshes = [], colliders = [], torchLights = [];
         let wallTexture, floorTexture, torchAnimatedTexture;
         const cameraRaycaster = new THREE.Raycaster();
 
+        // Opzioni Avatar (Devono corrispondere ai file caricati)
         const avatarOptions = [
             { label: "Fan", file: "Fan.png" },
             { label: "Alessandro", file: "Alessandro.png" },
@@ -80,37 +89,26 @@
         ];
 
         init();
+        initSocket(); 
         animate();
 
         function init() {
-            // 1. SETUP BASE
+            // SCENA
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x111111); // Grigio scuro (non nero assoluto)
+            scene.background = new THREE.Color(0x111111);
             scene.fog = new THREE.Fog(0x111111, 0, 50);
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            scene.add(camera); // Camera libera
+            scene.add(camera);
 
-            // 2. TEXTURES (Con fallback colore se falliscono)
+            // TEXTURES
             loader = new THREE.TextureLoader();
+            const loadTex = (p) => loader.load(p, (t) => t.colorSpace = THREE.SRGBColorSpace);
             
-            // Funzione helper per caricare con sicurezza
-            const loadTex = (path) => {
-                return loader.load(path, 
-                    (tex) => { tex.colorSpace = THREE.SRGBColorSpace; },
-                    undefined,
-                    (err) => { console.warn("Manca texture:", path); }
-                );
-            };
-
             wallTexture = loadTex('./muro.jpg');
             floorTexture = loadTex('./pavimento.jpg');
-            if(floorTexture) {
-                floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
-                floorTexture.repeat.set(10, 10);
-            }
+            if(floorTexture) { floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(10, 10); }
 
-            // GIF Texture
             const gifCanvas = document.createElement('canvas');
             gifCanvas.width = 128; gifCanvas.height = 128;
             torchAnimatedTexture = new THREE.CanvasTexture(gifCanvas);
@@ -118,15 +116,13 @@
             torchAnimatedTexture.minFilter = THREE.NearestFilter;
             try { window.gifler('./torcia.gif').animate(gifCanvas); } catch(e){}
 
-            // 3. PLAYER
+            // LOCAL PLAYER SETUP
             playerGroup = new THREE.Group();
             scene.add(playerGroup);
 
-            // Avatar (inizialmente invisibile)
             const avatarGeo = new THREE.PlaneGeometry(0.8, 1.7);
             const avatarMat = new THREE.MeshStandardMaterial({ 
-                transparent: true, side: THREE.DoubleSide, alphaTest: 0.5,
-                color: 0xffffff // Bianco base, viene colorato dalla texture
+                transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 
             });
             avatarMesh = new THREE.Mesh(avatarGeo, avatarMat);
             avatarMesh.position.set(0, 0.85, 0); 
@@ -134,35 +130,30 @@
             playerGroup.add(avatarMesh);
 
             setupAvatarMenu();
-
-            // 4. LUCI
-            const ambient = new THREE.AmbientLight(0xffffff, 0.2); // Un po' più luminosa per test
-            scene.add(ambient);
-
-            // 5. LIVELLO
             buildLevel();
 
-            // 6. RENDERER
+            // LUCI
+            const ambient = new THREE.AmbientLight(0xffffff, 0.2);
+            scene.add(ambient);
+
+            // RENDERER
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // 7. INPUT HANDLING
+            // EVENTI INPUT
             const instructions = document.getElementById('instructions');
             instructions.addEventListener('click', () => document.body.requestPointerLock());
-            
             document.addEventListener('pointerlockchange', () => {
                 isLocked = (document.pointerLockElement === document.body);
                 instructions.style.display = isLocked ? 'none' : 'block';
             });
-
             document.addEventListener('mousemove', (e) => {
                 if(!isLocked) return;
                 theta -= e.movementX * 0.002;
                 phi -= e.movementY * 0.002;
-                phi = Math.max(-1.5, Math.min(1.5, phi)); // Limit vertical look
+                phi = Math.max(-1.5, Math.min(1.5, phi));
             });
-
             document.addEventListener('keydown', (e) => {
                 switch(e.code) {
                     case 'KeyW': moveForward = true; break;
@@ -192,20 +183,139 @@
             });
         }
 
-        // --- GAME LOOP ---
+        // --- SOCKET.IO ---
+        function initSocket() {
+            console.log("Tentativo connessione a:", SOCKET_URL);
+            
+            // Connessione al server Render
+            socket = io(SOCKET_URL);
+
+            socket.on('connect', () => {
+                console.log("Connesso! ID:", socket.id);
+                document.getElementById('status').innerText = "Online: " + socket.id;
+                document.getElementById('status').style.color = "lime";
+            });
+
+            socket.on('connect_error', (err) => {
+                console.error("Errore connessione:", err);
+                document.getElementById('status').innerText = "Errore Connessione (vedi console)";
+                document.getElementById('status').style.color = "red";
+            });
+
+            // Ricevi lista giocatori esistenti
+            socket.on('currentPlayers', (players) => {
+                Object.keys(players).forEach((id) => {
+                    if (id !== socket.id) {
+                        addRemotePlayer(id, players[id]);
+                    }
+                });
+            });
+
+            // Nuovo giocatore entra
+            socket.on('newPlayer', (data) => {
+                console.log("Nuovo giocatore:", data.id);
+                addRemotePlayer(data.id, data.player);
+            });
+
+            // Movimento altrui
+            socket.on('playerMoved', (data) => {
+                const p = remotePlayers[data.id];
+                if (p) {
+                    p.position.set(data.x, data.y, data.z);
+                    p.rotation.y = data.theta + Math.PI; 
+                }
+            });
+
+            // Cambio skin altrui
+            socket.on('playerSkinChanged', (data) => {
+                const p = remotePlayers[data.id];
+                if (p) updateRemoteSkin(p, data.skin);
+            });
+
+            // Disconnessione
+            socket.on('playerDisconnected', (id) => {
+                if (remotePlayers[id]) {
+                    scene.remove(remotePlayers[id]);
+                    delete remotePlayers[id];
+                }
+            });
+        }
+
+        function addRemotePlayer(id, data) {
+            // Crea mesh per l'altro giocatore
+            const geo = new THREE.PlaneGeometry(0.8, 1.7);
+            const mat = new THREE.MeshStandardMaterial({ 
+                transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(data.x, data.y, data.z);
+            
+            updateRemoteSkin(mesh, data.skin || "plebeo.png");
+
+            scene.add(mesh);
+            remotePlayers[id] = mesh;
+        }
+
+        function updateRemoteSkin(mesh, filename) {
+            loader.load(`./${filename}`, (tex) => {
+                tex.colorSpace = THREE.SRGBColorSpace;
+                mesh.material.map = tex;
+                mesh.material.needsUpdate = true;
+            });
+        }
+
+        // --- GAME LOGIC ---
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
+            const t = performance.now() * 0.001;
+            torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
+
+            if(isLocked) {
+                const dt = 0.016; 
+                velocity.y -= GRAVITY * dt;
+                velocity.x -= velocity.x * 10.0 * dt;
+                velocity.z -= velocity.z * 10.0 * dt;
+
+                const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
+                const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
+
+                if(moveForward) velocity.add(fwd.clone().multiplyScalar(400 * dt));
+                if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-400 * dt));
+                if(moveLeft) velocity.add(right.clone().multiplyScalar(-400 * dt));
+                if(moveRight) velocity.add(right.clone().multiplyScalar(400 * dt));
+
+                const dx = velocity.x * dt; playerGroup.position.x += dx;
+                if(checkCol(playerGroup.position)) { playerGroup.position.x -= dx; velocity.x = 0; }
+                
+                const dz = velocity.z * dt; playerGroup.position.z += dz;
+                if(checkCol(playerGroup.position)) { playerGroup.position.z -= dz; velocity.z = 0; }
+
+                playerGroup.position.y += velocity.y * dt;
+                if(playerGroup.position.y < 0) { playerGroup.position.y = 0; velocity.y = 0; canJump = true; }
+
+                // INVIA POSIZIONE AL SERVER
+                if (socket && socket.connected) {
+                    // Inviamo solo se ci siamo mossi significativamente o ogni tot frame per ottimizzare (qui semplice)
+                    socket.emit('playerMove', {
+                        x: playerGroup.position.x,
+                        y: playerGroup.position.y + 0.85, 
+                        z: playerGroup.position.z,
+                        theta: theta,
+                        skin: mySkin
+                    });
+                }
+            }
+
+            updateCamera();
+            renderer.render(scene, camera);
+        }
 
         function updateCamera() {
-            // Posizione della testa del player
             const headPos = new THREE.Vector3().copy(playerGroup.position).add(new THREE.Vector3(0, 1.6, 0));
-            
-            // Distanza camera
             let targetDist = isThirdPerson ? 3.5 : 0.1;
             
-            // Direzione camera basata su angoli Theta/Phi
-            // Nota: in 1a persona vogliamo che la camera sia ESATTAMENTE sulla testa ma ruotata
-            // In 3a persona vogliamo che sia indietro
-            
-            // Calcolo posizione ideale camera sferica
             const camOffset = new THREE.Vector3(
                 Math.sin(theta) * Math.cos(phi),
                 Math.sin(phi),
@@ -214,158 +324,21 @@
 
             const idealCamPos = headPos.clone().add(camOffset);
 
-            // Collisione Camera (Solo 3a persona)
             if (isThirdPerson) {
                 const rayDir = new THREE.Vector3().subVectors(idealCamPos, headPos).normalize();
                 cameraRaycaster.set(headPos, rayDir);
                 cameraRaycaster.far = targetDist;
-                
                 const hits = cameraRaycaster.intersectObjects(wallMeshes);
-                if(hits.length > 0) {
-                    // Sposta camera al punto di impatto meno margine
-                    idealCamPos.copy(headPos).add(rayDir.multiplyScalar(hits[0].distance - 0.2));
-                }
-                
-                // Rotazione Avatar: guarda dove guarda la camera (ma opposto, per mostrare la schiena)
+                if(hits.length > 0) idealCamPos.copy(headPos).add(rayDir.multiplyScalar(hits[0].distance - 0.2));
                 avatarMesh.rotation.y = theta + Math.PI;
             }
 
             camera.position.copy(idealCamPos);
-            
-            // La camera deve guardare un punto "avanti" rispetto alla testa, non la testa stessa (altrimenti gira su se stessa male)
-            // Se siamo in 3a persona, guarda la testa.
-            // Se siamo in 1a persona, guarda UN PUNTO DISTANTE nella direzione dello sguardo.
-            
-            if (isThirdPerson) {
-                 camera.lookAt(headPos);
-            } else {
-                 // In 1a persona, idealCamPos è quasi dentro la testa.
-                 // Dobbiamo definire un target point lontano.
-                 // Il vettore "avanti" è l'opposto di camOffset (per come ho calcolato seno/coseno sopra)
-                 const lookDir = new THREE.Vector3(
-                    Math.sin(theta + Math.PI) * Math.cos(phi), // +PI per invertire
-                    Math.sin(phi + Math.PI), // Inverti pitch
-                    Math.cos(theta + Math.PI) * Math.cos(phi)
-                 );
-                 // Metodo alternativo più semplice per 1a persona:
-                 // Calcoliamo il punto sulla sfera unitaria inversa
+            if (isThirdPerson) camera.lookAt(headPos);
+            else {
                  const target = idealCamPos.clone().sub(camOffset.clone().normalize().multiplyScalar(10));
                  camera.lookAt(target);
             }
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            // Animations
-            if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
-            const t = performance.now() * 0.001;
-            torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
-
-            // Physics Movement
-            if(isLocked) {
-                const dt = 0.016; // Fisso approx 60fps
-                
-                // Gravità
-                velocity.y -= GRAVITY * dt;
-
-                // Attrito
-                velocity.x -= velocity.x * 10.0 * dt;
-                velocity.z -= velocity.z * 10.0 * dt;
-
-                // Calcolo direzione movimento (relativa allo sguardo Theta)
-                // W va verso dove guardiamo orizzontalmente
-                const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate(); // Negate perché camera guarda "indietro" nel mio calcolo
-                const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
-
-                if(moveForward) velocity.add(fwd.clone().multiplyScalar(400 * dt));
-                if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-400 * dt));
-                if(moveLeft) velocity.add(right.clone().multiplyScalar(-400 * dt));
-                if(moveRight) velocity.add(right.clone().multiplyScalar(400 * dt));
-
-                // Integrazione Posizione
-                const dx = velocity.x * dt;
-                playerGroup.position.x += dx;
-                if(checkCol(playerGroup.position)) { playerGroup.position.x -= dx; velocity.x = 0; }
-
-                const dz = velocity.z * dt;
-                playerGroup.position.z += dz;
-                if(checkCol(playerGroup.position)) { playerGroup.position.z -= dz; velocity.z = 0; }
-
-                playerGroup.position.y += velocity.y * dt;
-                if(playerGroup.position.y < 0) {
-                    playerGroup.position.y = 0;
-                    velocity.y = 0;
-                    canJump = true;
-                }
-            }
-
-            updateCamera();
-            renderer.render(scene, camera);
-        }
-
-        // --- HELPERS ---
-
-        function checkCol(pos) {
-            const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5);
-            const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5);
-            const box = new THREE.Box3(min, max);
-            return colliders.some(c => box.intersectsBox(c));
-        }
-
-        function createWall(x,y,z,w,h,d) {
-            const geo = new THREE.BoxGeometry(w,h,d);
-            const tex = wallTexture ? wallTexture.clone() : null;
-            if(tex) {
-                tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-                tex.repeat.set(Math.max(w,d)/4, h/4);
-                tex.needsUpdate = true;
-            }
-            const mat = new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0x888888 });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(x,y,z);
-            scene.add(mesh);
-            colliders.push(new THREE.Box3().setFromObject(mesh));
-            wallMeshes.push(mesh);
-        }
-
-        function createTorch(x,y,z,rot) {
-            const geo = new THREE.PlaneGeometry(0.8, 0.8);
-            const mat = new THREE.MeshBasicMaterial({ 
-                map: torchAnimatedTexture, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending 
-            });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(x,y,z); mesh.rotation.y = rot;
-            scene.add(mesh);
-            const l = new THREE.PointLight(0xff6600, 1, 10);
-            l.position.set(x + Math.sin(rot)*0.2, y, z + Math.cos(rot)*0.2);
-            scene.add(l);
-            torchLights.push({ light: l, speed: 2+Math.random()*3 });
-        }
-
-        function buildLevel() {
-            createWall(0, 5, 5, 10, 10, 1);
-            createWall(-5, 5, 0, 1, 10, 10);
-            createWall(5, 5, 0, 1, 10, 10);
-            createWall(-3.5, 5, -5, 4, 10, 1);
-            createWall(3.5, 5, -5, 4, 10, 1);
-            createWall(-2, 5, -15, 1, 10, 20);
-            createWall(2, 5, -15, 1, 10, 20);
-            createWall(-5, 5, -25, 6, 10, 1);
-            createWall(5, 5, -25, 6, 10, 1);
-            createWall(-8, 5, -32.5, 1, 10, 16);
-            createWall(8, 5, -32.5, 1, 10, 16);
-            createWall(0, 5, -40, 17, 10, 1);
-            
-            const floorGeo = new THREE.PlaneGeometry(100, 100);
-            const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture, color: floorTexture ? 0xffffff : 0x333333 });
-            const floor = new THREE.Mesh(floorGeo, floorMat);
-            floor.rotation.x = -Math.PI/2;
-            scene.add(floor);
-
-            createTorch(0, 2.5, 4.4, 0); 
-            createTorch(-4.4, 2.5, 0, Math.PI/2);
-            createTorch(4.4, 2.5, 0, -Math.PI/2);
         }
 
         function setupAvatarMenu() {
@@ -376,21 +349,61 @@
             });
             const rnd = avatarOptions[Math.floor(Math.random()*avatarOptions.length)];
             s.value = rnd.file;
-            loadAvatar(rnd.file);
-            s.addEventListener('change', (e) => loadAvatar(e.target.value));
+            changeLocalSkin(rnd.file);
+            s.addEventListener('change', (e) => changeLocalSkin(e.target.value));
         }
 
-        function loadAvatar(file) {
+        function changeLocalSkin(file) {
+            mySkin = file;
             loader.load(`./${file}`, (t) => {
                 t.colorSpace = THREE.SRGBColorSpace;
-                if(avatarMesh.material.map) avatarMesh.material.map.dispose();
                 avatarMesh.material.map = t;
                 avatarMesh.material.needsUpdate = true;
             });
+            if(socket && socket.connected) {
+                socket.emit('skinChange', file);
+            }
         }
-        // Nel tuo file HTML
-const socket = io("https://sputnikchat-1.onrender.com");
 
+        function checkCol(pos) {
+            const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5);
+            const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5);
+            const box = new THREE.Box3(min, max);
+            return colliders.some(c => box.intersectsBox(c));
+        }
+        
+        function createWall(x,y,z,w,h,d) {
+            const geo = new THREE.BoxGeometry(w,h,d);
+            const tex = wallTexture ? wallTexture.clone() : null;
+            if(tex) { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(Math.max(w,d)/4, h/4); tex.needsUpdate = true; }
+            const mat = new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0x888888 });
+            const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z);
+            scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh);
+        }
+
+        function createTorch(x,y,z,rot) {
+            const geo = new THREE.PlaneGeometry(0.8, 0.8);
+            const mat = new THREE.MeshBasicMaterial({ map: torchAnimatedTexture, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+            const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
+            const l = new THREE.PointLight(0xff6600, 1, 10); l.position.set(x + Math.sin(rot)*0.2, y, z + Math.cos(rot)*0.2); scene.add(l);
+            torchLights.push({ light: l, speed: 2+Math.random()*3 });
+        }
+
+        function buildLevel() {
+            createWall(0, 5, 5, 10, 10, 1); createWall(-5, 5, 0, 1, 10, 10); createWall(5, 5, 0, 1, 10, 10);
+            createWall(-3.5, 5, -5, 4, 10, 1); createWall(3.5, 5, -5, 4, 10, 1);
+            createWall(-2, 5, -15, 1, 10, 20); createWall(2, 5, -15, 1, 10, 20);
+            createWall(-5, 5, -25, 6, 10, 1); createWall(5, 5, -25, 6, 10, 1);
+            createWall(-8, 5, -32.5, 1, 10, 16); createWall(8, 5, -32.5, 1, 10, 16);
+            createWall(0, 5, -40, 17, 10, 1);
+            const floorGeo = new THREE.PlaneGeometry(100, 100);
+            const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture });
+            const floor = new THREE.Mesh(floorGeo, floorMat); floor.rotation.x = -Math.PI/2; scene.add(floor);
+            createTorch(0, 2.5, 4.4, 0); createTorch(-4.4, 2.5, 0, Math.PI/2); createTorch(4.4, 2.5, 0, -Math.PI/2);
+            createTorch(-1.4, 2.5, -10, Math.PI/2); createTorch(1.4, 2.5, -10, -Math.PI/2);
+            createTorch(-1.4, 2.5, -20, Math.PI/2); createTorch(1.4, 2.5, -20, -Math.PI/2);
+            createTorch(-7.4, 2.5, -30, Math.PI/2); createTorch(7.4, 2.5, -30, -Math.PI/2); createTorch(0, 2.5, -39.4, Math.PI);
+        }
     </script>
 </body>
 </html>
