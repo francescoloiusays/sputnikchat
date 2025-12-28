@@ -1,0 +1,12 @@
+{
+  "name": "server-gioco",
+  "version": "1.0.0",
+  "description": "Server Socket.io",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.2"
+  }
+}
