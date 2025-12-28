@@ -1,15 +1,14 @@
 // minimap.js
 
 export class Minimap {
-    constructor(scene, playerGroup, remotePlayers, mapSize = 300) {
+    constructor(scene, playerGroup, remotePlayers) {
         this.scene = scene;
         this.playerGroup = playerGroup;
-        this.remotePlayers = remotePlayers; // Riferimento all'oggetto dei player remoti
-        this.mapSize = mapSize; // Dimensione totale del mondo (pavimento)
+        this.remotePlayers = remotePlayers;
         
-        // Configurazione Minimappa
-        this.size = 200; // Grandezza in pixel del box mappa (200x200)
-        this.zoom = 5;   // Zoom (più è alto, più vedi area, più è basso più è zoomato)
+        // Configurazione
+        this.size = 200; // Grandezza 200x200 pixel
+        this.zoom = 4;   // Zoom della mappa
 
         this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d');
@@ -21,91 +20,79 @@ export class Minimap {
         this.canvas.width = this.size;
         this.canvas.height = this.size;
         
-        // Stile CSS per posizionarla in basso a sinistra (stile GTA)
+        // Stile CSS
         Object.assign(this.canvas.style, {
             position: 'absolute',
-            bottom: '20px',
+            bottom: '80px',     // ALZATA: da 20px a 80px (per evitare sovrapposizioni)
             left: '20px',
             width: `${this.size}px`,
             height: `${this.size}px`,
-            borderRadius: '50%', // Rotonda
-            border: '3px solid #fff',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            // borderRadius: '50%', // RIMOSSO: Ora è quadrata
+            border: '2px solid rgba(255, 255, 255, 0.6)', // Bordo semi-trasparente
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',        // SFONDO: Opacità al 50%
             zIndex: '100',
-            boxShadow: '0 0 10px rgba(0,0,0,0.5)'
+            boxShadow: '0 0 10px rgba(0,0,0,0.3)'
         });
 
         document.body.appendChild(this.canvas);
     }
 
     update() {
+        if (!this.playerGroup) return;
+
         const ctx = this.ctx;
         const w = this.canvas.width;
         const h = this.canvas.height;
         const cx = w / 2;
         const cy = h / 2;
 
-        // Pulisci
+        // Pulisci tutto
         ctx.clearRect(0, 0, w, h);
 
-        // --- 1. Disegna Sfondo/Muri (Semplificato) ---
-        // Salviamo il contesto per ruotare tutto attorno al giocatore
         ctx.save();
-        
-        // Spostiamo l'origine al centro e ruotiamo in base alla rotazione del giocatore
-        // (Così la mappa ruota come in GTA)
-        // Nota: playerGroup non ruota fisicamente, la rotazione è gestita dalla variabile 'theta' nel main.
-        // Dobbiamo passare 'theta' all'update se vogliamo la rotazione, 
-        // ALTRIMENTI (più semplice): Mappa fissa (Nord in alto), freccia che gira.
-        
-        // Facciamo MAPPA FISSA (Nord in alto) per ora, è più chiaro per orientarsi nei castelli.
-        
-        // Calcola offset per centrare il giocatore
+
+        // Parametri per disegnare
         const scale = this.zoom; 
         const px = this.playerGroup.position.x;
         const pz = this.playerGroup.position.z;
 
-        // Disegna una griglia o bordo del mondo per riferimento
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 2;
+        // --- 1. Griglia di Riferimento (Opzionale, aiuta a capire il movimento) ---
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        // Disegna un cerchio che rappresenta il raggio visivo della mappa
-        ctx.arc(cx, cy, w/2 - 2, 0, Math.PI * 2);
+        // Disegna una croce centrale
+        ctx.moveTo(cx, 0); ctx.lineTo(cx, h);
+        ctx.moveTo(0, cy); ctx.lineTo(w, cy);
         ctx.stroke();
-        ctx.clip(); // Disegna solo dentro il cerchio
 
-        // --- 2. Disegna gli ALTRI PLAYER (Remote) ---
+        // --- 2. Disegna gli ALTRI PLAYER (Rossi) ---
         if (this.remotePlayers) {
             Object.values(this.remotePlayers).forEach(mesh => {
-                // Posizione relativa al giocatore locale
+                // Calcola distanza relativa
                 const rx = (mesh.position.x - px) * scale;
                 const rz = (mesh.position.z - pz) * scale;
 
-                // Disegna pallino Rosso
-                ctx.fillStyle = '#ff3333';
-                ctx.beginPath();
-                ctx.arc(cx + rx, cy + rz, 4, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // (Opzionale) Nome player? Sarebbe complesso passarlo qui, lasciamo solo pallino
+                // Disegna solo se è dentro la mappa (per evitare pallini fuori dal quadrato)
+                if (Math.abs(rx) < w/2 && Math.abs(rz) < h/2) {
+                    ctx.fillStyle = '#ff4444'; // Rosso chiaro
+                    ctx.beginPath();
+                    ctx.arc(cx + rx, cy + rz, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             });
         }
 
-        // --- 3. Disegna il GIOCATORE LOCALE (Sempre al centro) ---
-        ctx.fillStyle = '#00ff00'; // Verde
+        // --- 3. Disegna il GIOCATORE LOCALE (Verde al centro) ---
+        ctx.fillStyle = '#00ff00';
         ctx.beginPath();
-        ctx.arc(cx, cy, 5, 0, Math.PI * 2); // Pallino centrale
+        ctx.arc(cx, cy, 5, 0, Math.PI * 2);
         ctx.fill();
         
-        // Freccia direzione (Se passiamo la rotazione)
-        // Per ora pallino semplice
+        // Contorno giocatore
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
         ctx.stroke();
 
         ctx.restore();
     }
-    
-    // Metodo opzionale se volessimo disegnare i muri veri
-    // Richiederebbe di passare l'array wallMeshes
 }
