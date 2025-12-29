@@ -178,6 +178,75 @@
             { label: "Francesco", file: "Personaggi/Francesco.png", propic: "Personaggi/Francesco_propic.png" }
         ];
 
+        // --- UTILS PER TARGHETTE NOMI ---
+        function drawRoundRect(ctx, x, y, w, h, r) {
+            const rr = Math.min(r, w / 2, h / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + rr, y);
+            ctx.arcTo(x + w, y, x + w, y + h, rr);
+            ctx.arcTo(x + w, y + h, x, y + h, rr);
+            ctx.arcTo(x, y + h, x, y, rr);
+            ctx.arcTo(x, y, x + w, y, rr);
+            ctx.closePath();
+        }
+
+        function createNameTagSprite(name) {
+            const text = (name && String(name).trim().length) ? String(name).trim() : "???";
+            const W = 256, H = 64;
+            const canvas = document.createElement('canvas');
+            canvas.width = W; canvas.height = H;
+            const ctx = canvas.getContext('2d');
+
+            ctx.clearRect(0, 0, W, H);
+            
+            // Sfondo semitrasparente
+            const pad = 6;
+            ctx.fillStyle = "rgba(0,0,0,0.65)";
+            drawRoundRect(ctx, pad, pad, W - pad*2, H - pad*2, 14);
+            ctx.fill();
+
+            // Bordo
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "rgba(255,255,255,0.25)";
+            ctx.stroke();
+
+            // Testo
+            ctx.font = "28px Planewalker, sans-serif";
+            ctx.fillStyle = "#ffff00";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowColor = "rgba(0,0,0,0.9)";
+            ctx.shadowBlur = 6;
+            ctx.fillText(text.slice(0, 16), W / 2, H / 2);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+            const spr = new THREE.Sprite(mat);
+            spr.renderOrder = 999;
+            spr.scale.set(2.4, 0.6, 1);
+            spr.userData.__name = text;
+            return spr;
+        }
+
+        function setOrUpdateNameTag(parentObj, newName) {
+            const text = (newName && String(newName).trim().length) ? String(newName).trim() : "???";
+            const old = parentObj.userData.nameTag;
+            if (old && old.userData.__name === text) return;
+
+            if (old) {
+                if (old.material && old.material.map) old.material.map.dispose();
+                if (old.material) old.material.dispose();
+                parentObj.remove(old);
+            }
+
+            const tag = createNameTagSprite(text);
+            tag.position.set(0, 1.95, 0); // Altezza sopra la testa
+            parentObj.add(tag);
+            parentObj.userData.nameTag = tag;
+        }
+        // --------------------------------
+
         setupLogin();
 
         function setupLogin() {
@@ -247,6 +316,11 @@
             avatarMesh.visible = false;
             playerGroup.add(avatarMesh);
 
+            // --- AGGIUNTA TARGHETTA AL GIOCATORE LOCALE ---
+            setOrUpdateNameTag(playerGroup, myName);
+            // Nascondiamo subito perché siamo in prima persona
+            if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = false;
+
             setupAvatarUI();
             setupMicButton();
             buildLevel();
@@ -310,6 +384,8 @@
                     case 'KeyV': 
                         isThirdPerson = !isThirdPerson; 
                         avatarMesh.visible = isThirdPerson;
+                        // Mostra/Nascondi targhetta locale quando cambi visuale
+                        if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = isThirdPerson;
                         break;
                 }
             });
@@ -384,7 +460,15 @@
             socket.on('newPlayer', (data) => addRemotePlayer(data.id, data.player));
             socket.on('userJoined', payload => { const peer = addPeer(payload.signal, payload.callerID, localStream); peers[payload.callerID] = peer; });
             socket.on('receivingReturnedSignal', payload => { const item = peers[payload.id]; if(item) item.signal(payload.signal); });
-            socket.on('playerMoved', (data) => { const p = remotePlayers[data.id]; if (p) { p.position.set(data.x, data.y, data.z); p.rotation.y = data.theta + Math.PI; } });
+            socket.on('playerMoved', (data) => { 
+                const p = remotePlayers[data.id]; 
+                if (p) { 
+                    p.position.set(data.x, data.y, data.z); 
+                    p.rotation.y = data.theta + Math.PI;
+                    // Aggiorna anche il nome se il server lo invia
+                    if(data.name) setOrUpdateNameTag(p, data.name);
+                } 
+            });
             socket.on('playerSkinChanged', (data) => { const p = remotePlayers[data.id]; if (p) updateRemoteSkin(p, data.skin); });
             socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
             socket.on('playerDisconnected', (id) => { if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; } if (peers[id]) { peers[id].destroy(); delete peers[id]; } });
@@ -403,6 +487,10 @@
             const safeY = Math.max(0.85, data.y);
             mesh.position.set(data.x, safeY, data.z); 
             updateRemoteSkin(mesh, data.skin || "plebeo.png"); 
+            
+            // --- AGGIUNTA TARGHETTA AL GIOCATORE REMOTO ---
+            setOrUpdateNameTag(mesh, data.name || "Anonimo");
+
             scene.add(mesh); 
             remotePlayers[id] = mesh; 
         }
