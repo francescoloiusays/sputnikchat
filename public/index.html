@@ -76,14 +76,31 @@
         #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 93%; font-size: 16px; }
 
         #status { position: absolute; bottom: 10px; left: 10px; color: yellow; z-index: 20; text-shadow: 1px 1px 0 #000; font-size: 16px; }
-        #sh-logo{
+        
+        #sh-logo {
             position: fixed;
             left: 10px;
             bottom: 10px;
             z-index: 80;
-            width: 140px;     /* cambia a piacere */
+            width: 140px;
             height: auto;
             pointer-events: none;
+        }
+
+        /* Stile Propic */
+        #propic-container {
+            text-align: center;
+            margin: 5px 0 10px 0;
+            display: flex;
+            justify-content: center;
+        }
+        #hud-propic {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid #ff9900;
+            object-fit: cover;
+            background: #000;
         }
     </style>
 </head>
@@ -100,6 +117,11 @@
         <!-- MODIFICA: Nome Giocatore in Alto -->
         <div id="hud-name" style="font-size: 22px; color: #ff9900; font-weight: bold; text-align: center; border-bottom: 1px solid #555; padding-bottom: 8px; margin-bottom: 5px;">GIOCATORE</div>
         
+        <!-- MODIFICA: Immagine Profilo -->
+        <div id="propic-container">
+            <img id="hud-propic" src="" alt="Profile">
+        </div>
+
         <div><label style="font-size: 18px;">Skin:</label><select id="avatarSelect"></select></div>
         <div style="font-size:16px; color:#ccc; margin-top: 5px;" id="cam-mode">Visuale: 1a Persona</div>
         <button id="mic-btn" class="ui-btn" style="background: #cc0000;">Microfono: OFF (Premi M)</button>
@@ -158,10 +180,11 @@
         let bgMusic = null;
         let isMusicOn = false;
 
+        // --- MODIFICA: Aggiunto campo 'propic' ---
         const avatarOptions = [
-            { label: "Ratto", file: "Personaggi/Rat.png" },
-            { label: "Alessandro", file: "Personaggi/Alessandro.png" },
-            { label: "Francesco", file: "Personaggi/Francesco.png" }
+            { label: "Ratto", file: "Personaggi/Rat.png", propic: "Rat_propic.png" },
+            { label: "Alessandro", file: "Personaggi/Alessandro.png", propic: "Alessandro_propic.png" },
+            { label: "Francesco", file: "Personaggi/Francesco.png", propic: "Francesco_propic.png" }
         ];
 
         setupLogin();
@@ -351,8 +374,41 @@
         function addChatMessage(n, t) { const c = document.getElementById('chat-messages'); const d = document.createElement('div'); d.innerHTML = `<span class="chat-name">${n}:</span> ${t}`; c.appendChild(d); c.scrollTop = c.scrollHeight; }
         function addRemotePlayer(id, data) { const g = new THREE.PlaneGeometry(0.8, 1.7); const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(data.x, data.y, data.z); updateRemoteSkin(mesh, data.skin || "plebeo.png"); scene.add(mesh); remotePlayers[id] = mesh; }
         function updateRemoteSkin(mesh, f) { loader.load(`./${f}`, t => { t.colorSpace = THREE.SRGBColorSpace; mesh.material.map = t; mesh.material.needsUpdate = true; }); }
-        function setupAvatarMenu() { const s = document.getElementById('avatarSelect'); avatarOptions.forEach(o => { const op = document.createElement('option'); op.value = o.file; op.innerText = o.label; s.appendChild(op); }); const rnd = avatarOptions[Math.floor(Math.random()*avatarOptions.length)]; s.value = rnd.file; changeLocalSkin(rnd.file); s.addEventListener('change', (e) => changeLocalSkin(e.target.value)); }
-        function changeLocalSkin(f) { mySkin = f; loader.load(`./${f}`, t => { t.colorSpace = THREE.SRGBColorSpace; avatarMesh.material.map = t; avatarMesh.material.needsUpdate = true; }); if(socket && socket.connected) socket.emit('skinChange', f); }
+        
+        function setupAvatarMenu() { 
+            const s = document.getElementById('avatarSelect'); 
+            avatarOptions.forEach(o => { 
+                const op = document.createElement('option'); 
+                op.value = o.file; 
+                op.innerText = o.label; 
+                s.appendChild(op); 
+            }); 
+            
+            // Random iniziale
+            const rnd = avatarOptions[Math.floor(Math.random()*avatarOptions.length)]; 
+            s.value = rnd.file; 
+            changeLocalSkin(rnd.file); 
+            
+            s.addEventListener('change', (e) => changeLocalSkin(e.target.value)); 
+        }
+
+        function changeLocalSkin(f) { 
+            mySkin = f; 
+            
+            // --- MODIFICA: Aggiorna propic ---
+            const opt = avatarOptions.find(o => o.file === f);
+            if(opt && opt.propic) {
+                document.getElementById('hud-propic').src = `./${opt.propic}`;
+            }
+
+            loader.load(`./${f}`, t => { 
+                t.colorSpace = THREE.SRGBColorSpace; 
+                avatarMesh.material.map = t; 
+                avatarMesh.material.needsUpdate = true; 
+            }); 
+            if(socket && socket.connected) socket.emit('skinChange', f); 
+        }
+
         function checkCol(pos) { const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5); const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5); const box = new THREE.Box3(min, max); return colliders.some(c => box.intersectsBox(c)); }
         function createWall(x,y,z,w,h,d) { const g = new THREE.BoxGeometry(w,h,d); const t = wallTexture ? wallTexture.clone() : null; if(t) { t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(Math.max(w,d)/4, h/4); t.needsUpdate=true; } const m = new THREE.MeshStandardMaterial({ map: t, color: t ? 0xffffff : 0x888888 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(x,y,z); scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh); }
         
