@@ -76,6 +76,15 @@
         #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 93%; font-size: 16px; }
 
         #status { position: absolute; bottom: 10px; left: 10px; color: yellow; z-index: 20; text-shadow: 1px 1px 0 #000; font-size: 16px; }
+        #sh-logo{
+            position: fixed;
+            left: 10px;
+            bottom: 10px;
+            z-index: 80;
+            width: 140px;     /* cambia a piacere */
+            height: auto;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -110,6 +119,8 @@
         <div id="chat-messages"></div>
         <input id="chat-input" type="text" placeholder="Premi invio per scrivere..." autocomplete="off">
     </div>
+
+    <img id="sh-logo" src="./SH_Logo.gif" alt="Sputnik Homies">
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
