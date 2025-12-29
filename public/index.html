@@ -443,16 +443,86 @@
         }
 
         function initSocket() {
-            socket = io(SOCKET_URL);
-            socket.on('currentPlayers', (players) => { Object.keys(players).forEach((id) => { if (id !== socket.id) { addRemotePlayer(id, players[id]); createPeer(id, socket.id, localStream); } }); });
-            socket.on('newPlayer', (data) => addRemotePlayer(data.id, data.player));
-            socket.on('userJoined', payload => { const peer = addPeer(payload.signal, payload.callerID, localStream); peers[payload.callerID] = peer; });
-            socket.on('receivingReturnedSignal', payload => { const item = peers[payload.id]; if(item) item.signal(payload.signal); });
-            socket.on('playerMoved', (data) => { const p = remotePlayers[data.id]; if (p) { p.position.set(data.x, data.y, data.z); p.rotation.y = data.theta + Math.PI; } });
-            socket.on('playerSkinChanged', (data) => { const p = remotePlayers[data.id]; if (p) updateRemoteSkin(p, data.skin); });
-            socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
-            socket.on('playerDisconnected', (id) => { if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; } if (peers[id]) { peers[id].destroy(); delete peers[id]; } });
+    socket = io(SOCKET_URL);
+
+    socket.on('connect', () => {
+        console.log("Connesso al server con ID:", socket.id);
+    });
+
+    // Quando entri, ricevi la lista di chi c'è già
+    socket.on('currentPlayers', (players) => {
+        Object.keys(players).forEach((id) => {
+            if (id !== socket.id) {
+                console.log("Trovato giocatore esistente:", id);
+                addRemotePlayer(id, players[id]);
+                // IMPORTANTE: Crea il peer SOLO se non esiste già
+                if (!peers[id]) {
+                    createPeer(id, socket.id, localStream);
+                }
+            }
+        });
+    });
+
+    // Quando entra un NUOVO giocatore
+    socket.on('newPlayer', (data) => {
+        console.log("Nuovo giocatore entrato:", data.id);
+        addRemotePlayer(data.id, data.player);
+        // Nota: Non creiamo il peer qui, aspettiamo il segnale 'userJoined' o lasciamo che sia lui a iniziare
+    });
+
+    // WebRTC: Un altro utente vuole connettersi (Signal Offer)
+    socket.on('userJoined', payload => {
+        console.log("Ricevuto segnale userJoined da:", payload.callerID);
+        const peer = addPeer(payload.signal, payload.callerID, localStream);
+        peers[payload.callerID] = peer;
+    });
+
+    // WebRTC: Risposta alla nostra offerta (Signal Answer)
+    socket.on('receivingReturnedSignal', payload => {
+        console.log("Ricevuto segnale di ritorno da:", payload.id);
+        const item = peers[payload.id];
+        if(item) {
+            item.signal(payload.signal);
         }
+    });
+
+    // Movimento
+    socket.on('playerMoved', (data) => {
+        const p = remotePlayers[data.id];
+        if (p) {
+            p.position.set(data.x, data.y, data.z);
+            p.rotation.y = data.theta + Math.PI;
+            // Aggiorna nome se presente (aggiunto fix per sicurezza)
+            if(data.name && typeof setOrUpdateNameTag === 'function') {
+                setOrUpdateNameTag(p, data.name);
+            }
+        }
+    });
+
+    socket.on('playerSkinChanged', (data) => {
+        const p = remotePlayers[data.id];
+        if (p) updateRemoteSkin(p, data.skin);
+    });
+
+    socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
+
+    socket.on('playerDisconnected', (id) => {
+        console.log("Giocatore disconnesso:", id);
+        // Rimuovi mesh
+        if (remotePlayers[id]) {
+            scene.remove(remotePlayers[id]);
+            delete remotePlayers[id];
+        }
+        // Chiudi connessione P2P e rimuovi audio
+        if (peers[id]) {
+            peers[id].destroy();
+            delete peers[id];
+        }
+        const audioEl = document.getElementById(`audio-${id}`);
+        if (audioEl) audioEl.remove();
+    });
+}
+
 
         function createPeer(u, c, s) { const p = new SimplePeer({ initiator: true, trickle: false, stream: s }); p.on("signal", sig => socket.emit("sendingSignal", { userToSignal: u, callerID: c, signal: sig })); p.on("stream", st => addAudioElement(u, st)); peers[u] = p; }
         function addPeer(sig, c, s) { const p = new SimplePeer({ initiator: false, trickle: false, stream: s }); p.on("signal", sig => socket.emit("returningSignal", { signal: sig, callerID: c })); p.on("stream", st => addAudioElement(c, st)); p.signal(sig); return p; }
