@@ -272,25 +272,35 @@
             const btn = document.getElementById('play-btn');
             const input = document.getElementById('nickname-input');
             
-            const startGame = async () => {
-                const val = input.value.trim();
-                if(val.length > 0) myName = val;
-                
-                document.getElementById('hud-name').innerText = myName;
+const startGame = async () => {
+    // (opzionale ma consigliato) evita doppio avvio se cliccano due volte
+    if (window.__gameStarted) return;
+    window.__gameStarted = true;
 
-                try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-                    localStream.getAudioTracks()[0].enabled = false;
-                } catch (err) { console.warn("Microfono negato."); }
+    const val = input.value.trim();
+    if (val.length > 0) myName = val;
 
-                setupMusic();
-                document.getElementById('login-overlay').style.display = 'none';
-                document.getElementById('instructions').style.display = 'block';
-                
-                init();
-                initSocket(); 
-                animate();
-            };
+    // --- AGGIORNAMENTO UI NOME ---
+    document.getElementById('hud-name').innerText = myName;
+
+    // --- AVVIO MUSICA AUTOMATICO (subito, dentro il gesto utente) ---
+    setupMusic();
+    if (!isMusicOn) toggleMusic(); // non usare await qui
+
+    // Microfono (può aprire prompt permessi, meglio dopo la musica)
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        localStream.getAudioTracks()[0].enabled = false;
+    } catch (err) { console.warn("Microfono negato."); }
+
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('instructions').style.display = 'block';
+
+    init();
+    initSocket();
+    animate();
+};
+
 
             btn.addEventListener('click', startGame);
 
