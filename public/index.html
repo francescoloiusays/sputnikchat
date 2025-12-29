@@ -501,25 +501,44 @@
         }
 
         async function toggleMusic() {
-            if(!bgMusic) { bgMusic = new Audio(MUSIC_FILE); bgMusic.loop = true; bgMusic.volume = 0.3; }
+            // Se l'oggetto audio non esiste ancora, crealo
+            if(!bgMusic) { 
+                bgMusic = new Audio(MUSIC_FILE); 
+                bgMusic.loop = true; 
+                bgMusic.volume = 0.3; 
+            }
+            
             const btn = document.getElementById('music-btn');
             const icon = document.getElementById('music-icon');
+            
+            // Inverti lo stato
             isMusicOn = !isMusicOn;
+
             if(isMusicOn) {
                 try { 
                     await bgMusic.play(); 
+                    // Stile ATTIVO
                     btn.classList.add('music-on'); 
-                    icon.className = "fa-solid fa-music"; // Icona accesa
+                    icon.style.color = "#0088ff"; // Colore acceso (Blu)
+                    icon.style.opacity = "1";
+                    // Opzionale: aggiungi effetto glow
+                    icon.style.filter = "drop-shadow(0 0 10px #0088ff)";
                 } 
-                catch(e) { isMusicOn = false; console.warn("Autoplay bloccato", e); }
+                catch(e) { 
+                    // Se fallisce (es. blocco browser), torna allo stato spento
+                    isMusicOn = false; 
+                    console.warn("Autoplay bloccato", e); 
+                }
             } else { 
+                // Stile SPENTO
                 bgMusic.pause(); 
                 btn.classList.remove('music-on'); 
-                icon.className = "fa-solid fa-music-slash"; // Icona spenta (opzionale se esiste in FA, senno usa opacity)
-                icon.style.opacity = "1";
+                icon.style.color = "#888"; // Colore spento (Grigio)
+                icon.style.opacity = "0.5"; // Semitrasparente
+                icon.style.filter = "none";
             }
-            if(isMusicOn) icon.style.opacity = "1";
         }
+
 
         function setupMicButton() { document.getElementById('mic-btn').addEventListener('click', toggleMic); }
         function toggleMic() {
