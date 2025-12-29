@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Castle 3D MMO</title>
+    <title>SputnikChat</title>
     
     <!-- Librerie -->
     <script src="https://unpkg.com/gifler@0.1.0/gifler.min.js"></script>
@@ -159,7 +159,19 @@ border: 2px solid #111;
             left: 270px; top: 694px;
             width: 1559px; height: 1560px;
             z-index: 6;
-            border: 4px solid #555;
+            /* Effetto "Scavato" con luce da Alto-Destra */
+box-shadow: 
+    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
+    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
+    
+    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
+    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
+    
+    /* Ombra esterna per stacco (opzionale) */
+    0 2px 4px rgba(0,0,0,0.5);
+
+/* Bordo scuro per definire il taglio */
+border: 2px solid #111;
             overflow: hidden;
             display: flex; align-items: center; justify-content: center;
         }
