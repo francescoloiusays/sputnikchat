@@ -189,7 +189,7 @@
         <h1 style="font-size: 50px; margin-bottom: 0px;">SputnikChat</h1>
         <p style="font-size: 20px; color: #ccc; margin-bottom: 15px;">Parla</p>
         <!-- Rimosso style inline per usare il CSS ID -->
-        <input id="nickname-input" type="text" placeholder="Scegli Nickname" maxlength="16">
+        <input id="nickname-input" type="text" placeholder="Scegli Nickname" maxlength="16" autofocus>
         <button id="play-btn">Entra</button>
     </div>
 
@@ -277,7 +277,9 @@
         function setupLogin() {
             const btn = document.getElementById('play-btn');
             const input = document.getElementById('nickname-input');
-            btn.addEventListener('click', async () => {
+            
+            // Funzione comune di avvio
+            const startGame = async () => {
                 const val = input.value.trim();
                 if(val.length > 0) myName = val;
                 
@@ -296,6 +298,16 @@
                 init();
                 initSocket(); 
                 animate();
+            };
+
+            // Evento Click sul Bottone
+            btn.addEventListener('click', startGame);
+
+            // --- MODIFICA: Evento Tasto Invio sull'Input ---
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    startGame();
+                }
             });
         }
 
