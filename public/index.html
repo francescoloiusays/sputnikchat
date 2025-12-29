@@ -516,33 +516,38 @@
 
         socket.on('connect', () => {
             console.log("Connesso al server. ID:", socket.id);
+            // FIX: Appena connesso, urla subito al server chi sei e che skin hai!
+            socket.emit('playerMove', { 
+                x: playerGroup.position.x, 
+                y: playerGroup.position.y + 0.85, 
+                z: playerGroup.position.z, 
+                theta: theta, 
+                skin: mySkin, 
+                name: myName 
+            });
+            socket.emit('skinChange', mySkin);
         });
 
         socket.on('currentPlayers', (players) => {
-            console.log("Ricevuti giocatori correnti:", players);
             Object.keys(players).forEach((id) => {
                 if (id !== socket.id) {
                     addRemotePlayer(id, players[id]);
-                    // Se non ho già un peer per lui, lo creo (io sono l'iniziatore)
                     if(!peers[id]) createPeer(id, socket.id, localStream);
                 }
             });
         });
 
         socket.on('newPlayer', (data) => {
-            console.log("Nuovo giocatore entrato:", data.id);
+            console.log("Nuovo giocatore:", data.id);
             addRemotePlayer(data.id, data.player);
         });
 
-        // WebRTC Signals
         socket.on('userJoined', payload => {
-            console.log("Segnale userJoined da:", payload.callerID);
             const peer = addPeer(payload.signal, payload.callerID, localStream);
             peers[payload.callerID] = peer;
         });
 
         socket.on('receivingReturnedSignal', payload => {
-            console.log("Segnale di ritorno da:", payload.id);
             const item = peers[payload.id];
             if(item) item.signal(payload.signal);
         });
@@ -552,15 +557,17 @@
             if (p) {
                 p.position.set(data.x, data.y, data.z);
                 p.rotation.y = data.theta + Math.PI;
-                // Aggiorna NameTag remoto se serve
-                if(data.name) setOrUpdateNameTag(p, data.name);
-            } else {
-                // Se arriva un movimento ma non ho il player, provo ad aggiungerlo al volo
-                // (Fallback utile in caso di lag di rete all'ingresso)
-                if(data.id !== socket.id) {
-                    console.log("Ricevuto movimento per player sconosciuto, aggiungo:", data.id);
-                    addRemotePlayer(data.id, data);
+                
+                // FIX: Se il server mi dice che ha una skin diversa da quella che sto vedendo, aggiornala!
+                // Questo risolve il problema del "grigio" se il dato arriva in ritardo
+                if (data.skin && p.userData.currentSkin !== data.skin) {
+                    updateRemoteSkin(p, data.skin);
                 }
+
+                if(data.name) setOrUpdateNameTag(p, data.name);
+            } else if(data.id !== socket.id) {
+                // Fallback: se non esiste, crealo ora
+                addRemotePlayer(data.id, data);
             }
         });
 
@@ -572,7 +579,6 @@
         socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
 
         socket.on('playerDisconnected', (id) => {
-            console.log("Disconnessione:", id);
             if (remotePlayers[id]) {
                 scene.remove(remotePlayers[id]);
                 delete remotePlayers[id];
@@ -585,6 +591,8 @@
             if(el) el.remove();
         });
     }
+
+        
 
     function createPeer(u, c, s) { 
         // Se s (stream) è null, SimplePeer funziona lo stesso per i dati, ma non invia audio.
@@ -636,12 +644,25 @@
     }
     
     function updateRemoteSkin(mesh, f) { 
-        loader.load(`./${f}`, t => { 
+        // Se è null o vuoto, usa il default
+        const skinFile = f || "plebeo.png";
+
+        // Ottimizzazione: Se ha già questa skin caricata, non fare nulla!
+        if (mesh.userData.currentSkin === skinFile) return;
+
+        loader.load(`./${skinFile}`, t => { 
             t.colorSpace = THREE.SRGBColorSpace; 
             mesh.material.map = t; 
             mesh.material.needsUpdate = true; 
-        }, undefined, (err) => console.log("Errore skin remota:", err)); 
+            // Salviamo quale skin abbiamo appena caricato
+            mesh.userData.currentSkin = skinFile;
+        }, undefined, (err) => {
+            console.warn("Impossibile caricare skin:", skinFile);
+            // Se fallisce, prova a caricare quella di default per non lasciarlo grigio
+            if (skinFile !== "plebeo.png") updateRemoteSkin(mesh, "plebeo.png");
+        }); 
     }
+
     
     // --- UI AVATAR ---
     function setupAvatarUI() { 
