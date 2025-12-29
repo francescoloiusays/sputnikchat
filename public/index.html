@@ -445,17 +445,22 @@
             });
         }
 
-        // Crea texture "non-stretchata" e propic
+                // Funzione ottimizzata per ridurre il peso al minimo (FIX LAG)
         function processCustomSkin(img) {
-            // 1. TEXTURE PERSONAGGIO (Aspect Ratio 0.8 : 1.7)
-            // Creiamo una canvas di dimensioni fisse, es. 400x850
-            const texW = 400; 
-            const texH = 850;
+            // 1. TEXTURE PERSONAGGIO - RIDOTTA DRASTICAMENTE
+            // Usiamo una risoluzione bassa per non intasare il server
+            // 100px di larghezza sono sufficienti per un personaggio in lontananza
+            const texW = 100; 
+            const texH = 212; // Mantiene aspect ratio approx 0.8 : 1.7
+            
             const texCanvas = document.createElement('canvas');
             texCanvas.width = texW; 
             texCanvas.height = texH;
             const ctxT = texCanvas.getContext('2d');
             
+            // Disabilitiamo l'anti-aliasing per un look più netto (pixel art style)
+            ctxT.imageSmoothingEnabled = false;
+
             // Logica "contain": mantieni aspect ratio, centra
             const scale = Math.min(texW / img.width, texH / img.height);
             const drawW = img.width * scale;
@@ -464,16 +469,25 @@
             const offY = (texH - drawH) / 2;
             
             ctxT.drawImage(img, offX, offY, drawW, drawH);
-            const textureDataUrl = texCanvas.toDataURL('image/png');
+            
+            // Compressione JPEG a bassa qualità (0.6) per ridurre la stringa Base64
+            // Se serve trasparenza bisogna usare 'image/png', ma pesa di più.
+            // Proviamo PNG ma con risoluzione bassa, dovrebbe reggere.
+            const textureDataUrl = texCanvas.toDataURL('image/png'); 
 
-            // 2. PROPIC (Quadrata 1:1)
-            const iconSize = 128;
+            // Controllo sicurezza dimensione (se > 100KB avvisa console)
+            if(textureDataUrl.length > 100000) {
+                console.warn("Attenzione: La skin generata è ancora pesante (" + Math.round(textureDataUrl.length/1024) + "KB). Potrebbe causare lag.");
+            }
+
+            // 2. PROPIC (Piccolissima)
+            const iconSize = 64; // Ridotto da 128 a 64
             const iconCanvas = document.createElement('canvas');
             iconCanvas.width = iconSize;
             iconCanvas.height = iconSize;
             const ctxI = iconCanvas.getContext('2d');
+            ctxI.imageSmoothingEnabled = false;
             
-            // Logica "cover": riempi il quadrato (zoom centrale)
             const scaleI = Math.max(iconSize / img.width, iconSize / img.height);
             const drawWI = img.width * scaleI;
             const drawHI = img.height * scaleI;
@@ -486,8 +500,8 @@
             // 3. Aggiungi alla lista e seleziona
             avatarOptions.push({
                 label: "Custom",
-                file: textureDataUrl, // Data URL usato come texture
-                propicData: propicDataUrl // Salviamo direttamente i dati per la propic
+                file: textureDataUrl, 
+                propicData: propicDataUrl 
             });
 
             currentSkinIndex = avatarOptions.length - 1;
