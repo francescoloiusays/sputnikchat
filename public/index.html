@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     
     <style>
-        /* 1. DEFINIZIONE FONT */
+        /* FONT */
         @font-face {
             font-family: 'Planewalker';
             src: url('./Planewalker.woff') format('woff');
@@ -18,21 +18,16 @@
             font-style: normal;
         }
 
-        /* 2. APPLICAZIONE GLOBALE */
         body { 
             margin: 0; 
             overflow: hidden; 
-            font-family: 'Planewalker', sans-serif; /* Fallback a sans-serif se manca il file */
+            font-family: 'Planewalker', sans-serif; 
             background: #111; 
         }
 
-        /* Forza il font anche su input e bottoni (spesso i browser usano il default di sistema) */
-        button, input, select, textarea {
-            font-family: 'Planewalker', sans-serif;
-        }
+        button, input, select, textarea { font-family: 'Planewalker', sans-serif; }
 
         canvas { display: block; }
-        
         .ui-layer { position: absolute; pointer-events: none; width: 100%; height: 100%; top: 0; left: 0; }
         .pointer-auto { pointer-events: auto; }
 
@@ -49,7 +44,7 @@
             text-transform: uppercase; letter-spacing: 1px;
         }
         
-        /* UI Top Left */
+        /* UI */
         #ui-top-left {
             position: absolute; top: 10px; left: 10px; z-index: 20;
             background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; color: white;
@@ -57,7 +52,6 @@
         }
         select { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; width: 100%; font-size: 16px; }
         
-        /* Bottoni UI */
         .ui-btn {
             background: #333; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; text-align: center;
         }
@@ -71,7 +65,6 @@
             font-size: 20px;
         }
 
-        /* Chat Box */
         #chat-container {
             position: absolute; bottom: 20px; right: 20px; width: 320px; height: 250px;
             background: rgba(0, 0, 0, 0.5); border-radius: 8px; z-index: 50;
@@ -94,16 +87,9 @@
     </div>
 
     <div id="ui-top-left" class="pointer-auto">
-        <!-- Skin Selector -->
         <div><label style="font-size: 18px;">Skin:</label><select id="avatarSelect"></select></div>
-        
-        <!-- Camera Mode -->
         <div style="font-size:16px; color:#ccc; margin-top: 5px;" id="cam-mode">Visuale: 1a Persona</div>
-        
-        <!-- Mic Button -->
         <button id="mic-btn" class="ui-btn" style="background: #cc0000;">Microfono: OFF (Premi M)</button>
-        
-        <!-- Music Player -->
         <div style="border-top: 1px solid #555; margin-top: 5px; padding-top: 5px;">
             <div style="font-size:16px; color:#ccc; margin-bottom: 4px;">Brano: <span id="music-name" style="color:white;">Nessuno</span></div>
             <button id="music-btn" class="ui-btn">Musica: OFF (Premi B)</button>
@@ -129,10 +115,8 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- URL SERVER ---
+        // --- CONFIG ---
         const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
-        
-        // --- FILE MUSICA ---
         const MUSIC_FILE = "./soundtrack.mp3"; 
         const MUSIC_TITLE = "Soundtrack";
 
@@ -151,12 +135,10 @@
         const cameraRaycaster = new THREE.Raycaster();
         let wallTexture, floorTexture, torchAnimatedTexture;
 
-        // WebRTC
+        // WebRTC & Audio
         let localStream;
         const peers = {}; 
         let isMicActive = false;
-        
-        // Music
         let bgMusic = null;
         let isMusicOn = false;
 
@@ -171,22 +153,16 @@
         function setupLogin() {
             const btn = document.getElementById('play-btn');
             const input = document.getElementById('nickname-input');
-            
             btn.addEventListener('click', async () => {
                 const val = input.value.trim();
                 if(val.length > 0) myName = val;
                 
-                // Mic setup
                 try {
                     localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
                     localStream.getAudioTracks()[0].enabled = false;
-                } catch (err) {
-                    console.warn("Microfono negato.");
-                }
+                } catch (err) { console.warn("Microfono negato."); }
 
-                // Music setup
                 setupMusic();
-
                 document.getElementById('login-overlay').style.display = 'none';
                 document.getElementById('instructions').style.display = 'block';
                 
@@ -268,9 +244,7 @@
                     if (e.code === 'Escape') { chatInput.blur(); document.body.requestPointerLock(); }
                     return;
                 }
-
                 if (e.code === 'Enter') { document.exitPointerLock(); chatInput.focus(); return; }
-                
                 if (e.code === 'KeyM') toggleMic();
                 if (e.code === 'KeyB') toggleMusic();
 
@@ -303,202 +277,58 @@
             });
         }
 
-        // --- MUSIC ---
         function setupMusic() {
             bgMusic = new Audio(MUSIC_FILE);
             bgMusic.loop = true;
             bgMusic.volume = 0.3;
             document.getElementById('music-name').innerText = MUSIC_TITLE;
-            
-            const btn = document.getElementById('music-btn');
-            btn.addEventListener('click', toggleMusic);
+            document.getElementById('music-btn').addEventListener('click', toggleMusic);
         }
 
         async function toggleMusic() {
-            // Se bgMusic non esiste, riprova a crearlo (sicurezza)
-            if(!bgMusic) {
-                 bgMusic = new Audio(MUSIC_FILE);
-                 bgMusic.loop = true;
-                 bgMusic.volume = 0.3;
-            }
-
+            if(!bgMusic) { bgMusic = new Audio(MUSIC_FILE); bgMusic.loop = true; bgMusic.volume = 0.3; }
             const btn = document.getElementById('music-btn');
             isMusicOn = !isMusicOn;
-            
             if(isMusicOn) {
-                try {
-                    await bgMusic.play();
-                    btn.innerText = "Musica: ON";
-                    btn.classList.add('music-on');
-                } catch(e) {
-                    isMusicOn = false;
-                    console.warn("Autoplay bloccato", e);
-                    alert("Impossibile avviare musica. Controlla il file su GitHub.");
-                }
-            } else {
-                bgMusic.pause();
-                btn.innerText = "Musica: OFF (Premi B)";
-                btn.classList.remove('music-on');
-            }
+                try { await bgMusic.play(); btn.innerText = "Musica: ON"; btn.classList.add('music-on'); } 
+                catch(e) { isMusicOn = false; console.warn("Autoplay bloccato", e); alert("Impossibile avviare musica."); }
+            } else { bgMusic.pause(); btn.innerText = "Musica: OFF (Premi B)"; btn.classList.remove('music-on'); }
         }
 
-        // --- MIC ---
-        function setupMicButton() {
-            const btn = document.getElementById('mic-btn');
-            btn.addEventListener('click', toggleMic);
-        }
-
+        function setupMicButton() { document.getElementById('mic-btn').addEventListener('click', toggleMic); }
         function toggleMic() {
             if(!localStream) return;
             isMicActive = !isMicActive;
             localStream.getAudioTracks()[0].enabled = isMicActive;
-            
             const btn = document.getElementById('mic-btn');
-            if(isMicActive) {
-                btn.innerText = "Microfono: ON";
-                btn.classList.add('active');
-            } else {
-                btn.innerText = "Microfono: OFF (Premi M)";
-                btn.classList.remove('active');
-            }
+            if(isMicActive) { btn.innerText = "Microfono: ON"; btn.classList.add('active'); } 
+            else { btn.innerText = "Microfono: OFF (Premi M)"; btn.classList.remove('active'); }
         }
 
-        // --- SOCKET & WEB RTC ---
         function initSocket() {
             socket = io(SOCKET_URL);
-
-            socket.on('connect', () => {
-                document.getElementById('status').innerText = "Online: " + myName;
-                document.getElementById('status').style.color = "lime";
-            });
-
-            socket.on('currentPlayers', (players) => {
-                Object.keys(players).forEach((id) => {
-                    if (id !== socket.id) {
-                        addRemotePlayer(id, players[id]);
-                        createPeer(id, socket.id, localStream);
-                    }
-                });
-            });
-
-            socket.on('newPlayer', (data) => {
-                addRemotePlayer(data.id, data.player);
-            });
-
-            socket.on('userJoined', payload => {
-                const peer = addPeer(payload.signal, payload.callerID, localStream);
-                peers[payload.callerID] = peer;
-            });
-
-            socket.on('receivingReturnedSignal', payload => {
-                const item = peers[payload.id];
-                if(item) item.signal(payload.signal);
-            });
-
-            socket.on('playerMoved', (data) => {
-                const p = remotePlayers[data.id];
-                if (p) { p.position.set(data.x, data.y, data.z); p.rotation.y = data.theta + Math.PI; }
-            });
-
-            socket.on('playerSkinChanged', (data) => {
-                const p = remotePlayers[data.id];
-                if (p) updateRemoteSkin(p, data.skin);
-            });
-
+            socket.on('connect', () => { document.getElementById('status').innerText = "Online: " + myName; document.getElementById('status').style.color = "lime"; });
+            socket.on('currentPlayers', (players) => { Object.keys(players).forEach((id) => { if (id !== socket.id) { addRemotePlayer(id, players[id]); createPeer(id, socket.id, localStream); } }); });
+            socket.on('newPlayer', (data) => addRemotePlayer(data.id, data.player));
+            socket.on('userJoined', payload => { const peer = addPeer(payload.signal, payload.callerID, localStream); peers[payload.callerID] = peer; });
+            socket.on('receivingReturnedSignal', payload => { const item = peers[payload.id]; if(item) item.signal(payload.signal); });
+            socket.on('playerMoved', (data) => { const p = remotePlayers[data.id]; if (p) { p.position.set(data.x, data.y, data.z); p.rotation.y = data.theta + Math.PI; } });
+            socket.on('playerSkinChanged', (data) => { const p = remotePlayers[data.id]; if (p) updateRemoteSkin(p, data.skin); });
             socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
-
-            socket.on('playerDisconnected', (id) => {
-                if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }
-                if (peers[id]) { peers[id].destroy(); delete peers[id]; } 
-            });
+            socket.on('playerDisconnected', (id) => { if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; } if (peers[id]) { peers[id].destroy(); delete peers[id]; } });
         }
 
-        function createPeer(userToSignal, callerID, stream) {
-            const peer = new SimplePeer({ initiator: true, trickle: false, stream: stream });
-            peer.on("signal", signal => { socket.emit("sendingSignal", { userToSignal, callerID, signal }); });
-            peer.on("stream", stream => { addAudioElement(userToSignal, stream); });
-            peers[userToSignal] = peer;
-        }
-
-        function addPeer(incomingSignal, callerID, stream) {
-            const peer = new SimplePeer({ initiator: false, trickle: false, stream: stream });
-            peer.on("signal", signal => { socket.emit("returningSignal", { signal, callerID }); });
-            peer.on("stream", stream => { addAudioElement(callerID, stream); });
-            peer.signal(incomingSignal);
-            return peer;
-        }
-
-        function addAudioElement(id, stream) {
-            const audio = document.createElement('audio');
-            audio.srcObject = stream;
-            audio.autoplay = true;
-            audio.id = `audio-${id}`;
-            document.body.appendChild(audio);
-        }
-
-        function addChatMessage(name, text) {
-            const container = document.getElementById('chat-messages');
-            const msgDiv = document.createElement('div');
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'chat-name'; nameSpan.innerText = name + ":";
-            const textSpan = document.createElement('span');
-            textSpan.innerText = " " + text;
-            msgDiv.appendChild(nameSpan); msgDiv.appendChild(textSpan);
-            container.appendChild(msgDiv);
-            container.scrollTop = container.scrollHeight;
-        }
-
-        function addRemotePlayer(id, data) {
-            const geo = new THREE.PlaneGeometry(0.8, 1.7);
-            const mat = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(data.x, data.y, data.z);
-            updateRemoteSkin(mesh, data.skin || "plebeo.png");
-            scene.add(mesh);
-            remotePlayers[id] = mesh;
-        }
-
-        function updateRemoteSkin(mesh, filename) {
-            loader.load(`./${filename}`, (tex) => {
-                tex.colorSpace = THREE.SRGBColorSpace;
-                mesh.material.map = tex;
-                mesh.material.needsUpdate = true;
-            });
-        }
-        function setupAvatarMenu() {
-            const s = document.getElementById('avatarSelect');
-            avatarOptions.forEach(o => {
-                const opt = document.createElement('option');
-                opt.value = o.file; opt.innerText = o.label; s.appendChild(opt);
-            });
-            const rnd = avatarOptions[Math.floor(Math.random()*avatarOptions.length)];
-            s.value = rnd.file;
-            changeLocalSkin(rnd.file);
-            s.addEventListener('change', (e) => changeLocalSkin(e.target.value));
-        }
-        function changeLocalSkin(file) {
-            mySkin = file;
-            loader.load(`./${file}`, (t) => {
-                t.colorSpace = THREE.SRGBColorSpace;
-                avatarMesh.material.map = t;
-                avatarMesh.material.needsUpdate = true;
-            });
-            if(socket && socket.connected) socket.emit('skinChange', file);
-        }
-        function checkCol(pos) {
-            const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5);
-            const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5);
-            const box = new THREE.Box3(min, max);
-            return colliders.some(c => box.intersectsBox(c));
-        }
-        function createWall(x,y,z,w,h,d) {
-            const geo = new THREE.BoxGeometry(w,h,d);
-            const tex = wallTexture ? wallTexture.clone() : null;
-            if(tex) { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(Math.max(w,d)/4, h/4); tex.needsUpdate = true; }
-            const mat = new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : 0x888888 });
-            const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z);
-            scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh);
-        }
+        function createPeer(u, c, s) { const p = new SimplePeer({ initiator: true, trickle: false, stream: s }); p.on("signal", sig => socket.emit("sendingSignal", { userToSignal: u, callerID: c, signal: sig })); p.on("stream", st => addAudioElement(u, st)); peers[u] = p; }
+        function addPeer(sig, c, s) { const p = new SimplePeer({ initiator: false, trickle: false, stream: s }); p.on("signal", sig => socket.emit("returningSignal", { signal: sig, callerID: c })); p.on("stream", st => addAudioElement(c, st)); p.signal(sig); return p; }
+        function addAudioElement(id, s) { const a = document.createElement('audio'); a.srcObject = s; a.autoplay = true; a.id = `audio-${id}`; document.body.appendChild(a); }
+        function addChatMessage(n, t) { const c = document.getElementById('chat-messages'); const d = document.createElement('div'); d.innerHTML = `<span class="chat-name">${n}:</span> ${t}`; c.appendChild(d); c.scrollTop = c.scrollHeight; }
+        function addRemotePlayer(id, data) { const g = new THREE.PlaneGeometry(0.8, 1.7); const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(data.x, data.y, data.z); updateRemoteSkin(mesh, data.skin || "plebeo.png"); scene.add(mesh); remotePlayers[id] = mesh; }
+        function updateRemoteSkin(mesh, f) { loader.load(`./${f}`, t => { t.colorSpace = THREE.SRGBColorSpace; mesh.material.map = t; mesh.material.needsUpdate = true; }); }
+        function setupAvatarMenu() { const s = document.getElementById('avatarSelect'); avatarOptions.forEach(o => { const op = document.createElement('option'); op.value = o.file; op.innerText = o.label; s.appendChild(op); }); const rnd = avatarOptions[Math.floor(Math.random()*avatarOptions.length)]; s.value = rnd.file; changeLocalSkin(rnd.file); s.addEventListener('change', (e) => changeLocalSkin(e.target.value)); }
+        function changeLocalSkin(f) { mySkin = f; loader.load(`./${f}`, t => { t.colorSpace = THREE.SRGBColorSpace; avatarMesh.material.map = t; avatarMesh.material.needsUpdate = true; }); if(socket && socket.connected) socket.emit('skinChange', f); }
+        function checkCol(pos) { const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5); const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5); const box = new THREE.Box3(min, max); return colliders.some(c => box.intersectsBox(c)); }
+        function createWall(x,y,z,w,h,d) { const g = new THREE.BoxGeometry(w,h,d); const t = wallTexture ? wallTexture.clone() : null; if(t) { t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(Math.max(w,d)/4, h/4); t.needsUpdate=true; } const m = new THREE.MeshStandardMaterial({ map: t, color: t ? 0xffffff : 0x888888 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(x,y,z); scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh); }
+        
         function buildLevel() {
             createWall(0, 5, 5, 10, 10, 1); createWall(-5, 5, 0, 1, 10, 10); createWall(5, 5, 0, 1, 10, 10);
             createWall(-3.5, 5, -5, 4, 10, 1); createWall(3.5, 5, -5, 4, 10, 1);
@@ -511,17 +341,27 @@
             const floor = new THREE.Mesh(floorGeo, floorMat); floor.rotation.x = -Math.PI/2; scene.add(floor);
             
             const createTorch = (x,y,z,rot) => {
+                // 1. MESH ANIMATA (Torcia visibile)
                 const geo = new THREE.PlaneGeometry(0.8, 0.8);
                 const mat = new THREE.MeshBasicMaterial({ map: torchAnimatedTexture, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
-                const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
-                const l = new THREE.PointLight(0xff6600, 1, 10); l.position.set(x + Math.sin(rot)*0.2, y, z + Math.cos(rot)*0.2); scene.add(l);
+                const mesh = new THREE.Mesh(geo, mat); 
+                mesh.position.set(x,y,z); 
+                mesh.rotation.y = rot; 
+                scene.add(mesh);
+
+                // 2. LUCE (PointLight) - Luminosità aumentata
+                const l = new THREE.PointLight(0xff6600, 2.0, 12); // Intensità 2.0 (era 1), Raggio 12 (era 10)
+                l.position.set(x + Math.sin(rot)*0.2, y, z + Math.cos(rot)*0.2); 
+                scene.add(l);
                 torchLights.push({ light: l, speed: 2+Math.random()*3 });
             };
+
             createTorch(0, 2.5, 4.4, 0); createTorch(-4.4, 2.5, 0, Math.PI/2); createTorch(4.4, 2.5, 0, -Math.PI/2);
             createTorch(-1.4, 2.5, -10, Math.PI/2); createTorch(1.4, 2.5, -10, -Math.PI/2);
             createTorch(-1.4, 2.5, -20, Math.PI/2); createTorch(1.4, 2.5, -20, -Math.PI/2);
             createTorch(-7.4, 2.5, -30, Math.PI/2); createTorch(7.4, 2.5, -30, -Math.PI/2); createTorch(0, 2.5, -39.4, Math.PI);
         }
+
         function animate() {
             requestAnimationFrame(animate);
             if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
