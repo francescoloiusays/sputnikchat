@@ -325,7 +325,6 @@
 
         function initSocket() {
             socket = io(SOCKET_URL);
-            socket.on('connect', () => { document.getElementById('status').innerText = myName; document.getElementById('status').style.color = "lime"; });
             socket.on('currentPlayers', (players) => { Object.keys(players).forEach((id) => { if (id !== socket.id) { addRemotePlayer(id, players[id]); createPeer(id, socket.id, localStream); } }); });
             socket.on('newPlayer', (data) => addRemotePlayer(data.id, data.player));
             socket.on('userJoined', payload => { const peer = addPeer(payload.signal, payload.callerID, localStream); peers[payload.callerID] = peer; });
