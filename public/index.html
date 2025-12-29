@@ -227,463 +227,539 @@
     </script>
 
     <script type="module">
-        import * as THREE from 'three';
-        // Se hai il file minimap.js, scommenta la riga sotto:
-        // import { Minimap } from './minimap.js';
+    import * as THREE from 'three';
 
-        // --- CONFIG ---
-        const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
-        const MUSIC_FILE = "./soundtrack.mp3"; 
+    // --- CONFIG ---
+    const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
+    const MUSIC_FILE = "./soundtrack.mp3"; 
 
-        let scene, camera, renderer, loader, socket, minimap;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let canJump = false, isLocked = false, isThirdPerson = false;
-        let playerGroup, avatarMesh, theta = 0, phi = 0;
-        let velocity = new THREE.Vector3();
-        const GRAVITY = 30.0;
+    let scene, camera, renderer, loader, socket;
+    let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+    let canJump = false, isLocked = false, isThirdPerson = false;
+    let playerGroup, avatarMesh, theta = 0, phi = 0;
+    let velocity = new THREE.Vector3();
+    const GRAVITY = 30.0;
+    
+    let mySkin = "plebeo.png";
+    let myName = "Anonimo";
+    let gameInitialized = false; // Flag per evitare doppi avvii
+
+    const remotePlayers = {}; 
+    const wallMeshes = [], colliders = [], torchLights = [];
+    const cameraRaycaster = new THREE.Raycaster();
+    let wallTexture, floorTexture, torchAnimatedTexture;
+
+    // WebRTC & Audio
+    let localStream = null; // Inizializziamo a null
+    const peers = {}; 
+    let isMicActive = false;
+    let bgMusic = null;
+    let isMusicOn = false;
+
+    // Indice Skin Corrente
+    let currentSkinIndex = 0;
+
+    const avatarOptions = [
+        { label: "Ratto", file: "Personaggi/Rat.png", propic: "Personaggi/Rat_propic.png" },
+        { label: "Alessandro", file: "Personaggi/Alessandro.png", propic: "Personaggi/Alessandro_propic.png" },
+        { label: "Francesco", file: "Personaggi/Francesco.png", propic: "Personaggi/Francesco_propic.png" }
+    ];
+
+    // --- UTILS PER TARGHETTE NOMI ---
+    function drawRoundRect(ctx, x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rr);
+        ctx.arcTo(x + w, y + h, x, y + h, rr);
+        ctx.arcTo(x, y + h, x, y, rr);
+        ctx.arcTo(x, y, x + w, y, rr);
+        ctx.closePath();
+    }
+
+    function createNameTagSprite(name) {
+        const text = (name && String(name).trim().length) ? String(name).trim() : "???";
+        const W = 256, H = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+
+        ctx.clearRect(0, 0, W, H);
+        const pad = 6;
+        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        drawRoundRect(ctx, pad, pad, W - pad*2, H - pad*2, 14);
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(255,255,255,0.25)";
+        ctx.stroke();
+        ctx.font = "28px Planewalker, sans-serif";
+        ctx.fillStyle = "#ffff00";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0,0,0,0.9)";
+        ctx.shadowBlur = 6;
+        ctx.fillText(text.slice(0, 16), W / 2, H / 2);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+        const spr = new THREE.Sprite(mat);
+        spr.renderOrder = 999;
+        spr.scale.set(2.4, 0.6, 1); // <--- MODIFICA QUI LA SIZE (es. 3.0, 0.8, 1)
+        spr.userData.__name = text;
+        return spr;
+    }
+
+    function setOrUpdateNameTag(parentObj, newName) {
+        if(!parentObj) return;
+        const text = (newName && String(newName).trim().length) ? String(newName).trim() : "???";
+        const old = parentObj.userData.nameTag;
+        if (old && old.userData.__name === text) return;
+
+        if (old) {
+            if (old.material && old.material.map) old.material.map.dispose();
+            if (old.material) old.material.dispose();
+            parentObj.remove(old);
+        }
+
+        const tag = createNameTagSprite(text);
+        tag.position.set(0, 1.95, 0); 
+        parentObj.add(tag);
+        parentObj.userData.nameTag = tag;
+    }
+    // --------------------------------
+
+    setupLogin();
+
+    function setupLogin() {
+        const btn = document.getElementById('play-btn');
+        const input = document.getElementById('nickname-input');
         
-        let mySkin = "plebeo.png";
-        let myName = "Anonimo";
+        const startGame = async () => {
+            if(gameInitialized) return; // Evita doppi click
+            gameInitialized = true;
 
-        const remotePlayers = {}; 
-        const wallMeshes = [], colliders = [], torchLights = [];
-        const cameraRaycaster = new THREE.Raycaster();
-        let wallTexture, floorTexture, torchAnimatedTexture;
-
-        // WebRTC & Audio
-        let localStream;
-        const peers = {}; 
-        let isMicActive = false;
-        let bgMusic = null;
-        let isMusicOn = false;
-
-        // Indice Skin Corrente
-        let currentSkinIndex = 0;
-
-        const avatarOptions = [
-            { label: "Ratto", file: "Personaggi/Rat.png", propic: "Personaggi/Rat_propic.png" },
-            { label: "Alessandro", file: "Personaggi/Alessandro.png", propic: "Personaggi/Alessandro_propic.png" },
-            { label: "Francesco", file: "Personaggi/Francesco.png", propic: "Personaggi/Francesco_propic.png" }
-        ];
-
-        setupLogin();
-
-        function setupLogin() {
-            const btn = document.getElementById('play-btn');
-            const input = document.getElementById('nickname-input');
+            const val = input.value.trim();
+            if(val.length > 0) myName = val;
             
-            const startGame = async () => {
-                const val = input.value.trim();
-                if(val.length > 0) myName = val;
-                
-                document.getElementById('hud-name').innerText = myName;
+            document.getElementById('hud-name').innerText = myName;
 
-                try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-                    localStream.getAudioTracks()[0].enabled = false;
-                } catch (err) { console.warn("Microfono negato."); }
+            // Richiesta microfono (opzionale, non deve bloccare il gioco)
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                localStream.getAudioTracks()[0].enabled = false;
+                console.log("Microfono acquisito.");
+            } catch (err) { 
+                console.warn("Microfono negato o non disponibile:", err); 
+                localStream = null; // Stream nullo esplicito
+            }
 
-                setupMusic();
-                document.getElementById('login-overlay').style.display = 'none';
-                document.getElementById('instructions').style.display = 'block';
-                
-                init();
-                initSocket(); 
-                animate();
-            };
+            // Musica
+            setupMusic();
 
-            btn.addEventListener('click', startGame);
-
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    startGame();
-                }
-            });
-        }
-
-        function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x111111);
-            scene.fog = new THREE.Fog(0x111111, 0, 60);
-
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            scene.add(camera);
-
-            loader = new THREE.TextureLoader();
-            const loadTex = (p) => loader.load(p, (t) => t.colorSpace = THREE.SRGBColorSpace);
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('instructions').style.display = 'block';
             
-            wallTexture = loadTex('./muro.jpg');
-            floorTexture = loadTex('./pavimento.jpg');
-            if(floorTexture) { floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(10, 10); }
+            init();
+            initSocket(); 
+            animate();
+        };
 
-            // --- TEXTURE TORCIA ---
-            const gifCanvas = document.createElement('canvas');
-            gifCanvas.width = 512;
-            gifCanvas.height = 512;
-            
-            torchAnimatedTexture = new THREE.CanvasTexture(gifCanvas);
-            torchAnimatedTexture.colorSpace = THREE.SRGBColorSpace;
-            torchAnimatedTexture.minFilter = THREE.LinearFilter; 
-            
-            try { window.gifler('./torcia.gif').animate(gifCanvas); } catch(e){}
-            // ---------------------
+        btn.addEventListener('click', startGame);
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
+    }
 
-            playerGroup = new THREE.Group();
-            scene.add(playerGroup);
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111111);
+        scene.fog = new THREE.Fog(0x111111, 0, 60);
 
-            const avatarGeo = new THREE.PlaneGeometry(0.8, 1.7);
-            const avatarMat = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 });
-            avatarMesh = new THREE.Mesh(avatarGeo, avatarMat);
-            avatarMesh.position.set(0, 0.85, 0); 
-            avatarMesh.visible = false;
-            playerGroup.add(avatarMesh);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        scene.add(camera);
 
-            setupAvatarUI();
-            setupMicButton();
-            buildLevel();
+        loader = new THREE.TextureLoader();
+        const loadTex = (p) => loader.load(p, (t) => t.colorSpace = THREE.SRGBColorSpace);
+        
+        wallTexture = loadTex('./muro.jpg');
+        floorTexture = loadTex('./pavimento.jpg');
+        if(floorTexture) { floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(10, 10); }
 
-            // Se hai il file minimap.js, scommenta:
-            // minimap = new Minimap(scene, playerGroup, remotePlayers);
+        // --- TEXTURE TORCIA ---
+        const gifCanvas = document.createElement('canvas');
+        gifCanvas.width = 512; gifCanvas.height = 512;
+        torchAnimatedTexture = new THREE.CanvasTexture(gifCanvas);
+        torchAnimatedTexture.colorSpace = THREE.SRGBColorSpace;
+        torchAnimatedTexture.minFilter = THREE.LinearFilter; 
+        try { window.gifler('./torcia.gif').animate(gifCanvas); } catch(e){}
 
-            const ambient = new THREE.AmbientLight(0xffffff, 0.2);
-            scene.add(ambient);
+        playerGroup = new THREE.Group();
+        scene.add(playerGroup);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+        const avatarGeo = new THREE.PlaneGeometry(0.8, 1.7);
+        const avatarMat = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 });
+        avatarMesh = new THREE.Mesh(avatarGeo, avatarMat);
+        avatarMesh.position.set(0, 0.85, 0); 
+        avatarMesh.visible = false;
+        playerGroup.add(avatarMesh);
 
-            // INPUTS
-            const instructions = document.getElementById('instructions');
-            instructions.addEventListener('click', () => document.body.requestPointerLock());
-            
-            document.addEventListener('pointerlockchange', () => {
-                isLocked = (document.pointerLockElement === document.body);
-                instructions.style.display = isLocked ? 'none' : 'block';
-            });
+        // NameTag Locale
+        setOrUpdateNameTag(playerGroup, myName);
+        if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = false;
 
-            document.addEventListener('mousemove', (e) => {
-                if(!isLocked) return;
-                theta -= e.movementX * 0.002;
-                phi += e.movementY * 0.002; 
-                phi = Math.max(-1.5, Math.min(1.5, phi));
-            });
+        setupAvatarUI();
+        setupMicButton();
+        buildLevel();
 
-            const chatInput = document.getElementById('chat-input');
-            document.addEventListener('keydown', (e) => {
-                if (document.activeElement === chatInput) {
-                    if (e.code === 'Enter') {
-                        const txt = chatInput.value.trim();
-                        if (txt.length > 0 && socket) {
-                            socket.emit('chatMessage', txt);
-                            chatInput.value = '';
-                        }
+        const ambient = new THREE.AmbientLight(0xffffff, 0.2);
+        scene.add(ambient);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // INPUTS
+        const instructions = document.getElementById('instructions');
+        instructions.addEventListener('click', () => {
+             if (!isLocked) document.body.requestPointerLock();
+        });
+        
+        document.addEventListener('pointerlockchange', () => {
+            isLocked = (document.pointerLockElement === document.body);
+            instructions.style.display = isLocked ? 'none' : 'block';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if(!isLocked) return;
+            theta -= e.movementX * 0.002;
+            phi += e.movementY * 0.002; 
+            phi = Math.max(-1.5, Math.min(1.5, phi));
+        });
+
+        const chatInput = document.getElementById('chat-input');
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement === chatInput) {
+                if (e.code === 'Enter') {
+                    const txt = chatInput.value.trim();
+                    if (txt.length > 0 && socket) {
+                        socket.emit('chatMessage', txt);
+                        chatInput.value = '';
                     }
-                    if (e.code === 'Escape') { chatInput.blur(); document.body.requestPointerLock(); }
-                    return;
                 }
-                if (e.code === 'Enter') { document.exitPointerLock(); chatInput.focus(); return; }
-                if (e.code === 'KeyM') toggleMic();
-                if (e.code === 'KeyB') toggleMusic();
+                if (e.code === 'Escape') { chatInput.blur(); document.body.requestPointerLock(); }
+                return;
+            }
+            if (e.code === 'Enter') { document.exitPointerLock(); chatInput.focus(); return; }
+            if (e.code === 'KeyM') toggleMic();
+            if (e.code === 'KeyB') toggleMusic();
 
-                switch(e.code) {
-                    case 'KeyW': case 'ArrowUp': moveForward = true; break;
-                    case 'KeyS': case 'ArrowDown': moveBackward = true; break;
-                    case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
-                    case 'KeyD': case 'ArrowRight': moveRight = true; break;
-                    
-                    case 'Space': if(canJump) { velocity.y += 12; canJump = false; } break;
-                    case 'KeyV': 
-                        isThirdPerson = !isThirdPerson; 
-                        avatarMesh.visible = isThirdPerson;
-                        break;
+            switch(e.code) {
+                case 'KeyW': case 'ArrowUp': moveForward = true; break;
+                case 'KeyS': case 'ArrowDown': moveBackward = true; break;
+                case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
+                case 'KeyD': case 'ArrowRight': moveRight = true; break;
+                
+                case 'Space': if(canJump) { velocity.y += 12; canJump = false; } break;
+                case 'KeyV': 
+                    isThirdPerson = !isThirdPerson; 
+                    avatarMesh.visible = isThirdPerson;
+                    if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = isThirdPerson;
+                    break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': case 'ArrowUp': moveForward = false; break;
+                case 'KeyS': case 'ArrowDown': moveBackward = false; break;
+                case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
+                case 'KeyD': case 'ArrowRight': moveRight = false; break;
+            }
+        });
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    }
+
+    function setupMusic() {
+        bgMusic = new Audio(MUSIC_FILE);
+        bgMusic.loop = true;
+        bgMusic.volume = 0.3;
+        document.getElementById('music-btn').addEventListener('click', toggleMusic);
+    }
+
+    async function toggleMusic() {
+        if(!bgMusic) { bgMusic = new Audio(MUSIC_FILE); bgMusic.loop = true; bgMusic.volume = 0.3; }
+        const btn = document.getElementById('music-btn');
+        isMusicOn = !isMusicOn;
+        if(isMusicOn) {
+            try { await bgMusic.play(); btn.innerText = "Musica: ON"; btn.classList.add('music-on'); } 
+            catch(e) { isMusicOn = false; console.warn("Autoplay bloccato", e); }
+        } else { bgMusic.pause(); btn.innerText = "Musica: OFF (Premi B)"; btn.classList.remove('music-on'); }
+    }
+
+    function setupMicButton() { document.getElementById('mic-btn').addEventListener('click', toggleMic); }
+    function toggleMic() {
+        if(!localStream) { alert("Microfono non disponibile (controlla i permessi)."); return; }
+        isMicActive = !isMicActive;
+        localStream.getAudioTracks()[0].enabled = isMicActive;
+        const btn = document.getElementById('mic-btn');
+        if(isMicActive) { btn.innerText = "Microfono: ON"; btn.classList.add('active'); } 
+        else { btn.innerText = "Microfono: OFF (Premi M)"; btn.classList.remove('active'); }
+    }
+
+    // --- SOCKET IO & MULTIPLAYER LOGIC CORRETTA ---
+    function initSocket() {
+        console.log("Inizializzazione Socket...");
+        socket = io(SOCKET_URL);
+
+        socket.on('connect', () => {
+            console.log("Connesso al server. ID:", socket.id);
+        });
+
+        socket.on('currentPlayers', (players) => {
+            console.log("Ricevuti giocatori correnti:", players);
+            Object.keys(players).forEach((id) => {
+                if (id !== socket.id) {
+                    addRemotePlayer(id, players[id]);
+                    // Se non ho già un peer per lui, lo creo (io sono l'iniziatore)
+                    if(!peers[id]) createPeer(id, socket.id, localStream);
                 }
             });
+        });
 
-            document.addEventListener('keyup', (e) => {
-                switch(e.code) {
-                    case 'KeyW': case 'ArrowUp': moveForward = false; break;
-                    case 'KeyS': case 'ArrowDown': moveBackward = false; break;
-                    case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
-                    case 'KeyD': case 'ArrowRight': moveRight = false; break;
-                }
-            });
-            window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
-        }
+        socket.on('newPlayer', (data) => {
+            console.log("Nuovo giocatore entrato:", data.id);
+            addRemotePlayer(data.id, data.player);
+        });
 
+        // WebRTC Signals
+        socket.on('userJoined', payload => {
+            console.log("Segnale userJoined da:", payload.callerID);
+            const peer = addPeer(payload.signal, payload.callerID, localStream);
+            peers[payload.callerID] = peer;
+        });
 
-        function setupMusic() {
-            bgMusic = new Audio(MUSIC_FILE);
-            bgMusic.loop = true;
-            bgMusic.volume = 0.3;
-            document.getElementById('music-btn').addEventListener('click', toggleMusic);
-        }
+        socket.on('receivingReturnedSignal', payload => {
+            console.log("Segnale di ritorno da:", payload.id);
+            const item = peers[payload.id];
+            if(item) item.signal(payload.signal);
+        });
 
-        async function toggleMusic() {
-            if(!bgMusic) { bgMusic = new Audio(MUSIC_FILE); bgMusic.loop = true; bgMusic.volume = 0.3; }
-            const btn = document.getElementById('music-btn');
-            isMusicOn = !isMusicOn;
-            if(isMusicOn) {
-                try { await bgMusic.play(); btn.innerText = "Musica: ON"; btn.classList.add('music-on'); } 
-                catch(e) { isMusicOn = false; console.warn("Autoplay bloccato", e); alert("Impossibile avviare musica."); }
-            } else { bgMusic.pause(); btn.innerText = "Musica: OFF (Premi B)"; btn.classList.remove('music-on'); }
-        }
-
-        function setupMicButton() { document.getElementById('mic-btn').addEventListener('click', toggleMic); }
-        function toggleMic() {
-            if(!localStream) return;
-            isMicActive = !isMicActive;
-            localStream.getAudioTracks()[0].enabled = isMicActive;
-            const btn = document.getElementById('mic-btn');
-            if(isMicActive) { btn.innerText = "Microfono: ON"; btn.classList.add('active'); } 
-            else { btn.innerText = "Microfono: OFF (Premi M)"; btn.classList.remove('active'); }
-        }
-
-        function initSocket() {
-    socket = io(SOCKET_URL);
-
-    socket.on('connect', () => {
-        console.log("Connesso al server con ID:", socket.id);
-    });
-
-    // Quando entri, ricevi la lista di chi c'è già
-    socket.on('currentPlayers', (players) => {
-        Object.keys(players).forEach((id) => {
-            if (id !== socket.id) {
-                console.log("Trovato giocatore esistente:", id);
-                addRemotePlayer(id, players[id]);
-                // IMPORTANTE: Crea il peer SOLO se non esiste già
-                if (!peers[id]) {
-                    createPeer(id, socket.id, localStream);
+        socket.on('playerMoved', (data) => {
+            const p = remotePlayers[data.id];
+            if (p) {
+                p.position.set(data.x, data.y, data.z);
+                p.rotation.y = data.theta + Math.PI;
+                // Aggiorna NameTag remoto se serve
+                if(data.name) setOrUpdateNameTag(p, data.name);
+            } else {
+                // Se arriva un movimento ma non ho il player, provo ad aggiungerlo al volo
+                // (Fallback utile in caso di lag di rete all'ingresso)
+                if(data.id !== socket.id) {
+                    console.log("Ricevuto movimento per player sconosciuto, aggiungo:", data.id);
+                    addRemotePlayer(data.id, data);
                 }
             }
         });
-    });
 
-    // Quando entra un NUOVO giocatore
-    socket.on('newPlayer', (data) => {
-        console.log("Nuovo giocatore entrato:", data.id);
-        addRemotePlayer(data.id, data.player);
-        // Nota: Non creiamo il peer qui, aspettiamo il segnale 'userJoined' o lasciamo che sia lui a iniziare
-    });
+        socket.on('playerSkinChanged', (data) => {
+            const p = remotePlayers[data.id];
+            if (p) updateRemoteSkin(p, data.skin);
+        });
 
-    // WebRTC: Un altro utente vuole connettersi (Signal Offer)
-    socket.on('userJoined', payload => {
-        console.log("Ricevuto segnale userJoined da:", payload.callerID);
-        const peer = addPeer(payload.signal, payload.callerID, localStream);
-        peers[payload.callerID] = peer;
-    });
+        socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
 
-    // WebRTC: Risposta alla nostra offerta (Signal Answer)
-    socket.on('receivingReturnedSignal', payload => {
-        console.log("Ricevuto segnale di ritorno da:", payload.id);
-        const item = peers[payload.id];
-        if(item) {
-            item.signal(payload.signal);
-        }
-    });
-
-    // Movimento
-    socket.on('playerMoved', (data) => {
-        const p = remotePlayers[data.id];
-        if (p) {
-            p.position.set(data.x, data.y, data.z);
-            p.rotation.y = data.theta + Math.PI;
-            // Aggiorna nome se presente (aggiunto fix per sicurezza)
-            if(data.name && typeof setOrUpdateNameTag === 'function') {
-                setOrUpdateNameTag(p, data.name);
+        socket.on('playerDisconnected', (id) => {
+            console.log("Disconnessione:", id);
+            if (remotePlayers[id]) {
+                scene.remove(remotePlayers[id]);
+                delete remotePlayers[id];
             }
-        }
-    });
+            if (peers[id]) {
+                peers[id].destroy();
+                delete peers[id];
+            }
+            const el = document.getElementById(`audio-${id}`);
+            if(el) el.remove();
+        });
+    }
 
-    socket.on('playerSkinChanged', (data) => {
-        const p = remotePlayers[data.id];
-        if (p) updateRemoteSkin(p, data.skin);
-    });
+    function createPeer(u, c, s) { 
+        // Se s (stream) è null, SimplePeer funziona lo stesso per i dati, ma non invia audio.
+        const p = new SimplePeer({ initiator: true, trickle: false, stream: s }); 
+        p.on("signal", sig => socket.emit("sendingSignal", { userToSignal: u, callerID: c, signal: sig })); 
+        p.on("stream", st => addAudioElement(u, st)); 
+        peers[u] = p; 
+    }
 
-    socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
+    function addPeer(sig, c, s) { 
+        const p = new SimplePeer({ initiator: false, trickle: false, stream: s }); 
+        p.on("signal", sig => socket.emit("returningSignal", { signal: sig, callerID: c })); 
+        p.on("stream", st => addAudioElement(c, st)); 
+        p.signal(sig); 
+        return p; 
+    }
 
-    socket.on('playerDisconnected', (id) => {
-        console.log("Giocatore disconnesso:", id);
-        // Rimuovi mesh
-        if (remotePlayers[id]) {
-            scene.remove(remotePlayers[id]);
-            delete remotePlayers[id];
-        }
-        // Chiudi connessione P2P e rimuovi audio
-        if (peers[id]) {
-            peers[id].destroy();
-            delete peers[id];
-        }
-        const audioEl = document.getElementById(`audio-${id}`);
-        if (audioEl) audioEl.remove();
-    });
-}
+    function addAudioElement(id, s) { 
+        const a = document.createElement('audio'); 
+        a.srcObject = s; 
+        a.autoplay = true; 
+        a.id = `audio-${id}`; 
+        document.body.appendChild(a); 
+    }
 
+    function addChatMessage(n, t) { const c = document.getElementById('chat-messages'); const d = document.createElement('div'); d.innerHTML = `<span class="chat-name">${n}:</span> ${t}`; c.appendChild(d); c.scrollTop = c.scrollHeight; }
+    
+    // --- FUNZIONE CORRETTA: NESSUN FILTRO SULLA POSIZIONE ---
+    function addRemotePlayer(id, data) { 
+        if(remotePlayers[id]) return; // Evita duplicati
 
-        function createPeer(u, c, s) { const p = new SimplePeer({ initiator: true, trickle: false, stream: s }); p.on("signal", sig => socket.emit("sendingSignal", { userToSignal: u, callerID: c, signal: sig })); p.on("stream", st => addAudioElement(u, st)); peers[u] = p; }
-        function addPeer(sig, c, s) { const p = new SimplePeer({ initiator: false, trickle: false, stream: s }); p.on("signal", sig => socket.emit("returningSignal", { signal: sig, callerID: c })); p.on("stream", st => addAudioElement(c, st)); p.signal(sig); return p; }
-        function addAudioElement(id, s) { const a = document.createElement('audio'); a.srcObject = s; a.autoplay = true; a.id = `audio-${id}`; document.body.appendChild(a); }
-        function addChatMessage(n, t) { const c = document.getElementById('chat-messages'); const d = document.createElement('div'); d.innerHTML = `<span class="chat-name">${n}:</span> ${t}`; c.appendChild(d); c.scrollTop = c.scrollHeight; }
+        console.log("Aggiungo Mesh Player Remoto:", id, data);
+
+        const g = new THREE.PlaneGeometry(0.8, 1.7); 
+        const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); 
+        const mesh = new THREE.Mesh(g, m); 
         
-        // --- MODIFICA: FIX GIOCATORE INCASTRATO ---
-        function addRemotePlayer(id, data) { 
-            // Ignora giocatori "fantasma" che appaiono esattamente a 0,0,0 (bug comune)
-            if(data.x === 0 && data.y === 0 && data.z === 0) return;
+        // Posizione sicura
+        const safeY = (data.y !== undefined && data.y !== null) ? Math.max(0.85, data.y) : 0.85;
+        mesh.position.set(data.x || 0, safeY, data.z || 0); 
+        
+        updateRemoteSkin(mesh, data.skin || "plebeo.png"); 
+        
+        // NameTag Remoto
+        setOrUpdateNameTag(mesh, data.name || "Anonimo");
 
-            const g = new THREE.PlaneGeometry(0.8, 1.7); 
-            const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); 
-            const mesh = new THREE.Mesh(g, m); 
-            
-            // Forza una Y minima per non averli incastrati nel pavimento se i dati sono errati
-            // (Il player è alto 1.7, il centro è a metà, quindi deve stare almeno a 0.85)
-            const safeY = Math.max(0.85, data.y);
-            mesh.position.set(data.x, safeY, data.z); 
-            
-            updateRemoteSkin(mesh, data.skin || "plebeo.png"); 
-            scene.add(mesh); 
-            remotePlayers[id] = mesh; 
-        }
-        
-        function updateRemoteSkin(mesh, f) { loader.load(`./${f}`, t => { t.colorSpace = THREE.SRGBColorSpace; mesh.material.map = t; mesh.material.needsUpdate = true; }); }
-        
-        // --- Logica Frecce ---
-        function setupAvatarUI() { 
-            // Inizializza con skin random o prima della lista
-            currentSkinIndex = Math.floor(Math.random() * avatarOptions.length);
+        scene.add(mesh); 
+        remotePlayers[id] = mesh; 
+    }
+    
+    function updateRemoteSkin(mesh, f) { 
+        loader.load(`./${f}`, t => { 
+            t.colorSpace = THREE.SRGBColorSpace; 
+            mesh.material.map = t; 
+            mesh.material.needsUpdate = true; 
+        }, undefined, (err) => console.log("Errore skin remota:", err)); 
+    }
+    
+    // --- UI AVATAR ---
+    function setupAvatarUI() { 
+        currentSkinIndex = Math.floor(Math.random() * avatarOptions.length);
+        updateLocalSkin();
+
+        document.getElementById('prev-skin-btn').addEventListener('click', () => {
+            currentSkinIndex--;
+            if(currentSkinIndex < 0) currentSkinIndex = avatarOptions.length - 1;
             updateLocalSkin();
+        });
 
-            document.getElementById('prev-skin-btn').addEventListener('click', () => {
-                currentSkinIndex--;
-                if(currentSkinIndex < 0) currentSkinIndex = avatarOptions.length - 1;
-                updateLocalSkin();
-            });
+        document.getElementById('next-skin-btn').addEventListener('click', () => {
+            currentSkinIndex++;
+            if(currentSkinIndex >= avatarOptions.length) currentSkinIndex = 0;
+            updateLocalSkin();
+        });
+    }
 
-            document.getElementById('next-skin-btn').addEventListener('click', () => {
-                currentSkinIndex++;
-                if(currentSkinIndex >= avatarOptions.length) currentSkinIndex = 0;
-                updateLocalSkin();
-            });
-        }
-
-        function updateLocalSkin() {
-            const opt = avatarOptions[currentSkinIndex];
-            mySkin = opt.file;
-            
-            // Aggiorna Label e Propic
-            document.getElementById('skin-label').innerText = "Skin: " + opt.label;
-            if(opt.propic) {
-                document.getElementById('hud-propic').src = `./${opt.propic}`;
-            }
-
-            // Carica Texture Personaggio
-            loader.load(`./${mySkin}`, t => { 
-                t.colorSpace = THREE.SRGBColorSpace; 
-                avatarMesh.material.map = t; 
-                avatarMesh.material.needsUpdate = true; 
-            }); 
-            
-            // Invia al server
-            if(socket && socket.connected) socket.emit('skinChange', mySkin);
-        }
-
-        function checkCol(pos) { const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5); const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5); const box = new THREE.Box3(min, max); return colliders.some(c => box.intersectsBox(c)); }
-        function createWall(x,y,z,w,h,d) { const g = new THREE.BoxGeometry(w,h,d); const t = wallTexture ? wallTexture.clone() : null; if(t) { t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(Math.max(w,d)/4, h/4); t.needsUpdate=true; } const m = new THREE.MeshStandardMaterial({ map: t, color: t ? 0xffffff : 0x888888 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(x,y,z); scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh); }
+    function updateLocalSkin() {
+        const opt = avatarOptions[currentSkinIndex];
+        mySkin = opt.file;
         
-        function buildLevel() {
-            createWall(0, 5, 5, 10, 10, 1); createWall(-5, 5, 0, 1, 10, 10); createWall(5, 5, 0, 1, 10, 10);
-            createWall(-3.5, 5, -5, 4, 10, 1); createWall(3.5, 5, -5, 4, 10, 1);
-            createWall(-2, 5, -15, 1, 10, 20); createWall(2, 5, -15, 1, 10, 20);
-            createWall(-5, 5, -25, 6, 10, 1); createWall(5, 5, -25, 6, 10, 1);
-            createWall(-8, 5, -32.5, 1, 10, 16); createWall(8, 5, -32.5, 1, 10, 16);
-            createWall(0, 5, -40, 17, 10, 1);
-            const floorGeo = new THREE.PlaneGeometry(100, 100);
-            const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture });
-            const floor = new THREE.Mesh(floorGeo, floorMat); floor.rotation.x = -Math.PI/2; scene.add(floor);
-            
-            const createTorch = (x,y,z,rot) => {
-                const geo = new THREE.PlaneGeometry(2.0, 2.0); // Torcia Grande
-                const mat = new THREE.MeshBasicMaterial({ 
-                    map: torchAnimatedTexture, 
-                    transparent: true, 
-                    side: THREE.DoubleSide, 
-                    blending: THREE.AdditiveBlending,
-                    depthWrite: false 
-                });
-                
-                const mesh = new THREE.Mesh(geo, mat); 
-                mesh.position.set(x,y,z); 
-                mesh.rotation.y = rot; 
-                scene.add(mesh);
+        document.getElementById('skin-label').innerText = "Skin: " + opt.label;
+        if(opt.propic) document.getElementById('hud-propic').src = `./${opt.propic}`;
 
-                const l = new THREE.PointLight(0xff6600, 2.0, 15); 
-                l.position.set(x + Math.sin(rot)*0.5, y, z + Math.cos(rot)*0.5); 
-                scene.add(l);
-                torchLights.push({ light: l, speed: 2+Math.random()*3 });
-            };
+        loader.load(`./${mySkin}`, t => { 
+            t.colorSpace = THREE.SRGBColorSpace; 
+            avatarMesh.material.map = t; 
+            avatarMesh.material.needsUpdate = true; 
+        }); 
+        
+        if(socket && socket.connected) socket.emit('skinChange', mySkin);
+    }
 
-            createTorch(0, 2.5, 4.4, 0); createTorch(-4.4, 2.5, 0, Math.PI/2); createTorch(4.4, 2.5, 0, -Math.PI/2);
-            createTorch(-1.4, 2.5, -10, Math.PI/2); createTorch(1.4, 2.5, -10, -Math.PI/2);
-            createTorch(-1.4, 2.5, -20, Math.PI/2); createTorch(1.4, 2.5, -20, -Math.PI/2);
-            createTorch(-7.4, 2.5, -30, Math.PI/2); createTorch(7.4, 2.5, -30, -Math.PI/2); createTorch(0, 2.5, -39.4, Math.PI);
-        }
+    function checkCol(pos) { const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5); const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5); const box = new THREE.Box3(min, max); return colliders.some(c => box.intersectsBox(c)); }
+    function createWall(x,y,z,w,h,d) { const g = new THREE.BoxGeometry(w,h,d); const t = wallTexture ? wallTexture.clone() : null; if(t) { t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(Math.max(w,d)/4, h/4); t.needsUpdate=true; } const m = new THREE.MeshStandardMaterial({ map: t, color: t ? 0xffffff : 0x888888 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(x,y,z); scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh); }
+    
+    function buildLevel() {
+        createWall(0, 5, 5, 10, 10, 1); createWall(-5, 5, 0, 1, 10, 10); createWall(5, 5, 0, 1, 10, 10);
+        createWall(-3.5, 5, -5, 4, 10, 1); createWall(3.5, 5, -5, 4, 10, 1);
+        createWall(-2, 5, -15, 1, 10, 20); createWall(2, 5, -15, 1, 10, 20);
+        createWall(-5, 5, -25, 6, 10, 1); createWall(5, 5, -25, 6, 10, 1);
+        createWall(-8, 5, -32.5, 1, 10, 16); createWall(8, 5, -32.5, 1, 10, 16);
+        createWall(0, 5, -40, 17, 10, 1);
+        const floorGeo = new THREE.PlaneGeometry(100, 100);
+        const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture });
+        const floor = new THREE.Mesh(floorGeo, floorMat); floor.rotation.x = -Math.PI/2; scene.add(floor);
+        
+        const createTorch = (x,y,z,rot) => {
+            const geo = new THREE.PlaneGeometry(2.0, 2.0); 
+            const mat = new THREE.MeshBasicMaterial({ 
+                map: torchAnimatedTexture, 
+                transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false 
+            });
+            const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
+            const l = new THREE.PointLight(0xff6600, 2.0, 15); l.position.set(x + Math.sin(rot)*0.5, y, z + Math.cos(rot)*0.5); scene.add(l);
+            torchLights.push({ light: l, speed: 2+Math.random()*3 });
+        };
 
-        function animate() {
-            requestAnimationFrame(animate);
-            // if(minimap) minimap.update(); // Scommenta se usi la minimappa
-            if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
-            const t = performance.now() * 0.001;
-            torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
+        createTorch(0, 2.5, 4.4, 0); createTorch(-4.4, 2.5, 0, Math.PI/2); createTorch(4.4, 2.5, 0, -Math.PI/2);
+        createTorch(-1.4, 2.5, -10, Math.PI/2); createTorch(1.4, 2.5, -10, -Math.PI/2);
+        createTorch(-1.4, 2.5, -20, Math.PI/2); createTorch(1.4, 2.5, -20, -Math.PI/2);
+        createTorch(-7.4, 2.5, -30, Math.PI/2); createTorch(7.4, 2.5, -30, -Math.PI/2); createTorch(0, 2.5, -39.4, Math.PI);
+    }
 
-            if(isLocked) {
-                const dt = 0.016; 
-                velocity.y -= GRAVITY * dt;
-                velocity.x -= velocity.x * 10.0 * dt;
-                velocity.z -= velocity.z * 10.0 * dt;
+    function animate() {
+        requestAnimationFrame(animate);
+        if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
+        const t = performance.now() * 0.001;
+        torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
 
-                const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
-                const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
-                const speed = 150.0;
+        if(isLocked) {
+            const dt = 0.016; 
+            velocity.y -= GRAVITY * dt;
+            velocity.x -= velocity.x * 10.0 * dt;
+            velocity.z -= velocity.z * 10.0 * dt;
 
-                if(moveForward) velocity.add(fwd.clone().multiplyScalar(speed * dt));
-                if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-speed * dt));
-                if(moveLeft) velocity.add(right.clone().multiplyScalar(-speed * dt));
-                if(moveRight) velocity.add(right.clone().multiplyScalar(speed * dt));
+            const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
+            const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
+            const speed = 150.0;
 
-                const dx = velocity.x * dt; playerGroup.position.x += dx;
-                if(checkCol(playerGroup.position)) { playerGroup.position.x -= dx; velocity.x = 0; }
-                const dz = velocity.z * dt; playerGroup.position.z += dz;
-                if(checkCol(playerGroup.position)) { playerGroup.position.z -= dz; velocity.z = 0; }
-                playerGroup.position.y += velocity.y * dt;
-                if(playerGroup.position.y < 0) { playerGroup.position.y = 0; velocity.y = 0; canJump = true; }
+            if(moveForward) velocity.add(fwd.clone().multiplyScalar(speed * dt));
+            if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-speed * dt));
+            if(moveLeft) velocity.add(right.clone().multiplyScalar(-speed * dt));
+            if(moveRight) velocity.add(right.clone().multiplyScalar(speed * dt));
 
-                if (socket && socket.connected) {
-                    socket.emit('playerMove', { x: playerGroup.position.x, y: playerGroup.position.y + 0.85, z: playerGroup.position.z, theta: theta, skin: mySkin, name: myName });
-                }
+            const dx = velocity.x * dt; playerGroup.position.x += dx;
+            if(checkCol(playerGroup.position)) { playerGroup.position.x -= dx; velocity.x = 0; }
+            const dz = velocity.z * dt; playerGroup.position.z += dz;
+            if(checkCol(playerGroup.position)) { playerGroup.position.z -= dz; velocity.z = 0; }
+            playerGroup.position.y += velocity.y * dt;
+            if(playerGroup.position.y < 0) { playerGroup.position.y = 0; velocity.y = 0; canJump = true; }
+
+            if (socket && socket.connected) {
+                socket.emit('playerMove', { x: playerGroup.position.x, y: playerGroup.position.y + 0.85, z: playerGroup.position.z, theta: theta, skin: mySkin, name: myName });
             }
-            updateCamera();
-            renderer.render(scene, camera);
         }
-        function updateCamera() {
-            const headPos = new THREE.Vector3().copy(playerGroup.position).add(new THREE.Vector3(0, 1.6, 0));
-            let targetDist = isThirdPerson ? 3.5 : 0.1;
-            const camOffset = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.sin(phi), Math.cos(theta) * Math.cos(phi)).multiplyScalar(targetDist);
-            const idealCamPos = headPos.clone().add(camOffset);
-            if (isThirdPerson) {
-                const rayDir = new THREE.Vector3().subVectors(idealCamPos, headPos).normalize();
-                cameraRaycaster.set(headPos, rayDir);
-                cameraRaycaster.far = targetDist;
-                const hits = cameraRaycaster.intersectObjects(wallMeshes);
-                if(hits.length > 0) idealCamPos.copy(headPos).add(rayDir.multiplyScalar(hits[0].distance - 0.2));
-                avatarMesh.rotation.y = theta + Math.PI;
-            }
-            camera.position.copy(idealCamPos);
-            if (isThirdPerson) camera.lookAt(headPos);
-            else { const target = idealCamPos.clone().sub(camOffset.clone().normalize().multiplyScalar(10)); camera.lookAt(target); }
+        updateCamera();
+        renderer.render(scene, camera);
+    }
+    function updateCamera() {
+        const headPos = new THREE.Vector3().copy(playerGroup.position).add(new THREE.Vector3(0, 1.6, 0));
+        let targetDist = isThirdPerson ? 3.5 : 0.1;
+        const camOffset = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.sin(phi), Math.cos(theta) * Math.cos(phi)).multiplyScalar(targetDist);
+        const idealCamPos = headPos.clone().add(camOffset);
+        if (isThirdPerson) {
+            const rayDir = new THREE.Vector3().subVectors(idealCamPos, headPos).normalize();
+            cameraRaycaster.set(headPos, rayDir);
+            cameraRaycaster.far = targetDist;
+            const hits = cameraRaycaster.intersectObjects(wallMeshes);
+            if(hits.length > 0) idealCamPos.copy(headPos).add(rayDir.multiplyScalar(hits[0].distance - 0.2));
+            avatarMesh.rotation.y = theta + Math.PI;
         }
+        camera.position.copy(idealCamPos);
+        if (isThirdPerson) camera.lookAt(headPos);
+        else { const target = idealCamPos.clone().sub(camOffset.clone().normalize().multiplyScalar(10)); camera.lookAt(target); }
+    }
     </script>
 </body>
 </html>
