@@ -18,6 +18,9 @@
             font-style: normal;
         }
 
+        /* RESET BOX MODEL per evitare problemi di dimensioni */
+        * { box-sizing: border-box; }
+
         body { 
             margin: 0; 
             overflow: hidden; 
@@ -48,8 +51,11 @@
         #ui-top-left {
             position: absolute; top: 10px; left: 10px; z-index: 20;
             background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; color: white;
-            display: flex; flex-direction: column; gap: 8px; width: 220px;
+            display: flex; flex-direction: column; gap: 8px; 
+            width: 240px; /* Larghezza fissa leggermente aumentata */
             border: 1px solid #333;
+            /* Min-height per stabilità */
+            min-height: 350px;
         }
         
         .ui-btn {
@@ -72,10 +78,8 @@
         }
         #chat-messages { flex-grow: 1; overflow-y: auto; color: white; font-size: 18px; margin-bottom: 5px; text-shadow: 1px 1px 1px black; }
         .chat-name { color: #ffaa00; margin-right: 5px; }
-        #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 93%; font-size: 16px; }
+        #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 100%; font-size: 16px; }
 
-        #status { position: absolute; bottom: 10px; left: 10px; color: yellow; z-index: 20; text-shadow: 1px 1px 0 #000; font-size: 16px; }
-        
         #sh-logo {
             position: fixed;
             left: 10px;
@@ -86,28 +90,32 @@
             pointer-events: none;
         }
 
-        /* Stile Propic + Frecce */
+        /* --- STILE PROPIC E LAYOUT STABILE --- */
         #propic-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin: 5px 0 10px 0;
             width: 100%;
+            height: 120px; /* Altezza fissa per bloccare il layout */
         }
         
         #propic-container {
             flex-grow: 1;
             margin: 0 5px;
-            position: relative;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden; /* Taglia se sfora */
         }
 
         #hud-propic {
-            width: 100%;            
-            aspect-ratio: 1/1;      
-            border-radius: 0;       
-            border: none;           
-            object-fit: cover;      
-            background: #000;
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Mantiene le proporzioni riempiendo il quadrato */
+            aspect-ratio: 1/1; /* Forza forma quadrata */
+            background: #000;  /* Sfondo nero durante il caricamento */
             display: block;
         }
 
@@ -119,11 +127,12 @@
             font-size: 24px;
             padding: 0;
             width: 30px;
-            height: 60px; /* Altezza per centratura visiva */
+            height: 100%; /* Altezza uguale alla riga */
             display: flex;
             align-items: center;
             justify-content: center;
             transition: background 0.2s;
+            flex-shrink: 0; /* Impedisce alle frecce di schiacciarsi */
         }
         .arrow-btn:hover { background: rgba(255, 153, 0, 0.3); }
 
@@ -132,6 +141,12 @@
             font-size: 18px;
             color: #ccc;
             margin-bottom: 5px;
+            /* Blocca l'altezza del testo per evitare salti */
+            height: 24px;
+            line-height: 24px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
         }
     </style>
 </head>
@@ -148,10 +163,10 @@
         <!-- Nome Giocatore -->
         <div id="hud-name" style="font-size: 22px; color: #ff9900; font-weight: bold; text-align: center; border-bottom: 1px solid #555; padding-bottom: 8px; margin-bottom: 5px;">GIOCATORE</div>
         
-        <!-- Label Nome Skin -->
+        <!-- Label Nome Skin (con altezza fissa) -->
         <div id="skin-label">Skin: ...</div>
 
-        <!-- Riga con Frecce e Immagine -->
+        <!-- Riga con Frecce e Immagine (con altezza fissa) -->
         <div id="propic-row">
             <button class="arrow-btn" id="prev-skin-btn">&lt;</button>
             <div id="propic-container">
