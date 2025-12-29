@@ -134,7 +134,6 @@
         /* Pulsanti Frecce (Sovrapposti alla ProPic) */
         .skin-arrow {
             position: absolute; top: 0; bottom: 0; width: 200px;
-            background: rgba(0,0,0,0.3); border: none; color: white;
             font-size: 150px; cursor: pointer; z-index: 10;
             display: flex; align-items: center; justify-content: center;
             font-family: 'Planewalker', sans-serif;
@@ -517,7 +516,7 @@
                 bgMusic.pause(); 
                 btn.classList.remove('music-on'); 
                 icon.className = "fa-solid fa-music-slash"; // Icona spenta (opzionale se esiste in FA, senno usa opacity)
-                icon.style.opacity = "0.5";
+                icon.style.opacity = "1";
             }
             if(isMusicOn) icon.style.opacity = "1";
         }
