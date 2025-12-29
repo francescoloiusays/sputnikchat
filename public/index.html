@@ -87,20 +87,20 @@
             pointer-events: none;
         }
 
-        /* Stile Propic */
+        /* Stile Propic Aggiornato */
         #propic-container {
-            text-align: center;
+            width: 100%;
             margin: 5px 0 10px 0;
-            display: flex;
-            justify-content: center;
+            /* Rimosso flex center per farla espandere */
         }
         #hud-propic {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            border: 3px solid #ff9900;
-            object-fit: cover;
+            width: 100%;            /* Larga quanto la scheda (padding escluso) */
+            aspect-ratio: 1/1;      /* Forza la forma quadrata */
+            border-radius: 0;       /* Nessun arrotondamento */
+            border: none;           /* Nessun outline */
+            object-fit: cover;      /* Taglia l'immagine se necessario per riempire il quadrato */
             background: #000;
+            display: block;
         }
     </style>
 </head>
@@ -117,7 +117,7 @@
         <!-- MODIFICA: Nome Giocatore in Alto -->
         <div id="hud-name" style="font-size: 22px; color: #ff9900; font-weight: bold; text-align: center; border-bottom: 1px solid #555; padding-bottom: 8px; margin-bottom: 5px;">GIOCATORE</div>
         
-        <!-- MODIFICA: Immagine Profilo -->
+        <!-- MODIFICA: Immagine Profilo Quadrata Full Width -->
         <div id="propic-container">
             <img id="hud-propic" src="" alt="Profile">
         </div>
