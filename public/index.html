@@ -88,6 +88,17 @@
             left: 0px; top: 0px;
             width: 2106px; height: 2956px;
             z-index: 1;
+                /* Bordo esterno scuro (il taglio della carta) */
+    border: 10px solid #111;
+    border-radius: 40px;
+
+    /* Aggiungi questo per il BORDO BIANCO INTERNO */
+    box-shadow: 
+        /* Bordo bianco interno netto (spessore 20px) */
+        inset 0 0 0 20px rgba(255, 255, 255, 0.9),
+        
+        /* (Opzionale) Leggera ombra interna per dare profondità sotto il bordo bianco */
+        inset 0 0 20px 20px rgba(0,0,0,0.2);
         }
 
         .nome_giocatore {
