@@ -100,19 +100,21 @@
             color: #ffff00;
             font-size: 140px;
             display: flex; align-items: center; justify-content: center;
-            /* Effetto "Scavato nella pietra" */
-            box-shadow: 
-            /* Ombra interna scura e profonda in alto a sinistra (crea la profondità) */
-            inset 6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-            /* Leggero riflesso chiaro interno in basso a destra (definisce il bordo opposto) */
-            inset -3px -3px 6px rgba(255, 255, 255, 0.08),
-    
-            /* Ombra esterna leggera per staccarlo dal fondo (opzionale) */
-            0 2px 4px rgba(0,0,0,0.5);
 
-            /* Bordo scuro per definire il taglio */
-            border: 2px solid #222;
+/* Effetto "Scavato" con luce da Alto-Destra */
+box-shadow: 
+    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
+    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
+    
+    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
+    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
+    
+    /* Ombra esterna per stacco (opzionale) */
+    0 2px 4px rgba(0,0,0,0.5);
+
+/* Bordo scuro per definire il taglio */
+border: 2px solid #111;
+
         }
 
         .skin {
