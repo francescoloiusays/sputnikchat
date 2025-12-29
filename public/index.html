@@ -78,7 +78,7 @@
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: white; background: rgba(0, 0, 0, 0.7); padding: 20px;
             text-align: center; border-radius: 10px; z-index: 10; user-select: none; display: none;
-            font-size: 20px; pointer-events: none; /* Lascia passare i click al body */
+            font-size: 20px; pointer-events: none; 
         }
 
         #chat-container {
@@ -96,10 +96,22 @@
 
         /* --- STILE PROPIC --- */
         #propic-row { display: flex; align-items: center; justify-content: space-between; margin: 5px 0 10px 0; width: 100%; height: 120px; }
-        #propic-container { flex-grow: 1; margin: 0 5px; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        #propic-container { flex-grow: 1; margin: 0 5px; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
         #hud-propic { width: 100%; height: 100%; object-fit: cover; aspect-ratio: 1/1; background: #000; display: block; }
+        
         .arrow-btn { background: rgba(0,0,0,0.5); color: #ffff00; border: 0px solid #555; cursor: pointer; font-size: 24px; padding: 0; width: 30px; height: 100%; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
         .arrow-btn:hover { background: rgba(255, 153, 0, 0.3); }
+
+        /* Nuovo bottone upload (+) */
+        .upload-btn {
+            position: absolute; bottom: 0; right: 0;
+            background: rgba(0,0,0,0.7); color: #00ff00;
+            border: none; cursor: pointer; font-size: 20px;
+            width: 25px; height: 25px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .upload-btn:hover { background: #00ff00; color: black; }
+
         #skin-label { text-align: center; font-size: 18px; color: #ccc; margin-bottom: 5px; height: 24px; line-height: 24px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     </style>
 </head>
@@ -117,7 +129,12 @@
         <div id="skin-label">Skin: ...</div>
         <div id="propic-row">
             <button class="arrow-btn" id="prev-skin-btn">&lt;</button>
-            <div id="propic-container"><img id="hud-propic" src="" alt="Profile"></div>
+            <div id="propic-container">
+                <img id="hud-propic" src="" alt="Profile">
+                <!-- Bottone Upload -->
+                <button class="upload-btn" id="upload-skin-btn" title="Carica Skin">+</button>
+                <input type="file" id="skin-file-input" accept="image/png, image/jpeg, image/gif" style="display: none;">
+            </div>
             <button class="arrow-btn" id="next-skin-btn">&gt;</button>
         </div>
         <button id="mic-btn" class="ui-btn" style="background: #cc0000;">Microfono: OFF (Premi M)</button>
@@ -172,6 +189,7 @@
         let isMusicOn = false;
         let currentSkinIndex = 0;
 
+        // Lista skin (iniziale)
         const avatarOptions = [
             { label: "Ratto", file: "Personaggi/Rat.png", propic: "Personaggi/Rat_propic.png" },
             { label: "Alessandro", file: "Personaggi/Alessandro.png", propic: "Personaggi/Alessandro_propic.png" },
@@ -192,9 +210,7 @@
                 if(val.length > 0) myName = val;
                 document.getElementById('hud-name').innerText = myName;
 
-                // --- AUTO AVVIO MUSICA (Gesto Utente) ---
                 setupMusic();
-                // Tenta di avviare subito la musica
                 if(!isMusicOn) toggleMusic();
 
                 try {
@@ -229,7 +245,6 @@
             floorTexture = loadTex('./pavimento.jpg');
             if(floorTexture) { floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(10, 10); }
 
-            // --- TEXTURE TORCIA ---
             const gifCanvas = document.createElement('canvas');
             gifCanvas.width = 512; gifCanvas.height = 512;
             torchAnimatedTexture = new THREE.CanvasTexture(gifCanvas);
@@ -258,15 +273,10 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // --- GESTIONE POINTER LOCK (CLIC OVUNQUE) ---
             const instructions = document.getElementById('instructions');
             
-            // Listener globale sul body per catturare il pointer lock
             document.body.addEventListener('click', (e) => {
-                // Se stiamo cliccando su UI (bottoni, input), ignoriamo il lock
                 if (e.target.closest('button') || e.target.closest('input') || e.target.closest('#ui-top-left') || e.target.closest('#chat-container')) return;
-                
-                // Se non siamo già lockati, richiedi il lock
                 if (!isLocked && document.getElementById('login-overlay').style.display === 'none') {
                     document.body.requestPointerLock();
                 }
@@ -331,12 +341,7 @@
 
 
         function setupMusic() {
-            if(!bgMusic) {
-                bgMusic = new Audio(MUSIC_FILE);
-                bgMusic.loop = true;
-                bgMusic.volume = 0.3;
-            }
-            // Rimuoviamo vecchi listener per evitare duplicati
+            if(!bgMusic) { bgMusic = new Audio(MUSIC_FILE); bgMusic.loop = true; bgMusic.volume = 0.3; }
             const btn = document.getElementById('music-btn');
             const newBtn = btn.cloneNode(true);
             btn.parentNode.replaceChild(newBtn, btn);
@@ -346,25 +351,11 @@
         async function toggleMusic() {
             if(!bgMusic) setupMusic();
             const btn = document.getElementById('music-btn');
-            
-            // Se è già on, spegni
             if(isMusicOn) {
-                bgMusic.pause();
-                isMusicOn = false;
-                btn.innerText = "Musica: OFF (Premi B)";
-                btn.classList.remove('music-on');
+                bgMusic.pause(); isMusicOn = false; btn.innerText = "Musica: OFF (Premi B)"; btn.classList.remove('music-on');
             } else {
-                // Se è off, accendi
-                try { 
-                    await bgMusic.play(); 
-                    isMusicOn = true;
-                    btn.innerText = "Musica: ON"; 
-                    btn.classList.add('music-on'); 
-                } 
-                catch(e) { 
-                    console.warn("Autoplay bloccato o errore", e); 
-                    isMusicOn = false;
-                }
+                try { await bgMusic.play(); isMusicOn = true; btn.innerText = "Musica: ON"; btn.classList.add('music-on'); } 
+                catch(e) { console.warn("Autoplay bloccato", e); isMusicOn = false; }
             }
         }
 
@@ -407,27 +398,126 @@
             remotePlayers[id] = mesh; 
         }
         
-        function updateRemoteSkin(mesh, f) { loader.load(`./${f}`, t => { t.colorSpace = THREE.SRGBColorSpace; mesh.material.map = t; mesh.material.needsUpdate = true; }); }
+        function updateRemoteSkin(mesh, f) { 
+            // Supporto Data URL per skin custom
+            loader.load(f, t => { 
+                t.colorSpace = THREE.SRGBColorSpace; 
+                mesh.material.map = t; 
+                mesh.material.needsUpdate = true; 
+            }, undefined, err => {
+                // Fallback se fallisce il caricamento (es. path errato per altri client)
+                console.warn("Errore caricamento skin remota", err);
+            }); 
+        }
         
+        // --- LOGICA SKIN & UPLOAD ---
         function setupAvatarUI() { 
             currentSkinIndex = Math.floor(Math.random() * avatarOptions.length);
             updateLocalSkin();
+            
+            // Frecce
             document.getElementById('prev-skin-btn').addEventListener('click', () => {
                 currentSkinIndex--; if(currentSkinIndex < 0) currentSkinIndex = avatarOptions.length - 1; updateLocalSkin();
             });
             document.getElementById('next-skin-btn').addEventListener('click', () => {
                 currentSkinIndex++; if(currentSkinIndex >= avatarOptions.length) currentSkinIndex = 0; updateLocalSkin();
             });
+
+            // Upload
+            const uploadBtn = document.getElementById('upload-skin-btn');
+            const fileInput = document.getElementById('skin-file-input');
+
+            uploadBtn.addEventListener('click', () => fileInput.click());
+            
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        processCustomSkin(img);
+                    };
+                    img.src = evt.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Crea texture "non-stretchata" e propic
+        function processCustomSkin(img) {
+            // 1. TEXTURE PERSONAGGIO (Aspect Ratio 0.8 : 1.7)
+            // Creiamo una canvas di dimensioni fisse, es. 400x850
+            const texW = 400; 
+            const texH = 850;
+            const texCanvas = document.createElement('canvas');
+            texCanvas.width = texW; 
+            texCanvas.height = texH;
+            const ctxT = texCanvas.getContext('2d');
+            
+            // Logica "contain": mantieni aspect ratio, centra
+            const scale = Math.min(texW / img.width, texH / img.height);
+            const drawW = img.width * scale;
+            const drawH = img.height * scale;
+            const offX = (texW - drawW) / 2;
+            const offY = (texH - drawH) / 2;
+            
+            ctxT.drawImage(img, offX, offY, drawW, drawH);
+            const textureDataUrl = texCanvas.toDataURL('image/png');
+
+            // 2. PROPIC (Quadrata 1:1)
+            const iconSize = 128;
+            const iconCanvas = document.createElement('canvas');
+            iconCanvas.width = iconSize;
+            iconCanvas.height = iconSize;
+            const ctxI = iconCanvas.getContext('2d');
+            
+            // Logica "cover": riempi il quadrato (zoom centrale)
+            const scaleI = Math.max(iconSize / img.width, iconSize / img.height);
+            const drawWI = img.width * scaleI;
+            const drawHI = img.height * scaleI;
+            const offXI = (iconSize - drawWI) / 2;
+            const offYI = (iconSize - drawHI) / 2;
+
+            ctxI.drawImage(img, offXI, offYI, drawWI, drawHI);
+            const propicDataUrl = iconCanvas.toDataURL('image/png');
+
+            // 3. Aggiungi alla lista e seleziona
+            avatarOptions.push({
+                label: "Custom",
+                file: textureDataUrl, // Data URL usato come texture
+                propicData: propicDataUrl // Salviamo direttamente i dati per la propic
+            });
+
+            currentSkinIndex = avatarOptions.length - 1;
+            updateLocalSkin();
         }
 
         function updateLocalSkin() {
             const opt = avatarOptions[currentSkinIndex];
-            mySkin = opt.file;
+            
             document.getElementById('skin-label').innerText = "Skin: " + opt.label;
-            if(opt.propic) document.getElementById('hud-propic').src = `./${opt.propic}`;
-            loader.load(`./${mySkin}`, t => { 
-                t.colorSpace = THREE.SRGBColorSpace; avatarMesh.material.map = t; avatarMesh.material.needsUpdate = true; 
+            
+            // Gestione Propic (File o DataURL)
+            const propicImg = document.getElementById('hud-propic');
+            if(opt.propicData) {
+                propicImg.src = opt.propicData;
+            } else if (opt.propic) {
+                propicImg.src = `./${opt.propic}`;
+            }
+
+            // Gestione Texture (File o DataURL)
+            // Se inizia con "data:", il loader la gestisce comunque
+            const textureSrc = opt.file.startsWith('data:') ? opt.file : `./${opt.file}`;
+            mySkin = textureSrc; // Salviamo tutto il blob/path
+
+            loader.load(textureSrc, t => { 
+                t.colorSpace = THREE.SRGBColorSpace; 
+                avatarMesh.material.map = t; 
+                avatarMesh.material.needsUpdate = true; 
             }); 
+            
             if(socket && socket.connected) socket.emit('skinChange', mySkin);
         }
 
