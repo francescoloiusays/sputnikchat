@@ -188,7 +188,7 @@
             if(floorTexture) { floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(10, 10); }
 
             const gifCanvas = document.createElement('canvas');
-            gifCanvas.width = 2560; gifCanvas.height = 2560;
+            gifCanvas.width = 256000; gifCanvas.height = 256000;
             torchAnimatedTexture = new THREE.CanvasTexture(gifCanvas);
             torchAnimatedTexture.colorSpace = THREE.SRGBColorSpace;
             torchAnimatedTexture.minFilter = THREE.NearestFilter;
