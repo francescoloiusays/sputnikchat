@@ -44,21 +44,16 @@
         /* MODIFICA: STILE 3D PER L'INPUT */
         #nickname-input { 
             padding: 15px; 
-            font-size: 24px; /* Ignoriamo lo stile inline per coerenza */
+            font-size: 24px; 
             text-align: center;
-            
-            /* Stile Base */
             background-color: #222;
             color: #ffff00;
             border: 2px solid #555;
             border-radius: 8px;
-            
-            /* Effetto 3D (Ombre interne ed esterne) */
             box-shadow: 
-                inset 4px 4px 8px rgba(0,0,0,0.9),  /* Ombra interna scura (alto-sx) */
-                inset -2px -2px 5px rgba(255,255,255,0.1), /* Luce interna (basso-dx) */
-                0 0 15px rgba(0,0,0,0.5); /* Ombra esterna */
-            
+                inset 4px 4px 8px rgba(0,0,0,0.9),
+                inset -2px -2px 5px rgba(255,255,255,0.1),
+                0 0 15px rgba(0,0,0,0.5);
             outline: none;
             transition: all 0.2s;
             width: 300px;
@@ -68,7 +63,7 @@
             border-color: #ffff00;
             box-shadow: 
                 inset 4px 4px 8px rgba(0,0,0,0.9),
-                0 0 20px rgba(255, 170, 0, 0.4); /* Glow esterno arancione */
+                0 0 20px rgba(255, 170, 0, 0.4);
         }
 
         #play-btn { 
@@ -77,7 +72,7 @@
             background: transparent; 
             color: #ffff00;
             border: none;
-            text-shadow: 0 4px 0 #000; /* Piccolo effetto 3D anche sul testo */
+            text-shadow: 0 4px 0 #000;
             transition: transform 0.1s;
         }
         #play-btn:active { transform: translateY(4px); text-shadow: 0 0 0 #000; }
@@ -188,7 +183,6 @@
     <div id="login-overlay" class="pointer-auto">
         <h1 style="font-size: 50px; margin-bottom: 0px;">SputnikChat</h1>
         <p style="font-size: 20px; color: #ccc; margin-bottom: 15px;">Parla</p>
-        <!-- Rimosso style inline per usare il CSS ID -->
         <input id="nickname-input" type="text" placeholder="Scegli Nickname" maxlength="16" autofocus>
         <button id="play-btn">Entra</button>
     </div>
@@ -218,7 +212,7 @@
 
     <div id="instructions">
         <h1 style="font-size: 40px;">Clicca per Giocare</h1>
-        <p>Muoviti: <b>WASD</b> + <b>SPAZIO</b><br>Chat: <b>INVIO</b><br>Voce: <b>M</b> | Musica: <b>B</b><br>Guarda: <b>MOUSE</b></p>
+        <p>Muoviti: <b>WASD / Frecce</b> + <b>SPAZIO</b><br>Chat: <b>INVIO</b><br>Voce: <b>M</b> | Musica: <b>B</b><br>Guarda: <b>MOUSE</b></p>
     </div>
 
     <div id="chat-container">
@@ -278,12 +272,10 @@
             const btn = document.getElementById('play-btn');
             const input = document.getElementById('nickname-input');
             
-            // Funzione comune di avvio
             const startGame = async () => {
                 const val = input.value.trim();
                 if(val.length > 0) myName = val;
                 
-                // --- AGGIORNAMENTO UI NOME ---
                 document.getElementById('hud-name').innerText = myName;
 
                 try {
@@ -300,10 +292,8 @@
                 animate();
             };
 
-            // Evento Click sul Bottone
             btn.addEventListener('click', startGame);
 
-            // --- MODIFICA: Evento Tasto Invio sull'Input ---
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     startGame();
@@ -396,10 +386,11 @@
                 if (e.code === 'KeyB') toggleMusic();
 
                 switch(e.code) {
-                    case 'KeyW': moveForward = true; break;
-                    case 'KeyS': moveBackward = true; break;
-                    case 'KeyA': moveLeft = true; break;
-                    case 'KeyD': moveRight = true; break;
+                    case 'KeyW': case 'ArrowUp': moveForward = true; break;
+                    case 'KeyS': case 'ArrowDown': moveBackward = true; break;
+                    case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
+                    case 'KeyD': case 'ArrowRight': moveRight = true; break;
+                    
                     case 'Space': if(canJump) { velocity.y += 12; canJump = false; } break;
                     case 'KeyV': 
                         isThirdPerson = !isThirdPerson; 
@@ -410,10 +401,10 @@
 
             document.addEventListener('keyup', (e) => {
                 switch(e.code) {
-                    case 'KeyW': moveForward = false; break;
-                    case 'KeyS': moveBackward = false; break;
-                    case 'KeyA': moveLeft = false; break;
-                    case 'KeyD': moveRight = false; break;
+                    case 'KeyW': case 'ArrowUp': moveForward = false; break;
+                    case 'KeyS': case 'ArrowDown': moveBackward = false; break;
+                    case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
+                    case 'KeyD': case 'ArrowRight': moveRight = false; break;
                 }
             });
             window.addEventListener('resize', () => {
