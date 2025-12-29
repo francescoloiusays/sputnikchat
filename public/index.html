@@ -51,7 +51,6 @@
             display: flex; flex-direction: column; gap: 8px; width: 220px;
             border: 1px solid #333;
         }
-        select { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; width: 100%; font-size: 16px; }
         
         .ui-btn {
             background: #333; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; text-align: center;
@@ -87,20 +86,52 @@
             pointer-events: none;
         }
 
-        /* Stile Propic Aggiornato */
-        #propic-container {
-            width: 100%;
+        /* Stile Propic + Frecce */
+        #propic-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             margin: 5px 0 10px 0;
-            /* Rimosso flex center per farla espandere */
+            width: 100%;
         }
+        
+        #propic-container {
+            flex-grow: 1;
+            margin: 0 5px;
+            position: relative;
+        }
+
         #hud-propic {
-            width: 100%;            /* Larga quanto la scheda (padding escluso) */
-            aspect-ratio: 1/1;      /* Forza la forma quadrata */
-            border-radius: 0;       /* Nessun arrotondamento */
-            border: none;           /* Nessun outline */
-            object-fit: cover;      /* Taglia l'immagine se necessario per riempire il quadrato */
+            width: 100%;            
+            aspect-ratio: 1/1;      
+            border-radius: 0;       
+            border: none;           
+            object-fit: cover;      
             background: #000;
             display: block;
+        }
+
+        .arrow-btn {
+            background: rgba(0,0,0,0.5);
+            color: #ff9900;
+            border: 1px solid #555;
+            cursor: pointer;
+            font-size: 24px;
+            padding: 0;
+            width: 30px;
+            height: 60px; /* Altezza per centratura visiva */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .arrow-btn:hover { background: rgba(255, 153, 0, 0.3); }
+
+        #skin-label {
+            text-align: center;
+            font-size: 18px;
+            color: #ccc;
+            margin-bottom: 5px;
         }
     </style>
 </head>
@@ -114,15 +145,21 @@
     </div>
 
     <div id="ui-top-left" class="pointer-auto">
-        <!-- MODIFICA: Nome Giocatore in Alto -->
+        <!-- Nome Giocatore -->
         <div id="hud-name" style="font-size: 22px; color: #ff9900; font-weight: bold; text-align: center; border-bottom: 1px solid #555; padding-bottom: 8px; margin-bottom: 5px;">GIOCATORE</div>
         
-        <!-- MODIFICA: Immagine Profilo Quadrata Full Width -->
-        <div id="propic-container">
-            <img id="hud-propic" src="" alt="Profile">
+        <!-- Label Nome Skin -->
+        <div id="skin-label">Skin: ...</div>
+
+        <!-- Riga con Frecce e Immagine -->
+        <div id="propic-row">
+            <button class="arrow-btn" id="prev-skin-btn">&lt;</button>
+            <div id="propic-container">
+                <img id="hud-propic" src="" alt="Profile">
+            </div>
+            <button class="arrow-btn" id="next-skin-btn">&gt;</button>
         </div>
 
-        <div><label style="font-size: 18px;">Skin:</label><select id="avatarSelect"></select></div>
         <button id="mic-btn" class="ui-btn" style="background: #cc0000;">Microfono: OFF (Premi M)</button>
         <div style="border-top: 1px solid #555; margin-top: 5px; padding-top: 5px;">
             <button id="music-btn" class="ui-btn">Musica: OFF (Premi B)</button>
@@ -177,7 +214,9 @@
         let bgMusic = null;
         let isMusicOn = false;
 
-        // --- MODIFICA: Aggiunto campo 'propic' ---
+        // Indice Skin Corrente
+        let currentSkinIndex = 0;
+
         const avatarOptions = [
             { label: "Ratto", file: "Personaggi/Rat.png", propic: "Personaggi/Rat_propic.png" },
             { label: "Alessandro", file: "Personaggi/Alessandro.png", propic: "Personaggi/Alessandro_propic.png" },
@@ -248,7 +287,7 @@
             avatarMesh.visible = false;
             playerGroup.add(avatarMesh);
 
-            setupAvatarMenu();
+            setupAvatarUI();
             setupMicButton();
             buildLevel();
 
@@ -370,38 +409,44 @@
         function addRemotePlayer(id, data) { const g = new THREE.PlaneGeometry(0.8, 1.7); const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(data.x, data.y, data.z); updateRemoteSkin(mesh, data.skin || "plebeo.png"); scene.add(mesh); remotePlayers[id] = mesh; }
         function updateRemoteSkin(mesh, f) { loader.load(`./${f}`, t => { t.colorSpace = THREE.SRGBColorSpace; mesh.material.map = t; mesh.material.needsUpdate = true; }); }
         
-        function setupAvatarMenu() { 
-            const s = document.getElementById('avatarSelect'); 
-            avatarOptions.forEach(o => { 
-                const op = document.createElement('option'); 
-                op.value = o.file; 
-                op.innerText = o.label; 
-                s.appendChild(op); 
-            }); 
-            
-            // Random iniziale
-            const rnd = avatarOptions[Math.floor(Math.random()*avatarOptions.length)]; 
-            s.value = rnd.file; 
-            changeLocalSkin(rnd.file); 
-            
-            s.addEventListener('change', (e) => changeLocalSkin(e.target.value)); 
+        // --- MODIFICA: Logica Frecce ---
+        function setupAvatarUI() { 
+            // Inizializza con skin random o prima della lista
+            currentSkinIndex = Math.floor(Math.random() * avatarOptions.length);
+            updateLocalSkin();
+
+            document.getElementById('prev-skin-btn').addEventListener('click', () => {
+                currentSkinIndex--;
+                if(currentSkinIndex < 0) currentSkinIndex = avatarOptions.length - 1;
+                updateLocalSkin();
+            });
+
+            document.getElementById('next-skin-btn').addEventListener('click', () => {
+                currentSkinIndex++;
+                if(currentSkinIndex >= avatarOptions.length) currentSkinIndex = 0;
+                updateLocalSkin();
+            });
         }
 
-        function changeLocalSkin(f) { 
-            mySkin = f; 
+        function updateLocalSkin() {
+            const opt = avatarOptions[currentSkinIndex];
+            mySkin = opt.file;
             
-            // --- MODIFICA: Aggiorna propic ---
-            const opt = avatarOptions.find(o => o.file === f);
-            if(opt && opt.propic) {
+            // Aggiorna Label e Propic
+            document.getElementById('skin-label').innerText = "Skin: " + opt.label;
+            if(opt.propic) {
                 document.getElementById('hud-propic').src = `./${opt.propic}`;
             }
 
-            loader.load(`./${f}`, t => { 
+            // Carica Texture Personaggio
+            loader.load(`./${mySkin}`, t => { 
                 t.colorSpace = THREE.SRGBColorSpace; 
                 avatarMesh.material.map = t; 
                 avatarMesh.material.needsUpdate = true; 
             }); 
-            if(socket && socket.connected) socket.emit('skinChange', f); 
+            
+            // Invia al server
+            if(socket && socket.connected) socket.emit('skinChange', mySkin);
         }
 
         function checkCol(pos) { const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5); const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5); const box = new THREE.Box3(min, max); return colliders.some(c => box.intersectsBox(c)); }
