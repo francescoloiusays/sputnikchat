@@ -224,7 +224,7 @@
             const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
             const spr = new THREE.Sprite(mat);
             spr.renderOrder = 999;
-            spr.scale.set(2.4, 0.6, 1);
+            spr.scale.set(1.8, 0.45, 1);
             spr.userData.__name = text;
             return spr;
         }
@@ -316,8 +316,6 @@
             avatarMesh.visible = false;
             playerGroup.add(avatarMesh);
 
-            // --- AGGIUNTA TARGHETTA AL GIOCATORE LOCALE ---
-            setOrUpdateNameTag(playerGroup, myName);
             // Nascondiamo subito perché siamo in prima persona
             if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = false;
 
