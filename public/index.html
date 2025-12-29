@@ -18,7 +18,7 @@
             font-style: normal;
         }
 
-        /* RESET BOX MODEL per evitare problemi di dimensioni */
+        /* RESET BOX MODEL */
         * { box-sizing: border-box; }
 
         body { 
@@ -40,21 +40,55 @@
             background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 100; color: white;
         }
-        #nickname-input { padding: 10px; font-size: 24px; border-radius: 5px; border: none; text-align: center; }
-        #play-btn { 
-            margin-top: 20px; padding: 10px 30px; font-size: 24px; cursor: pointer; 
-            letter-spacing: 1px;
-            background: #000000; border: none;
+        
+        /* MODIFICA: STILE 3D PER L'INPUT */
+        #nickname-input { 
+            padding: 15px; 
+            font-size: 24px; /* Ignoriamo lo stile inline per coerenza */
+            text-align: center;
+            
+            /* Stile Base */
+            background-color: #222;
+            color: #ff9900;
+            border: 2px solid #555;
+            border-radius: 8px;
+            
+            /* Effetto 3D (Ombre interne ed esterne) */
+            box-shadow: 
+                inset 4px 4px 8px rgba(0,0,0,0.9),  /* Ombra interna scura (alto-sx) */
+                inset -2px -2px 5px rgba(255,255,255,0.1), /* Luce interna (basso-dx) */
+                0 0 15px rgba(0,0,0,0.5); /* Ombra esterna */
+            
+            outline: none;
+            transition: all 0.2s;
+            width: 300px;
         }
+
+        #nickname-input:focus {
+            border-color: #ffaa00;
+            box-shadow: 
+                inset 4px 4px 8px rgba(0,0,0,0.9),
+                0 0 20px rgba(255, 170, 0, 0.4); /* Glow esterno arancione */
+        }
+
+        #play-btn { 
+            margin-top: 20px; padding: 10px 30px; font-size: 50px; cursor: pointer; 
+            letter-spacing: 1px;
+            background: transparent; 
+            color: #ffff00;
+            border: none;
+            text-shadow: 0 4px 0 #000; /* Piccolo effetto 3D anche sul testo */
+            transition: transform 0.1s;
+        }
+        #play-btn:active { transform: translateY(4px); text-shadow: 0 0 0 #000; }
         
         /* UI */
         #ui-top-left {
             position: absolute; top: 10px; left: 10px; z-index: 20;
             background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; color: white;
             display: flex; flex-direction: column; gap: 8px; 
-            width: 240px; /* Larghezza fissa leggermente aumentata */
+            width: 240px; 
             border: 1px solid #333;
-            /* Min-height per stabilità */
             min-height: 350px;
         }
         
@@ -90,14 +124,14 @@
             pointer-events: none;
         }
 
-        /* --- STILE PROPIC E LAYOUT STABILE --- */
+        /* --- STILE PROPIC E LAYOUT --- */
         #propic-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin: 5px 0 10px 0;
             width: 100%;
-            height: 120px; /* Altezza fissa per bloccare il layout */
+            height: 120px; 
         }
         
         #propic-container {
@@ -107,15 +141,15 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden; /* Taglia se sfora */
+            overflow: hidden; 
         }
 
         #hud-propic {
             width: 100%;
             height: 100%;
-            object-fit: cover; /* Mantiene le proporzioni riempiendo il quadrato */
-            aspect-ratio: 1/1; /* Forza forma quadrata */
-            background: #000;  /* Sfondo nero durante il caricamento */
+            object-fit: cover; 
+            aspect-ratio: 1/1; 
+            background: #000;  
             display: block;
         }
 
@@ -127,12 +161,12 @@
             font-size: 24px;
             padding: 0;
             width: 30px;
-            height: 100%; /* Altezza uguale alla riga */
+            height: 100%; 
             display: flex;
             align-items: center;
             justify-content: center;
             transition: background 0.2s;
-            flex-shrink: 0; /* Impedisce alle frecce di schiacciarsi */
+            flex-shrink: 0; 
         }
         .arrow-btn:hover { background: rgba(255, 153, 0, 0.3); }
 
@@ -141,7 +175,6 @@
             font-size: 18px;
             color: #ccc;
             margin-bottom: 5px;
-            /* Blocca l'altezza del testo per evitare salti */
             height: 24px;
             line-height: 24px;
             overflow: hidden;
@@ -154,19 +187,20 @@
 
     <div id="login-overlay" class="pointer-auto">
         <h1 style="font-size: 50px; margin-bottom: 0px;">SputnikChat</h1>
-        <p style="font-size: 20px; color: #ccc;">Parla</p>
-        <input style="font-size: 20px;" id="nickname-input" type="text" placeholder="Scegli Nickname" maxlength="16">
-        <button id="play-btn" style="color: #ffff00; font-size: 50px;">Entra</button>
+        <p style="font-size: 20px; color: #ccc; margin-bottom: 15px;">Parla</p>
+        <!-- Rimosso style inline per usare il CSS ID -->
+        <input id="nickname-input" type="text" placeholder="Scegli Nickname" maxlength="16">
+        <button id="play-btn">Entra</button>
     </div>
 
     <div id="ui-top-left" class="pointer-auto">
         <!-- Nome Giocatore -->
         <div id="hud-name" style="font-size: 22px; color: #ffff00; font-weight: bold; text-align: center; border-bottom: 1px solid #555; padding-bottom: 8px; margin-bottom: 5px;">GIOCATORE</div>
         
-        <!-- Label Nome Skin (con altezza fissa) -->
+        <!-- Label Nome Skin -->
         <div id="skin-label">Skin: ...</div>
 
-        <!-- Riga con Frecce e Immagine (con altezza fissa) -->
+        <!-- Riga con Frecce e Immagine -->
         <div id="propic-row">
             <button class="arrow-btn" id="prev-skin-btn">&lt;</button>
             <div id="propic-container">
@@ -421,10 +455,29 @@
         function addPeer(sig, c, s) { const p = new SimplePeer({ initiator: false, trickle: false, stream: s }); p.on("signal", sig => socket.emit("returningSignal", { signal: sig, callerID: c })); p.on("stream", st => addAudioElement(c, st)); p.signal(sig); return p; }
         function addAudioElement(id, s) { const a = document.createElement('audio'); a.srcObject = s; a.autoplay = true; a.id = `audio-${id}`; document.body.appendChild(a); }
         function addChatMessage(n, t) { const c = document.getElementById('chat-messages'); const d = document.createElement('div'); d.innerHTML = `<span class="chat-name">${n}:</span> ${t}`; c.appendChild(d); c.scrollTop = c.scrollHeight; }
-        function addRemotePlayer(id, data) { const g = new THREE.PlaneGeometry(0.8, 1.7); const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(data.x, data.y, data.z); updateRemoteSkin(mesh, data.skin || "plebeo.png"); scene.add(mesh); remotePlayers[id] = mesh; }
+        
+        // --- MODIFICA: FIX GIOCATORE INCASTRATO ---
+        function addRemotePlayer(id, data) { 
+            // Ignora giocatori "fantasma" che appaiono esattamente a 0,0,0 (bug comune)
+            if(data.x === 0 && data.y === 0 && data.z === 0) return;
+
+            const g = new THREE.PlaneGeometry(0.8, 1.7); 
+            const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); 
+            const mesh = new THREE.Mesh(g, m); 
+            
+            // Forza una Y minima per non averli incastrati nel pavimento se i dati sono errati
+            // (Il player è alto 1.7, il centro è a metà, quindi deve stare almeno a 0.85)
+            const safeY = Math.max(0.85, data.y);
+            mesh.position.set(data.x, safeY, data.z); 
+            
+            updateRemoteSkin(mesh, data.skin || "plebeo.png"); 
+            scene.add(mesh); 
+            remotePlayers[id] = mesh; 
+        }
+        
         function updateRemoteSkin(mesh, f) { loader.load(`./${f}`, t => { t.colorSpace = THREE.SRGBColorSpace; mesh.material.map = t; mesh.material.needsUpdate = true; }); }
         
-        // --- MODIFICA: Logica Frecce ---
+        // --- Logica Frecce ---
         function setupAvatarUI() { 
             // Inizializza con skin random o prima della lista
             currentSkinIndex = Math.floor(Math.random() * avatarOptions.length);
