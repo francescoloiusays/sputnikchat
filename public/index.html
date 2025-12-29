@@ -123,7 +123,6 @@
         </div>
 
         <div><label style="font-size: 18px;">Skin:</label><select id="avatarSelect"></select></div>
-        <div style="font-size:16px; color:#ccc; margin-top: 5px;" id="cam-mode">Visuale: 1a Persona</div>
         <button id="mic-btn" class="ui-btn" style="background: #cc0000;">Microfono: OFF (Premi M)</button>
         <div style="border-top: 1px solid #555; margin-top: 5px; padding-top: 5px;">
             <div style="font-size:16px; color:#ccc; margin-bottom: 4px;">Brano: <span id="music-name" style="color:white;">Nessuno</span></div>
@@ -156,7 +155,6 @@
         // --- CONFIG ---
         const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
         const MUSIC_FILE = "./soundtrack.mp3"; 
-        const MUSIC_TITLE = "Soundtrack";
 
         let scene, camera, renderer, loader, socket, minimap;
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -307,7 +305,6 @@
                     case 'KeyV': 
                         isThirdPerson = !isThirdPerson; 
                         avatarMesh.visible = isThirdPerson;
-                        document.getElementById('cam-mode').innerText = isThirdPerson ? "Visuale: 3a Persona" : "Visuale: 1a Persona";
                         break;
                 }
             });
@@ -332,7 +329,6 @@
             bgMusic = new Audio(MUSIC_FILE);
             bgMusic.loop = true;
             bgMusic.volume = 0.3;
-            document.getElementById('music-name').innerText = MUSIC_TITLE;
             document.getElementById('music-btn').addEventListener('click', toggleMusic);
         }
 
