@@ -372,11 +372,11 @@ border: 2px solid #111;
             
             // Sfondo
             const pad = 6;
-            ctx.fillStyle = "rgba(0,0,0,0.65)";
+            ctx.fillStyle = "rgba(0,0,0,0)";
             drawRoundRect(ctx, pad, pad, W - pad*2, H - pad*2, 14);
             ctx.fill();
             // Bordo
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 0;
             ctx.strokeStyle = "rgba(255,255,255,0.25)";
             ctx.stroke();
             // Testo
