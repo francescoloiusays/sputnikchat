@@ -375,10 +375,6 @@ border: 2px solid #111;
             ctx.fillStyle = "rgba(0,0,0,0)";
             drawRoundRect(ctx, pad, pad, W - pad*2, H - pad*2, 14);
             ctx.fill();
-            // Bordo
-            ctx.lineWidth = 0;
-            ctx.strokeStyle = "rgba(255,255,255,0.25)";
-            ctx.stroke();
             // Testo
             ctx.font = "28px Planewalker, sans-serif";
             ctx.fillStyle = "#ffff00";
@@ -409,7 +405,7 @@ border: 2px solid #111;
                 parentObj.remove(old);
             }
             const tag = createNameTagSprite(text);
-            tag.position.set(0, 1.8, 0); 
+            tag.position.set(0, 1.6, 0); 
             parentObj.add(tag);
             parentObj.userData.nameTag = tag;
         }
