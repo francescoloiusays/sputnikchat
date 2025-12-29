@@ -393,7 +393,7 @@ border: 2px solid #111;
             const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
             const spr = new THREE.Sprite(mat);
             spr.renderOrder = 999;
-            spr.scale.set(2.4, 0.6, 1);
+            spr.scale.set(1.8, 0.4, 1);
             spr.userData.__name = text;
             return spr;
         }
@@ -409,7 +409,7 @@ border: 2px solid #111;
                 parentObj.remove(old);
             }
             const tag = createNameTagSprite(text);
-            tag.position.set(0, 1.95, 0); 
+            tag.position.set(0, 1.7, 0); 
             parentObj.add(tag);
             parentObj.userData.nameTag = tag;
         }
