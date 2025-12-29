@@ -41,39 +41,22 @@
             justify-content: center; align-items: center; z-index: 100; color: white;
         }
         
-        /* MODIFICA: STILE 3D PER L'INPUT */
         #nickname-input { 
-            padding: 15px; 
-            font-size: 24px; 
-            text-align: center;
-            background-color: #222;
-            color: #ffff00;
-            border: 2px solid #555;
-            border-radius: 8px;
-            box-shadow: 
-                inset 4px 4px 8px rgba(0,0,0,0.9),
-                inset -2px -2px 5px rgba(255,255,255,0.1),
-                0 0 15px rgba(0,0,0,0.5);
-            outline: none;
-            transition: all 0.2s;
-            width: 300px;
+            padding: 15px; font-size: 24px; text-align: center;
+            background-color: #222; color: #ffff00;
+            border: 2px solid #555; border-radius: 8px;
+            box-shadow: inset 4px 4px 8px rgba(0,0,0,0.9), inset -2px -2px 5px rgba(255,255,255,0.1), 0 0 15px rgba(0,0,0,0.5);
+            outline: none; transition: all 0.2s; width: 300px;
         }
-
         #nickname-input:focus {
             border-color: #ffff00;
-            box-shadow: 
-                inset 4px 4px 8px rgba(0,0,0,0.9),
-                0 0 20px rgba(255, 170, 0, 0.4);
+            box-shadow: inset 4px 4px 8px rgba(0,0,0,0.9), 0 0 20px rgba(255, 170, 0, 0.4);
         }
 
         #play-btn { 
             margin-top: 20px; padding: 10px 30px; font-size: 50px; cursor: pointer; 
-            letter-spacing: 1px;
-            background: transparent; 
-            color: #ffff00;
-            border: none;
-            text-shadow: 0 4px 0 #000;
-            transition: transform 0.1s;
+            letter-spacing: 1px; background: transparent; color: #ffff00; border: none;
+            text-shadow: 0 4px 0 #000; transition: transform 0.1s;
         }
         #play-btn:active { transform: translateY(4px); text-shadow: 0 0 0 #000; }
         
@@ -82,9 +65,7 @@
             position: absolute; top: 10px; left: 10px; z-index: 20;
             background: rgba(0,0,0,0.6); padding: 15px; border-radius: 8px; color: white;
             display: flex; flex-direction: column; gap: 8px; 
-            width: 240px; 
-            border: 1px solid #333;
-            min-height: 350px;
+            width: 240px; border: 1px solid #333; min-height: 350px;
         }
         
         .ui-btn {
@@ -96,8 +77,8 @@
         #instructions {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: white; background: rgba(0, 0, 0, 0.7); padding: 20px;
-            text-align: center; cursor: pointer; border-radius: 10px; z-index: 10; user-select: none; display: none;
-            font-size: 20px;
+            text-align: center; border-radius: 10px; z-index: 10; user-select: none; display: none;
+            font-size: 20px; pointer-events: none; /* Lascia passare i click al body */
         }
 
         #chat-container {
@@ -110,72 +91,16 @@
         #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 100%; font-size: 16px; }
 
         #sh-logo {
-            position: fixed;
-            left: 10px;
-            bottom: 10px;
-            z-index: 80;
-            width: 140px;
-            height: auto;
-            pointer-events: none;
+            position: fixed; left: 10px; bottom: 10px; z-index: 80; width: 140px; height: auto; pointer-events: none;
         }
 
-        /* --- STILE PROPIC E LAYOUT --- */
-        #propic-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin: 5px 0 10px 0;
-            width: 100%;
-            height: 120px; 
-        }
-        
-        #propic-container {
-            flex-grow: 1;
-            margin: 0 5px;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden; 
-        }
-
-        #hud-propic {
-            width: 100%;
-            height: 100%;
-            object-fit: cover; 
-            aspect-ratio: 1/1; 
-            background: #000;  
-            display: block;
-        }
-
-        .arrow-btn {
-            background: rgba(0,0,0,0.5);
-            color: #ffff00;
-            border: 0px solid #555;
-            cursor: pointer;
-            font-size: 24px;
-            padding: 0;
-            width: 30px;
-            height: 100%; 
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.2s;
-            flex-shrink: 0; 
-        }
+        /* --- STILE PROPIC --- */
+        #propic-row { display: flex; align-items: center; justify-content: space-between; margin: 5px 0 10px 0; width: 100%; height: 120px; }
+        #propic-container { flex-grow: 1; margin: 0 5px; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        #hud-propic { width: 100%; height: 100%; object-fit: cover; aspect-ratio: 1/1; background: #000; display: block; }
+        .arrow-btn { background: rgba(0,0,0,0.5); color: #ffff00; border: 0px solid #555; cursor: pointer; font-size: 24px; padding: 0; width: 30px; height: 100%; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
         .arrow-btn:hover { background: rgba(255, 153, 0, 0.3); }
-
-        #skin-label {
-            text-align: center;
-            font-size: 18px;
-            color: #ccc;
-            margin-bottom: 5px;
-            height: 24px;
-            line-height: 24px;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-        }
+        #skin-label { text-align: center; font-size: 18px; color: #ccc; margin-bottom: 5px; height: 24px; line-height: 24px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     </style>
 </head>
 <body>
@@ -188,30 +113,21 @@
     </div>
 
     <div id="ui-top-left" class="pointer-auto">
-        <!-- Nome Giocatore -->
         <div id="hud-name" style="font-size: 22px; color: #ffff00; font-weight: bold; text-align: center; border-bottom: 1px solid #555; padding-bottom: 8px; margin-bottom: 5px;">GIOCATORE</div>
-        
-        <!-- Label Nome Skin -->
         <div id="skin-label">Skin: ...</div>
-
-        <!-- Riga con Frecce e Immagine -->
         <div id="propic-row">
             <button class="arrow-btn" id="prev-skin-btn">&lt;</button>
-            <div id="propic-container">
-                <img id="hud-propic" src="" alt="Profile">
-            </div>
+            <div id="propic-container"><img id="hud-propic" src="" alt="Profile"></div>
             <button class="arrow-btn" id="next-skin-btn">&gt;</button>
         </div>
-
         <button id="mic-btn" class="ui-btn" style="background: #cc0000;">Microfono: OFF (Premi M)</button>
         <div style="border-top: 1px solid #555; margin-top: 5px; padding-top: 5px;">
             <button id="music-btn" class="ui-btn">Musica: OFF (Premi B)</button>
         </div>
     </div>
-    
 
     <div id="instructions">
-        <h1 style="font-size: 40px;">Clicca per Giocare</h1>
+        <h1 style="font-size: 40px;">Clicca ovunque per Giocare</h1>
         <p>Muoviti: <b>WASD / Frecce</b> + <b>SPAZIO</b><br>Chat: <b>INVIO</b><br>Voce: <b>M</b> | Musica: <b>B</b><br>Guarda: <b>MOUSE</b></p>
     </div>
 
@@ -228,14 +144,12 @@
 
     <script type="module">
         import * as THREE from 'three';
-        // Se hai il file minimap.js, scommenta la riga sotto:
-        // import { Minimap } from './minimap.js';
 
         // --- CONFIG ---
         const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
         const MUSIC_FILE = "./soundtrack.mp3"; 
 
-        let scene, camera, renderer, loader, socket, minimap;
+        let scene, camera, renderer, loader, socket;
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         let canJump = false, isLocked = false, isThirdPerson = false;
         let playerGroup, avatarMesh, theta = 0, phi = 0;
@@ -244,20 +158,18 @@
         
         let mySkin = "plebeo.png";
         let myName = "Anonimo";
+        let gameInitialized = false;
 
         const remotePlayers = {}; 
         const wallMeshes = [], colliders = [], torchLights = [];
         const cameraRaycaster = new THREE.Raycaster();
         let wallTexture, floorTexture, torchAnimatedTexture;
 
-        // WebRTC & Audio
         let localStream;
         const peers = {}; 
         let isMicActive = false;
         let bgMusic = null;
         let isMusicOn = false;
-
-        // Indice Skin Corrente
         let currentSkinIndex = 0;
 
         const avatarOptions = [
@@ -272,43 +184,34 @@
             const btn = document.getElementById('play-btn');
             const input = document.getElementById('nickname-input');
             
-const startGame = async () => {
-    // (opzionale ma consigliato) evita doppio avvio se cliccano due volte
-    if (window.__gameStarted) return;
-    window.__gameStarted = true;
+            const startGame = async () => {
+                if(gameInitialized) return;
+                gameInitialized = true;
 
-    const val = input.value.trim();
-    if (val.length > 0) myName = val;
+                const val = input.value.trim();
+                if(val.length > 0) myName = val;
+                document.getElementById('hud-name').innerText = myName;
 
-    // --- AGGIORNAMENTO UI NOME ---
-    document.getElementById('hud-name').innerText = myName;
+                // --- AUTO AVVIO MUSICA (Gesto Utente) ---
+                setupMusic();
+                // Tenta di avviare subito la musica
+                if(!isMusicOn) toggleMusic();
 
-    // --- AVVIO MUSICA AUTOMATICO (subito, dentro il gesto utente) ---
-    setupMusic();
-    if (!isMusicOn) toggleMusic(); // non usare await qui
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                    localStream.getAudioTracks()[0].enabled = false;
+                } catch (err) { console.warn("Microfono negato."); }
 
-    // Microfono (può aprire prompt permessi, meglio dopo la musica)
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-        localStream.getAudioTracks()[0].enabled = false;
-    } catch (err) { console.warn("Microfono negato."); }
-
-    document.getElementById('login-overlay').style.display = 'none';
-    document.getElementById('instructions').style.display = 'block';
-
-    init();
-    initSocket();
-    animate();
-};
-
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('instructions').style.display = 'block';
+                
+                init();
+                initSocket(); 
+                animate();
+            };
 
             btn.addEventListener('click', startGame);
-
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    startGame();
-                }
-            });
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
         }
 
         function init() {
@@ -328,15 +231,11 @@ const startGame = async () => {
 
             // --- TEXTURE TORCIA ---
             const gifCanvas = document.createElement('canvas');
-            gifCanvas.width = 512;
-            gifCanvas.height = 512;
-            
+            gifCanvas.width = 512; gifCanvas.height = 512;
             torchAnimatedTexture = new THREE.CanvasTexture(gifCanvas);
             torchAnimatedTexture.colorSpace = THREE.SRGBColorSpace;
             torchAnimatedTexture.minFilter = THREE.LinearFilter; 
-            
             try { window.gifler('./torcia.gif').animate(gifCanvas); } catch(e){}
-            // ---------------------
 
             playerGroup = new THREE.Group();
             scene.add(playerGroup);
@@ -352,9 +251,6 @@ const startGame = async () => {
             setupMicButton();
             buildLevel();
 
-            // Se hai il file minimap.js, scommenta:
-            // minimap = new Minimap(scene, playerGroup, remotePlayers);
-
             const ambient = new THREE.AmbientLight(0xffffff, 0.2);
             scene.add(ambient);
 
@@ -362,9 +258,19 @@ const startGame = async () => {
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // INPUTS
+            // --- GESTIONE POINTER LOCK (CLIC OVUNQUE) ---
             const instructions = document.getElementById('instructions');
-            instructions.addEventListener('click', () => document.body.requestPointerLock());
+            
+            // Listener globale sul body per catturare il pointer lock
+            document.body.addEventListener('click', (e) => {
+                // Se stiamo cliccando su UI (bottoni, input), ignoriamo il lock
+                if (e.target.closest('button') || e.target.closest('input') || e.target.closest('#ui-top-left') || e.target.closest('#chat-container')) return;
+                
+                // Se non siamo già lockati, richiedi il lock
+                if (!isLocked && document.getElementById('login-overlay').style.display === 'none') {
+                    document.body.requestPointerLock();
+                }
+            });
             
             document.addEventListener('pointerlockchange', () => {
                 isLocked = (document.pointerLockElement === document.body);
@@ -400,7 +306,6 @@ const startGame = async () => {
                     case 'KeyS': case 'ArrowDown': moveBackward = true; break;
                     case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
                     case 'KeyD': case 'ArrowRight': moveRight = true; break;
-                    
                     case 'Space': if(canJump) { velocity.y += 12; canJump = false; } break;
                     case 'KeyV': 
                         isThirdPerson = !isThirdPerson; 
@@ -426,20 +331,41 @@ const startGame = async () => {
 
 
         function setupMusic() {
-            bgMusic = new Audio(MUSIC_FILE);
-            bgMusic.loop = true;
-            bgMusic.volume = 0.3;
-            document.getElementById('music-btn').addEventListener('click', toggleMusic);
+            if(!bgMusic) {
+                bgMusic = new Audio(MUSIC_FILE);
+                bgMusic.loop = true;
+                bgMusic.volume = 0.3;
+            }
+            // Rimuoviamo vecchi listener per evitare duplicati
+            const btn = document.getElementById('music-btn');
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            newBtn.addEventListener('click', toggleMusic);
         }
 
         async function toggleMusic() {
-            if(!bgMusic) { bgMusic = new Audio(MUSIC_FILE); bgMusic.loop = true; bgMusic.volume = 0.3; }
+            if(!bgMusic) setupMusic();
             const btn = document.getElementById('music-btn');
-            isMusicOn = !isMusicOn;
+            
+            // Se è già on, spegni
             if(isMusicOn) {
-                try { await bgMusic.play(); btn.innerText = "Musica: ON"; btn.classList.add('music-on'); } 
-                catch(e) { isMusicOn = false; console.warn("Autoplay bloccato", e); alert("Impossibile avviare musica."); }
-            } else { bgMusic.pause(); btn.innerText = "Musica: OFF (Premi B)"; btn.classList.remove('music-on'); }
+                bgMusic.pause();
+                isMusicOn = false;
+                btn.innerText = "Musica: OFF (Premi B)";
+                btn.classList.remove('music-on');
+            } else {
+                // Se è off, accendi
+                try { 
+                    await bgMusic.play(); 
+                    isMusicOn = true;
+                    btn.innerText = "Musica: ON"; 
+                    btn.classList.add('music-on'); 
+                } 
+                catch(e) { 
+                    console.warn("Autoplay bloccato o errore", e); 
+                    isMusicOn = false;
+                }
+            }
         }
 
         function setupMicButton() { document.getElementById('mic-btn').addEventListener('click', toggleMic); }
@@ -469,20 +395,13 @@ const startGame = async () => {
         function addAudioElement(id, s) { const a = document.createElement('audio'); a.srcObject = s; a.autoplay = true; a.id = `audio-${id}`; document.body.appendChild(a); }
         function addChatMessage(n, t) { const c = document.getElementById('chat-messages'); const d = document.createElement('div'); d.innerHTML = `<span class="chat-name">${n}:</span> ${t}`; c.appendChild(d); c.scrollTop = c.scrollHeight; }
         
-        // --- MODIFICA: FIX GIOCATORE INCASTRATO ---
         function addRemotePlayer(id, data) { 
-            // Ignora giocatori "fantasma" che appaiono esattamente a 0,0,0 (bug comune)
             if(data.x === 0 && data.y === 0 && data.z === 0) return;
-
             const g = new THREE.PlaneGeometry(0.8, 1.7); 
             const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); 
             const mesh = new THREE.Mesh(g, m); 
-            
-            // Forza una Y minima per non averli incastrati nel pavimento se i dati sono errati
-            // (Il player è alto 1.7, il centro è a metà, quindi deve stare almeno a 0.85)
             const safeY = Math.max(0.85, data.y);
             mesh.position.set(data.x, safeY, data.z); 
-            
             updateRemoteSkin(mesh, data.skin || "plebeo.png"); 
             scene.add(mesh); 
             remotePlayers[id] = mesh; 
@@ -490,43 +409,25 @@ const startGame = async () => {
         
         function updateRemoteSkin(mesh, f) { loader.load(`./${f}`, t => { t.colorSpace = THREE.SRGBColorSpace; mesh.material.map = t; mesh.material.needsUpdate = true; }); }
         
-        // --- Logica Frecce ---
         function setupAvatarUI() { 
-            // Inizializza con skin random o prima della lista
             currentSkinIndex = Math.floor(Math.random() * avatarOptions.length);
             updateLocalSkin();
-
             document.getElementById('prev-skin-btn').addEventListener('click', () => {
-                currentSkinIndex--;
-                if(currentSkinIndex < 0) currentSkinIndex = avatarOptions.length - 1;
-                updateLocalSkin();
+                currentSkinIndex--; if(currentSkinIndex < 0) currentSkinIndex = avatarOptions.length - 1; updateLocalSkin();
             });
-
             document.getElementById('next-skin-btn').addEventListener('click', () => {
-                currentSkinIndex++;
-                if(currentSkinIndex >= avatarOptions.length) currentSkinIndex = 0;
-                updateLocalSkin();
+                currentSkinIndex++; if(currentSkinIndex >= avatarOptions.length) currentSkinIndex = 0; updateLocalSkin();
             });
         }
 
         function updateLocalSkin() {
             const opt = avatarOptions[currentSkinIndex];
             mySkin = opt.file;
-            
-            // Aggiorna Label e Propic
             document.getElementById('skin-label').innerText = "Skin: " + opt.label;
-            if(opt.propic) {
-                document.getElementById('hud-propic').src = `./${opt.propic}`;
-            }
-
-            // Carica Texture Personaggio
+            if(opt.propic) document.getElementById('hud-propic').src = `./${opt.propic}`;
             loader.load(`./${mySkin}`, t => { 
-                t.colorSpace = THREE.SRGBColorSpace; 
-                avatarMesh.material.map = t; 
-                avatarMesh.material.needsUpdate = true; 
+                t.colorSpace = THREE.SRGBColorSpace; avatarMesh.material.map = t; avatarMesh.material.needsUpdate = true; 
             }); 
-            
-            // Invia al server
             if(socket && socket.connected) socket.emit('skinChange', mySkin);
         }
 
@@ -545,26 +446,12 @@ const startGame = async () => {
             const floor = new THREE.Mesh(floorGeo, floorMat); floor.rotation.x = -Math.PI/2; scene.add(floor);
             
             const createTorch = (x,y,z,rot) => {
-                const geo = new THREE.PlaneGeometry(2.0, 2.0); // Torcia Grande
-                const mat = new THREE.MeshBasicMaterial({ 
-                    map: torchAnimatedTexture, 
-                    transparent: true, 
-                    side: THREE.DoubleSide, 
-                    blending: THREE.AdditiveBlending,
-                    depthWrite: false 
-                });
-                
-                const mesh = new THREE.Mesh(geo, mat); 
-                mesh.position.set(x,y,z); 
-                mesh.rotation.y = rot; 
-                scene.add(mesh);
-
-                const l = new THREE.PointLight(0xff6600, 2.0, 15); 
-                l.position.set(x + Math.sin(rot)*0.5, y, z + Math.cos(rot)*0.5); 
-                scene.add(l);
+                const geo = new THREE.PlaneGeometry(2.0, 2.0); 
+                const mat = new THREE.MeshBasicMaterial({ map: torchAnimatedTexture, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+                const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
+                const l = new THREE.PointLight(0xff6600, 2.0, 15); l.position.set(x + Math.sin(rot)*0.5, y, z + Math.cos(rot)*0.5); scene.add(l);
                 torchLights.push({ light: l, speed: 2+Math.random()*3 });
             };
-
             createTorch(0, 2.5, 4.4, 0); createTorch(-4.4, 2.5, 0, Math.PI/2); createTorch(4.4, 2.5, 0, -Math.PI/2);
             createTorch(-1.4, 2.5, -10, Math.PI/2); createTorch(1.4, 2.5, -10, -Math.PI/2);
             createTorch(-1.4, 2.5, -20, Math.PI/2); createTorch(1.4, 2.5, -20, -Math.PI/2);
@@ -573,7 +460,6 @@ const startGame = async () => {
 
         function animate() {
             requestAnimationFrame(animate);
-            // if(minimap) minimap.update(); // Scommenta se usi la minimappa
             if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
             const t = performance.now() * 0.001;
             torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
