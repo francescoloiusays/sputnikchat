@@ -131,6 +131,7 @@
             <button class="arrow-btn" id="prev-skin-btn">&lt;</button>
             <div id="propic-container">
                 <img id="hud-propic" src="" alt="Profile">
+                <!-- Bottone Upload -->
                 <button class="upload-btn" id="upload-skin-btn" title="Carica Skin">+</button>
                 <input type="file" id="skin-file-input" accept="image/png, image/jpeg, image/gif" style="display: none;">
             </div>
@@ -188,82 +189,12 @@
         let isMusicOn = false;
         let currentSkinIndex = 0;
 
+        // Lista skin (iniziale)
         const avatarOptions = [
             { label: "Ratto", file: "Personaggi/Rat.png", propic: "Personaggi/Rat_propic.png" },
             { label: "Alessandro", file: "Personaggi/Alessandro.png", propic: "Personaggi/Alessandro_propic.png" },
             { label: "Francesco", file: "Personaggi/Francesco.png", propic: "Personaggi/Francesco_propic.png" }
         ];
-
-        // --- UTILITIES PER NUVOLETTA NOME ---
-        function drawRoundRect(ctx, x, y, w, h, r) {
-            const rr = Math.min(r, w / 2, h / 2);
-            ctx.beginPath();
-            ctx.moveTo(x + rr, y);
-            ctx.arcTo(x + w, y, x + w, y + h, rr);
-            ctx.arcTo(x + w, y + h, x, y + h, rr);
-            ctx.arcTo(x, y + h, x, y, rr);
-            ctx.arcTo(x, y, x + w, y, rr);
-            ctx.closePath();
-        }
-
-        function createNameTagSprite(name) {
-            const text = (name && String(name).trim().length) ? String(name).trim() : "???";
-
-            const W = 256, H = 64;
-            const canvas = document.createElement('canvas');
-            canvas.width = W; canvas.height = H;
-            const ctx = canvas.getContext('2d');
-
-            ctx.clearRect(0, 0, W, H);
-
-            const pad = 6;
-            ctx.fillStyle = "rgba(0,0,0,0.65)";
-            drawRoundRect(ctx, pad, pad, W - pad*2, H - pad*2, 14);
-            ctx.fill();
-
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = "rgba(255,255,255,0.25)";
-            ctx.stroke();
-
-            ctx.font = "28px Planewalker, sans-serif";
-            ctx.fillStyle = "#ffff00";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.shadowColor = "rgba(0,0,0,0.9)";
-            ctx.shadowBlur = 6;
-            ctx.fillText(text.slice(0, 16), W / 2, H / 2);
-
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.colorSpace = THREE.SRGBColorSpace;
-
-            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-            const spr = new THREE.Sprite(mat);
-            spr.renderOrder = 999;
-            spr.scale.set(2.4, 0.6, 1);
-            spr.userData.__name = text;
-
-            return spr;
-        }
-
-        function setOrUpdateNameTag(parentObj, newName) {
-            const text = (newName && String(newName).trim().length) ? String(newName).trim() : "???";
-            const old = parentObj.userData.nameTag;
-
-            if (old && old.userData.__name === text) return;
-
-            if (old) {
-                if (old.material?.map) old.material.map.dispose();
-                if (old.material) old.material.dispose();
-                parentObj.remove(old);
-            }
-
-            const tag = createNameTagSprite(text);
-            tag.position.set(0, 1.95, 0);
-            parentObj.add(tag);
-
-            parentObj.userData.nameTag = tag;
-        }
-        // ------------------------------------
 
         setupLogin();
 
@@ -331,10 +262,6 @@
             avatarMesh.visible = false;
             playerGroup.add(avatarMesh);
 
-            // Aggiungi NameTag al player locale (nascosto in prima persona)
-            setOrUpdateNameTag(playerGroup, myName);
-            if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = false;
-
             setupAvatarUI();
             setupMicButton();
             buildLevel();
@@ -393,8 +320,6 @@
                     case 'KeyV': 
                         isThirdPerson = !isThirdPerson; 
                         avatarMesh.visible = isThirdPerson;
-                        // Mostra/Nascondi nameTag in terza persona
-                        if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = isThirdPerson;
                         break;
                 }
             });
@@ -450,15 +375,7 @@
             socket.on('newPlayer', (data) => addRemotePlayer(data.id, data.player));
             socket.on('userJoined', payload => { const peer = addPeer(payload.signal, payload.callerID, localStream); peers[payload.callerID] = peer; });
             socket.on('receivingReturnedSignal', payload => { const item = peers[payload.id]; if(item) item.signal(payload.signal); });
-            socket.on('playerMoved', (data) => { 
-                const p = remotePlayers[data.id]; 
-                if (p) { 
-                    p.position.set(data.x, data.y, data.z); 
-                    p.rotation.y = data.theta + Math.PI;
-                    // Aggiorna anche il nome se arriva
-                    if(data.name) setOrUpdateNameTag(p, data.name);
-                } 
-            });
+            socket.on('playerMoved', (data) => { const p = remotePlayers[data.id]; if (p) { p.position.set(data.x, data.y, data.z); p.rotation.y = data.theta + Math.PI; } });
             socket.on('playerSkinChanged', (data) => { const p = remotePlayers[data.id]; if (p) updateRemoteSkin(p, data.skin); });
             socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
             socket.on('playerDisconnected', (id) => { if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; } if (peers[id]) { peers[id].destroy(); delete peers[id]; } });
@@ -476,21 +393,19 @@
             const mesh = new THREE.Mesh(g, m); 
             const safeY = Math.max(0.85, data.y);
             mesh.position.set(data.x, safeY, data.z); 
-            updateRemoteSkin(mesh, data.skin || "plebeo.png");
-            
-            // Aggiungi NameTag al player remoto
-            setOrUpdateNameTag(mesh, data.name || "Anonimo");
-            
+            updateRemoteSkin(mesh, data.skin || "plebeo.png"); 
             scene.add(mesh); 
             remotePlayers[id] = mesh; 
         }
         
         function updateRemoteSkin(mesh, f) { 
+            // Supporto Data URL per skin custom
             loader.load(f, t => { 
                 t.colorSpace = THREE.SRGBColorSpace; 
                 mesh.material.map = t; 
                 mesh.material.needsUpdate = true; 
             }, undefined, err => {
+                // Fallback se fallisce il caricamento (es. path errato per altri client)
                 console.warn("Errore caricamento skin remota", err);
             }); 
         }
@@ -530,17 +445,18 @@
             });
         }
 
-        // Funzione ottimizzata per ridurre il peso al minimo (FIX LAG)
+        // Crea texture "non-stretchata" e propic
         function processCustomSkin(img) {
-            // 1. TEXTURE PERSONAGGIO - RIDOTTA DRASTICAMENTE
-            const texW = 100; 
-            const texH = 212; 
-            
+            // 1. TEXTURE PERSONAGGIO (Aspect Ratio 0.8 : 1.7)
+            // Creiamo una canvas di dimensioni fisse, es. 400x850
+            const texW = 400; 
+            const texH = 850;
             const texCanvas = document.createElement('canvas');
-            texCanvas.width = texW; texCanvas.height = texH;
+            texCanvas.width = texW; 
+            texCanvas.height = texH;
             const ctxT = texCanvas.getContext('2d');
-            ctxT.imageSmoothingEnabled = false; // Pixel art style
-
+            
+            // Logica "contain": mantieni aspect ratio, centra
             const scale = Math.min(texW / img.width, texH / img.height);
             const drawW = img.width * scale;
             const drawH = img.height * scale;
@@ -548,19 +464,16 @@
             const offY = (texH - drawH) / 2;
             
             ctxT.drawImage(img, offX, offY, drawW, drawH);
-            const textureDataUrl = texCanvas.toDataURL('image/png'); 
+            const textureDataUrl = texCanvas.toDataURL('image/png');
 
-            if(textureDataUrl.length > 100000) {
-                console.warn("Attenzione: Skin pesante (" + Math.round(textureDataUrl.length/1024) + "KB).");
-            }
-
-            // 2. PROPIC
-            const iconSize = 64; 
+            // 2. PROPIC (Quadrata 1:1)
+            const iconSize = 128;
             const iconCanvas = document.createElement('canvas');
-            iconCanvas.width = iconSize; iconCanvas.height = iconSize;
+            iconCanvas.width = iconSize;
+            iconCanvas.height = iconSize;
             const ctxI = iconCanvas.getContext('2d');
-            ctxI.imageSmoothingEnabled = false;
             
+            // Logica "cover": riempi il quadrato (zoom centrale)
             const scaleI = Math.max(iconSize / img.width, iconSize / img.height);
             const drawWI = img.width * scaleI;
             const drawHI = img.height * scaleI;
@@ -570,11 +483,11 @@
             ctxI.drawImage(img, offXI, offYI, drawWI, drawHI);
             const propicDataUrl = iconCanvas.toDataURL('image/png');
 
-            // 3. Aggiungi
+            // 3. Aggiungi alla lista e seleziona
             avatarOptions.push({
                 label: "Custom",
-                file: textureDataUrl, 
-                propicData: propicDataUrl 
+                file: textureDataUrl, // Data URL usato come texture
+                propicData: propicDataUrl // Salviamo direttamente i dati per la propic
             });
 
             currentSkinIndex = avatarOptions.length - 1;
@@ -586,6 +499,7 @@
             
             document.getElementById('skin-label').innerText = "Skin: " + opt.label;
             
+            // Gestione Propic (File o DataURL)
             const propicImg = document.getElementById('hud-propic');
             if(opt.propicData) {
                 propicImg.src = opt.propicData;
@@ -593,8 +507,10 @@
                 propicImg.src = `./${opt.propic}`;
             }
 
+            // Gestione Texture (File o DataURL)
+            // Se inizia con "data:", il loader la gestisce comunque
             const textureSrc = opt.file.startsWith('data:') ? opt.file : `./${opt.file}`;
-            mySkin = textureSrc; 
+            mySkin = textureSrc; // Salviamo tutto il blob/path
 
             loader.load(textureSrc, t => { 
                 t.colorSpace = THREE.SRGBColorSpace; 
