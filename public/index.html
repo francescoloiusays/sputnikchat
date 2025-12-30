@@ -798,7 +798,7 @@ border: 2px solid #111;
         function checkCol(pos) { const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5); const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5); const box = new THREE.Box3(min, max); return colliders.some(c => box.intersectsBox(c)); }
         function createWall(x,y,z,w,h,d) { const g = new THREE.BoxGeometry(w,h,d); const t = wallTexture ? wallTexture.clone() : null; if(t) { t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(Math.max(w,d)/4, h/4); t.needsUpdate=true; } const m = new THREE.MeshStandardMaterial({ map: t, color: t ? 0xffffff : 0x888888 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(x,y,z); scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh); }
         
-                function buildLevel() {
+        function buildLevel() {
             // --- 1. PAVIMENTO ---
             const floorGeo = new THREE.PlaneGeometry(150, 150);
             if(floorTexture) floorTexture.repeat.set(15, 15);
@@ -822,21 +822,17 @@ border: 2px solid #111;
             createWall(4, 5, -11, 1, 10, 10);  
 
             // --- STANZA 2: LA SALA GRANDE ---
-            // Muro Sud
             createWall(-8, 5, -16, 9, 10, 1); 
             createWall(8, 5, -16, 9, 10, 1);  
-            // Muro Nord (Chiuso)
-            createWall(0, 5, -36, 22, 10, 1);
+            createWall(0, 5, -36, 22, 10, 1); // Nord
             
-            // Muro Ovest (con passaggio per Armeria)
-            // Gap tra -21 e -33 (Largo e sicuro)
+            // Ovest
             createWall(-11, 5, -21, 1, 10, 10); 
             createWall(-11, 5, -33, 1, 10, 6);  
             
-            // Muro Est (con passaggio per Santuario) - FIXATO
-            // Gap tra -26 e -30.
-            createWall(11, 5, -21, 1, 10, 10); // Finisce a -26
-            createWall(11, 5, -33, 1, 10, 6);  // Inizia a -30
+            // Est
+            createWall(11, 5, -21, 1, 10, 10);
+            createWall(11, 5, -33, 1, 10, 6);
 
             // --- STANZA 3: L'ARMERIA (OVEST) ---
             createWall(-25, 5, -36, 30, 10, 1); 
@@ -844,23 +840,18 @@ border: 2px solid #111;
             createWall(-40, 5, -26, 1, 10, 21); 
 
             // --- STANZA 4: IL SANTUARIO (EST) ---
-            // FIX: Corridoio ora allineato perfettamente con i muri della sala grande per non lasciare buchi
-            // Muro Sud Corridoio: A z=-25 (Si sovrappone col muro sala che finisce a -26)
             createWall(16, 5, -25, 10, 10, 1); 
-            // Muro Nord Corridoio: A z=-31 (Si sovrappone col muro sala che inizia a -30)
             createWall(16, 5, -31, 10, 10, 1); 
             
-            // FIX: Muro Ovest del Santuario ora ha un BUCO per entrare (prima era solido)
-            // Parte Sud del muro
+            // Muro Ovest con Buco
             createWall(21, 5, -19.25, 1, 10, 11.5); 
-            // Parte Nord del muro
             createWall(21, 5, -34.75, 1, 10, 7.5);
 
             // Muri esterni Santuario
-            createWall(35, 5, -26, 1, 10, 25); // Est
-            createWall(28, 5, -39, 15, 10, 1); // Nord
-            createWall(28, 5, -13, 15, 10, 1); // Sud
-            createWall(28, 5, -26, 4, 10, 4);  // Pilastro
+            createWall(35, 5, -26, 1, 10, 25); 
+            createWall(28, 5, -39, 15, 10, 1); 
+            createWall(28, 5, -13, 15, 10, 1); 
+            createWall(28, 5, -26, 4, 10, 4);  
 
             // --- STANZA 5: LA CRIPTA SEGRETA (SUD) ---
             createWall(-2.5, 5, 9, 1, 10, 6);
@@ -871,7 +862,7 @@ border: 2px solid #111;
             createWall(8, 5, 17, 1, 10, 10);  
             createWall(0, 5, 22, 17, 10, 1);  
 
-            // --- LUCI ---
+            // --- LUCI ALLINEATE ---
             const createTorch = (x,y,z,rot) => {
                 const geo = new THREE.PlaneGeometry(2.0, 2.0); 
                 const mat = new THREE.MeshBasicMaterial({ 
@@ -879,10 +870,17 @@ border: 2px solid #111;
                     transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false 
                 });
                 const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
-                const l = new THREE.PointLight(0xff6600, 2.0, 15); l.position.set(x + Math.sin(rot)*0.5, y, z + Math.cos(rot)*0.5); scene.add(l);
+                
+                // FIX LUCE:
+                const l = new THREE.PointLight(0xff6600, 2.0, 15); 
+                // Offset ridotto (0.2) e alzato (y+0.3) per centrare la fiamma
+                l.position.set(x + Math.sin(rot)*0.2, y + 0.3, z + Math.cos(rot)*0.2); 
+                
+                scene.add(l);
                 torchLights.push({ light: l, speed: 2+Math.random()*3 });
             };
 
+            // Posizionamento Torce
             createTorch(-5.4, 2.5, 0, Math.PI/2); 
             createTorch(5.4, 2.5, 0, -Math.PI/2);
             createTorch(-10.4, 3, -17, Math.PI/2);
@@ -895,6 +893,7 @@ border: 2px solid #111;
             createTorch(28, 2.5, -13.6, 0);       
             createTorch(0, 2, 21.4, Math.PI);
         }
+
 
 
         function animate() {
