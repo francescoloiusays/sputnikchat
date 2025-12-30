@@ -460,8 +460,30 @@ border: 2px solid #111;
 
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x111111);
-            scene.fog = new THREE.Fog(0x111111, 0, 60);
+
+            // --- NUOVO CIELO CREPUSCOLARE (Stile Mario Kart DS) ---
+            const canvas = document.createElement('canvas');
+            canvas.width = 1;
+            canvas.height = 32;
+            const context = canvas.getContext('2d');
+            const gradient = context.createLinearGradient(0, 0, 0, 32);
+            
+            // Gradiente: Blu scuro -> Viola -> Arancio
+            gradient.addColorStop(0.0, '#0b001a'); // Zenith
+            gradient.addColorStop(0.4, '#2d0a45'); 
+            gradient.addColorStop(0.7, '#751e5e'); 
+            gradient.addColorStop(1.0, '#ffaa00'); // Orizzonte
+
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 1, 32);
+
+            const skyTexture = new THREE.CanvasTexture(canvas);
+            skyTexture.colorSpace = THREE.SRGBColorSpace;
+            
+            scene.background = skyTexture;
+            // Nebbia viola per fondersi con il cielo
+            scene.fog = new THREE.Fog(0x2d0a45, 10, 60);
+            // -----------------------------------------------------
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             scene.add(camera);
@@ -564,6 +586,7 @@ border: 2px solid #111;
                 renderer.setSize(window.innerWidth, window.innerHeight);
             });
         }
+
 
         function setupMusic() {
             bgMusic = new Audio(MUSIC_FILE);
