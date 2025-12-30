@@ -947,6 +947,230 @@ border: 2px solid #111;
             if (isThirdPerson) camera.lookAt(headPos);
             else { const target = idealCamPos.clone().sub(camOffset.clone().normalize().multiplyScalar(10)); camera.lookAt(target); }
         }
+        // --- CONFIGURAZIONE MINIGIOCO ---
+const MUD_SPEED = 25.0;      // Velocità della palla
+const SHOT_COOLDOWN = 500;   // Millisecondi tra un colpo e l'altro
+const FREEZE_HITS = 5;       // Colpi subiti per congelare
+const FREEZE_TIME = 5000;    // Durata congelamento (ms)
+const BULLET_LIFE = 2.0;     // Secondi di vita della palla
+
+// --- STATO DEL GIOCO ---
+let bullets = [];            // Array proiettili attivi
+let myScore = 0;             // Mio punteggio
+let myHitsTaken = 0;         // Colpi che ho subito
+let isFrozen = false;        // Sono congelato?
+let lastShotTime = 0;        // Timestamp ultimo sparo
+let scores = {};             // Oggetto { id_giocatore: punteggio }
+
+/**
+ * Funzione principale per sparare.
+ * Da chiamare quando l'utente preme il tasto di fuoco (Click o F).
+ */
+export function shootBall(socket, playerPos, cameraDir, socketId) {
+    if (isFrozen || !socket) return;
+
+    const now = Date.now();
+    if (now - lastShotTime < SHOT_COOLDOWN) return;
+    lastShotTime = now;
+
+    // Calcolo punto di partenza (occhi del giocatore)
+    const startPos = playerPos.clone();
+    startPos.y += 1.5; 
+
+    // 1. Crea palla visiva locale immediata
+    createBulletVisual(startPos, cameraDir, socketId);
+
+    // 2. Invia evento "Sparo" agli altri via chat nascosta
+    // Formato: __SHOOT__:x,y,z,dirX,dirY,dirZ
+    socket.emit('chatMessage', `__SHOOT__:${startPos.x},${startPos.y},${startPos.z},${cameraDir.x},${cameraDir.y},${cameraDir.z}`);
+}
+
+/**
+ * Crea fisicamente la mesh della palla e la aggiunge alla scena.
+ */
+export function createBulletVisual(pos, dir, shooterId, scene) {
+    // Se la scena non è passata (uso interno modulo), usa quella globale se disponibile
+    if(!scene && window.scene) scene = window.scene; 
+
+    const geo = new THREE.SphereGeometry(0.2, 8, 8);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Marrone Fango
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    
+    if(scene) scene.add(mesh);
+    
+    bullets.push({
+        mesh: mesh,
+        velocity: dir.clone().multiplyScalar(MUD_SPEED),
+        shooterId: shooterId,
+        life: BULLET_LIFE
+    });
+}
+
+/**
+ * Loop di aggiornamento fisico delle palle.
+ * Da chiamare dentro la funzione animate().
+ */
+export function updateBullets(dt, scene, playerGroup, socketId, socket) {
+    // Itera al contrario per rimuovere elementi sicuri
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.life -= dt;
+        
+        // Movimento
+        b.mesh.position.add(b.velocity.clone().multiplyScalar(dt));
+
+        // Rilevamento Collisione con IL MIO GIOCATORE
+        // (Controlliamo solo se la palla NON è mia e io NON sono congelato)
+        if (b.shooterId !== socketId && !isFrozen) {
+            const myHeadPos = playerGroup.position.clone().add(new THREE.Vector3(0, 1, 0));
+            
+            // Hitbox semplice sferica (raggio 0.8)
+            if (b.mesh.position.distanceTo(myHeadPos) < 0.8) {
+                // COLITO!
+                handleHit(b.shooterId, socket, playerGroup);
+                
+                // Rimuovi palla
+                scene.remove(b.mesh);
+                bullets.splice(i, 1);
+                continue;
+            }
+        }
+
+        // Rimozione per tempo scaduto
+        if (b.life <= 0) {
+            scene.remove(b.mesh);
+            bullets.splice(i, 1);
+        }
+    }
+}
+
+/**
+ * Gestisce la logica quando vieni colpito.
+ */
+function handleHit(shooterId, socket, playerGroup) {
+    if (isFrozen) return;
+
+    myHitsTaken++;
+    
+    // Invia evento "Colpito" alla rete per aggiornare i punteggi di chi ha sparato
+    // Formato: __HIT__:ID_CHI_SPARA:ID_VITTIMA
+    socket.emit('chatMessage', `__HIT__:${shooterId}:${socket.id}`);
+    
+    if (myHitsTaken >= FREEZE_HITS) {
+        freezePlayer(socket, playerGroup);
+    }
+}
+
+/**
+ * Logica del congelamento giocatore.
+ */
+function freezePlayer(socket, playerGroup) {
+    isFrozen = true;
+    
+    // UI Warning
+    const warningEl = document.getElementById('freeze-warning');
+    if(warningEl) warningEl.style.display = 'block';
+
+    // Effetto Visivo Locale (Diventa Azzurro)
+    // Nota: richiede accesso alla mesh dell'avatar, qui assumiamo sia nel playerGroup
+    const avatarMesh = playerGroup.children.find(c => c.type === 'Mesh');
+    if(avatarMesh) avatarMesh.material.color.setHex(0x00ffff);
+
+    // Dillo agli altri (Hack visivo usando il sistema skin)
+    socket.emit('skinChange', "FROZEN"); 
+    
+    // Timer Scongelamento
+    setTimeout(() => {
+        isFrozen = false;
+        myHitsTaken = 0;
+        
+        if(warningEl) warningEl.style.display = 'none';
+        if(avatarMesh) avatarMesh.material.color.setHex(0xffffff); // Reset colore
+        
+        // Ripristina skin normale (richiede variabile globale o passata, qui semplificato)
+        // socket.emit('skinChange', myActualSkin); 
+    }, FREEZE_TIME);
+}
+
+/**
+ * Gestisce i messaggi di rete in arrivo per il gioco.
+ * Da chiamare dentro socket.on('chatMessage').
+ */
+export function handleGameNetworkMessage(text, socketId, updateScoreUI, remotePlayers, playerGroup) {
+    
+    // 1. EVENTO SPARO REMOTO
+    if (text.startsWith("__SHOOT__:")) {
+        const parts = text.split(':')[1].split(',').map(parseFloat);
+        const start = new THREE.Vector3(parts[0], parts[1], parts[2]);
+        const dir = new THREE.Vector3(parts[3], parts[4], parts[5]);
+        
+        createBulletVisual(start, dir, "remote");
+        return true; // Messaggio gestito
+    }
+
+    // 2. EVENTO PUNTEGGIO (HIT)
+    if (text.startsWith("__HIT__:")) {
+        const parts = text.split(':');
+        const shooterId = parts[1];
+        
+        // Aggiorna punteggio in memoria
+        if (!scores[shooterId]) scores[shooterId] = 0;
+        scores[shooterId]++;
+        
+        // Se sono io quello che ha sparato, aggiorna la mia UI
+        if (shooterId === socketId) {
+            myScore++;
+            updateScoreUI(myScore);
+        }
+        
+        updateCrowns(socketId, remotePlayers, playerGroup);
+        return true; // Messaggio gestito
+    }
+
+    return false; // Non era un messaggio di gioco
+}
+
+/**
+ * Calcola chi vince e mostra la corona.
+ */
+function updateCrowns(socketId, remotePlayers, playerGroup) {
+    let maxScore = -1;
+    let winnerId = null;
+    
+    // Aggiorna il mio score nell'elenco globale
+    scores[socketId] = myScore;
+    
+    // Trova il vincitore
+    for (let id in scores) {
+        if (scores[id] > maxScore) {
+            maxScore = scores[id];
+            winnerId = id;
+        }
+    }
+
+    // Funzione helper per mostrare/nascondere corona
+    const setCrown = (obj, visible) => {
+        if (obj && obj.userData.crown) {
+            obj.userData.crown.visible = visible;
+        }
+    };
+
+    // Aggiorna Me Stesso
+    // Se pareggio (maxScore > 0 serve a non dare corona se tutti sono a 0)
+    setCrown(playerGroup, (winnerId === socketId && maxScore > 0));
+
+    // Aggiorna Altri
+    for (let id in remotePlayers) {
+        setCrown(remotePlayers[id], (id === winnerId && maxScore > 0));
+    }
+}
+
+// Getter per lo stato congelato (utile per bloccare il movimento nel main)
+export function isPlayerFrozen() {
+    return isFrozen;
+}
+
     </script>
 </body>
 </html>
