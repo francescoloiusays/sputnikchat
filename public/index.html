@@ -776,28 +776,118 @@ border: 2px solid #111;
         function createWall(x,y,z,w,h,d) { const g = new THREE.BoxGeometry(w,h,d); const t = wallTexture ? wallTexture.clone() : null; if(t) { t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(Math.max(w,d)/4, h/4); t.needsUpdate=true; } const m = new THREE.MeshStandardMaterial({ map: t, color: t ? 0xffffff : 0x888888 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(x,y,z); scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh); }
         
         function buildLevel() {
-            createWall(0, 5, 5, 10, 10, 1); createWall(-5, 5, 0, 1, 10, 10); createWall(5, 5, 0, 1, 10, 10);
-            createWall(-3.5, 5, -5, 4, 10, 1); createWall(3.5, 5, -5, 4, 10, 1);
-            createWall(-2, 5, -15, 1, 10, 20); createWall(2, 5, -15, 1, 10, 20);
-            createWall(-5, 5, -25, 6, 10, 1); createWall(5, 5, -25, 6, 10, 1);
-            createWall(-8, 5, -32.5, 1, 10, 16); createWall(8, 5, -32.5, 1, 10, 16);
-            createWall(0, 5, -40, 17, 10, 1);
-            const floorGeo = new THREE.PlaneGeometry(100, 100);
+            // --- 1. PAVIMENTO ---
+            // Aumentiamo la dimensione del pavimento per coprire la nuova area estesa
+            const floorGeo = new THREE.PlaneGeometry(150, 150);
+            if(floorTexture) floorTexture.repeat.set(15, 15); // Aumenta ripetizione texture
             const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture });
-            const floor = new THREE.Mesh(floorGeo, floorMat); floor.rotation.x = -Math.PI/2; scene.add(floor);
+            const floor = new THREE.Mesh(floorGeo, floorMat); 
+            floor.rotation.x = -Math.PI/2; 
+            scene.add(floor);
+
+            // Funzione helper per creare muri (x, y, z, width, height, depth)
+            // Y è sempre 5 (metà altezza 10), altezza fissa a 10
             
+            // --- STANZA 1: L'ATRIO (SPAWN) [Centro 0,0] ---
+            // Dimensioni interne approx: 10x10
+            createWall(-6, 5, 0, 1, 10, 12); // Ovest
+            createWall(6, 5, 0, 1, 10, 12);  // Est
+            // Sud (con buco per Cripta)
+            createWall(-3.5, 5, 6, 6, 10, 1); 
+            createWall(3.5, 5, 6, 6, 10, 1);
+            // Nord (con buco per Sala Grande)
+            createWall(-3.5, 5, -6, 6, 10, 1);
+            createWall(3.5, 5, -6, 6, 10, 1);
+
+            // --- CORRIDOIO NORD (Verso Sala Grande) ---
+            createWall(-3, 5, -11, 1, 10, 10); // Lato Sx
+            createWall(3, 5, -11, 1, 10, 10);  // Lato Dx
+
+            // --- STANZA 2: LA SALA GRANDE [Centro 0, -25] ---
+            // Una stanza vasta 20x20
+            // Muro Sud (ingresso dal corridoio)
+            createWall(-7, 5, -16, 9, 10, 1);
+            createWall(7, 5, -16, 9, 10, 1);
+            // Muro Nord (Chiuso)
+            createWall(0, 5, -36, 22, 10, 1);
+            // Muro Ovest (con passaggio per Armeria)
+            createWall(-11, 5, -21, 1, 10, 10); // Parte alta
+            createWall(-11, 5, -33, 1, 10, 6);  // Parte bassa
+            // Muro Est (con passaggio per Santuario)
+            createWall(11, 5, -21, 1, 10, 10);
+            createWall(11, 5, -33, 1, 10, 6);
+
+            // --- STANZA 3: L'ARMERIA (OVEST) [Centro -20, -25] ---
+            // Stretta e lunga (corridoio tattico)
+            // Muro Nord Armeria
+            createWall(-25, 5, -36, 30, 10, 1);
+            // Muro Sud Armeria
+            createWall(-25, 5, -16, 30, 10, 1);
+            // Muro Ovest Chiusura
+            createWall(-40, 5, -26, 1, 10, 21);
+
+            // --- STANZA 4: IL SANTUARIO (EST) [Centro 25, -25] ---
+            // Accesso tramite corridoio lungo
+            // Corridoio Est
+            createWall(16, 5, -24, 10, 10, 1); // Sud corridoio
+            createWall(16, 5, -28, 10, 10, 1); // Nord corridoio
+            
+            // La Stanza (Forma irregolare a "U")
+            createWall(21, 5, -26, 1, 10, 25); // Muro Ovest interno
+            createWall(35, 5, -26, 1, 10, 25); // Muro Est esterno
+            createWall(28, 5, -39, 15, 10, 1); // Fondo Nord
+            createWall(28, 5, -13, 15, 10, 1); // Fondo Sud
+            
+            // Pilastro centrale nel Santuario per copertura
+            createWall(28, 5, -26, 4, 10, 4);
+
+            // --- STANZA 5: LA CRIPTA SEGRETA (SUD) [Centro 0, 15] ---
+            // Corridoio Stretto
+            createWall(-1.5, 5, 9, 1, 10, 6);
+            createWall(1.5, 5, 9, 1, 10, 6);
+            
+            // La Stanza
+            createWall(-5, 5, 12, 8, 10, 1); // Nord Sx
+            createWall(5, 5, 12, 8, 10, 1);  // Nord Dx
+            createWall(-8, 5, 17, 1, 10, 10); // Ovest
+            createWall(8, 5, 17, 1, 10, 10);  // Est
+            createWall(0, 5, 22, 17, 10, 1);  // Sud (Fondo)
+
+
+            // --- ILLUMINAZIONE (TORCHE) ---
             const createTorch = (x,y,z,rot) => {
                 const geo = new THREE.PlaneGeometry(2.0, 2.0); 
-                const mat = new THREE.MeshBasicMaterial({ map: torchAnimatedTexture, transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+                const mat = new THREE.MeshBasicMaterial({ 
+                    map: torchAnimatedTexture, 
+                    transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false 
+                });
                 const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
                 const l = new THREE.PointLight(0xff6600, 2.0, 15); l.position.set(x + Math.sin(rot)*0.5, y, z + Math.cos(rot)*0.5); scene.add(l);
                 torchLights.push({ light: l, speed: 2+Math.random()*3 });
             };
-            createTorch(0, 2.5, 4.4, 0); createTorch(-4.4, 2.5, 0, Math.PI/2); createTorch(4.4, 2.5, 0, -Math.PI/2);
-            createTorch(-1.4, 2.5, -10, Math.PI/2); createTorch(1.4, 2.5, -10, -Math.PI/2);
-            createTorch(-1.4, 2.5, -20, Math.PI/2); createTorch(1.4, 2.5, -20, -Math.PI/2);
-            createTorch(-7.4, 2.5, -30, Math.PI/2); createTorch(7.4, 2.5, -30, -Math.PI/2); createTorch(0, 2.5, -39.4, Math.PI);
+
+            // Torce Atrio
+            createTorch(-5.4, 2.5, 0, Math.PI/2); 
+            createTorch(5.4, 2.5, 0, -Math.PI/2);
+
+            // Torce Sala Grande (Angoli)
+            createTorch(-10.4, 3, -17, Math.PI/2);
+            createTorch(10.4, 3, -17, -Math.PI/2);
+            createTorch(0, 3, -35.4, Math.PI);
+
+            // Torce Armeria (Ritmo lungo il muro)
+            createTorch(-20, 2.5, -35.4, Math.PI);
+            createTorch(-30, 2.5, -35.4, Math.PI);
+            createTorch(-39.4, 2.5, -26, Math.PI/2);
+
+            // Torce Santuario (Atmosferiche)
+            createTorch(28, 2.5, -38.4, Math.PI); // Fondo Nord
+            createTorch(28, 2.5, -13.6, 0);       // Fondo Sud
+
+            // Torcia Cripta (Una sola, centrale sul fondo)
+            createTorch(0, 2, 21.4, Math.PI);
         }
+
 
         function animate() {
             requestAnimationFrame(animate);
