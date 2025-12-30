@@ -3,324 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SputnikChat</title>
+    <title>SputnikChat - MudBall Arena</title>
     
     <!-- Librerie -->
     <script src="https://unpkg.com/gifler@0.1.0/gifler.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
-    <!-- FontAwesome per le icone -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <style>
         /* FONT */
-        @font-face {
-            font-family: 'Planewalker';
-            src: url('./Planewalker.woff') format('woff');
-            font-weight: normal;
-            font-style: normal;
-        }
-
-        /* RESET BOX MODEL */
+        @font-face { font-family: 'Planewalker'; src: url('./Planewalker.woff') format('woff'); }
         * { box-sizing: border-box; }
-
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            font-family: 'Planewalker', sans-serif; 
-            background: #111; 
-        }
-
-        button, input, select, textarea { font-family: 'Planewalker', sans-serif; }
-        canvas { display: block; }
-        .pointer-auto { pointer-events: auto; }
-
-        /* Login Overlay */
+        body { margin: 0; overflow: hidden; font-family: 'Planewalker', sans-serif; background: #111; user-select: none; }
+        button, input { font-family: 'Planewalker', sans-serif; }
+        
+        /* UI LAYOUT */
         #login-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 100; color: white;
         }
-        
         #nickname-input { 
-            padding: 15px; font-size: 24px; text-align: center;
-            background-color: #222; color: #ffff00;
-            border: 2px solid #555; border-radius: 8px;
-            box-shadow: inset 4px 4px 8px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.5);
-            outline: none; transition: all 0.2s; width: 300px;
+            padding: 15px; font-size: 24px; text-align: center; background-color: #222; color: #ffff00;
+            border: 2px solid #555; border-radius: 8px; outline: none; width: 300px;
         }
-        #nickname-input:focus { border-color: #ffff00; box-shadow: 0 0 20px rgba(255, 170, 0, 0.4); }
+        #play-btn { margin-top: 20px; padding: 10px 30px; font-size: 50px; cursor: pointer; background: transparent; color: #ffff00; border: none; }
 
-        #play-btn { 
-            margin-top: 20px; padding: 10px 30px; font-size: 50px; cursor: pointer; 
-            letter-spacing: 1px; background: transparent; color: #ffff00; border: none;
-            text-shadow: 0 4px 0 #000; transition: transform 0.1s;
-        }
-        #play-btn:active { transform: translateY(4px); text-shadow: 0 0 0 #000; }
-
-        /* --- NUOVA UI SCHEDA GIOCATORE (SCALATA) --- */
-        #ui-container-wrapper {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            width: 300px; /* Spazio riservato sullo schermo */
-            height: 400px;
-            z-index: 20;
-            pointer-events: none; /* Lascia passare i click fuori */
-        }
-
-        /* Contenitore che applica la scala per adattare le dimensioni giganti del CSS originale */
-        #ui-scale-wrapper {
-            transform: scale(0.13); /* Riduce tutto al 13% circa */
-            transform-origin: top left;
-            position: relative;
-            width: 2106px; /* Larghezza originale del design */
-            height: 2956px;
-            pointer-events: auto; /* Riattiva i click sugli elementi interni */
-        }
-
-        /* CSS ORIGINALE FORNITO (con correzioni sintassi) */
-        .Texture {
-            background-image: url("Texture.png"); 
-            border: 10px solid #333;   /* Bordo fittizio per vedere i confini senza img */
-            border-radius: 40px;
-            position: absolute;
-            left: 0px; top: 0px;
-            width: 2106px; height: 2956px;
-            z-index: 1;
-                /* Bordo esterno scuro (il taglio della carta) */
-    border: 10px solid #333; 
-
-    /* Aggiungi questo per il BORDO BIANCO INTERNO */
-    box-shadow: 
-        /* Bordo bianco interno netto (spessore 20px) */
-        inset 0 0 0 60px rgba(255, 255, 255, 0.9),
+        /* HUD SCHEDA (SCALATA) */
+        #ui-container-wrapper { position: absolute; top: 10px; left: 10px; width: 300px; height: 400px; z-index: 20; pointer-events: none; }
+        #ui-scale-wrapper { transform: scale(0.13); transform-origin: top left; width: 2106px; height: 2956px; pointer-events: auto; }
         
-        /* (Opzionale) Leggera ombra interna per dare profondità sotto il bordo bianco */
-        inset 0 0 20px 20px rgba(0,0,0,0.2);
+        .Texture {
+            background-image: url("Texture.png"); background-color: #1a1a1a;
+            border: 10px solid #111; border-radius: 40px; position: absolute; width: 100%; height: 100%;
+            box-shadow: inset 0 0 0 20px rgba(255, 255, 255, 0.9), inset 0 0 20px 20px rgba(0,0,0,0.2);
         }
-
+        /* Effetto Incassato Comune */
+        .incassato {
+            box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5);
+            border: 2px solid #111;
+        }
+        
         .nome_giocatore {
-            background-color: rgba(34, 32, 30, 0.6);
-            position: absolute;
-            left: 269px; top: 144px;
-            width: 1560px; height: 212px;
-            z-index: 2;
-            /* Stile Testo */
-            color: #ffff00;
-            font-size: 140px;
-            display: flex; align-items: center; justify-content: center;
-
-/* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-
+            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 269px; top: 144px; width: 1560px; height: 212px;
+            color: #ffff00; font-size: 140px; display: flex; align-items: center; justify-content: center;
         }
-
         .skin {
-            background-color: rgba(34, 32, 30, 0.6);
-            position: absolute;
-            left: 269px; top: 411px;
-            width: 1560px; height: 211px;
-            z-index: 3;
-            /* Stile Testo */
-            color: #ccc;
-            font-size: 100px;
-            display: flex; align-items: center; justify-content: center;
-            /* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-
+            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 269px; top: 411px; width: 1560px; height: 211px;
+            color: #ccc; font-size: 100px; display: flex; align-items: center; justify-content: center;
         }
-
         .immagine {
-            background-color: rgb(34, 32, 30);
-            position: absolute;
-            left: 270px; top: 694px;
-            width: 1559px; height: 1560px;
-            z-index: 6;
-            /* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-            overflow: hidden;
-            display: flex; align-items: center; justify-content: center;
+            background-color: rgb(34, 32, 30); position: absolute; left: 270px; top: 694px; width: 1559px; height: 1560px;
+            overflow: hidden; display: flex; align-items: center; justify-content: center;
         }
-
-        .immagine img {
-            width: 100%; height: 100%; object-fit: cover;
-        }
-
-        /* Pulsanti Frecce (Sovrapposti alla ProPic) */
+        .immagine img { width: 100%; height: 100%; object-fit: cover; }
+        
         .skin-arrow {
-            position: absolute; top: 0; bottom: 0; width: 200px;
-            background: rgba(0,0,0,0); border: none; color: white;
+            position: absolute; top: 0; bottom: 0; width: 200px; background: transparent; border: none; color: white;
             font-size: 150px; cursor: pointer; z-index: 10;
-            display: flex; align-items: center; justify-content: center;
-            font-family: 'Planewalker', sans-serif;
-            transition: background 0.2s;
         }
         .skin-arrow:hover { background: rgba(255, 187, 0, 0.4); color: #ffff00; }
-        .arrow-left { left: 0; }
-        .arrow-right { right: 0; }
+        .arrow-left { left: 0; } .arrow-right { right: 0; }
 
-        .microfono {
-            background-color: rgba(34, 32, 30, 0.6);
-            position: absolute;
-            left: 269px; top: 2326px;
-            width: 752px; height: 492px;
-            z-index: 4;
-            cursor: pointer;
-            /* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-
-            display: flex; align-items: center; justify-content: center;
-            transition: background 0.2s;
+        .microfono, .musica {
+            background-color: rgba(34, 32, 30, 0.6); position: absolute; top: 2326px; width: 752px; height: 492px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
         }
-        .microfono:hover { background-color: rgba(255, 255, 255, 0.1); }
-        .microfono i { font-size: 200px; color: #cc0000; } /* Icona OFF */
-        .microfono.active { background-color: rgba(0, 204, 0, 0.3); border-color: #00ff00; }
-        .microfono.active i { color: #00ff00; }
+        .microfono { left: 269px; } .musica { left: 1078px; }
+        .microfono i, .musica i { font-size: 200px; color: #888; opacity: 0.5; }
+        .active i { color: #00ff00; opacity: 1; }
+        .music-on i { color: #0088ff; opacity: 1; }
 
-        .musica {
-            background-color: rgba(34, 32, 30, 0.6);
-            position: absolute;
-            left: 1078px; top: 2326px;
-            width: 751px; height: 492px;
-            z-index: 5;
-            cursor: pointer;
-            /* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-
-            display: flex; align-items: center; justify-content: center;
-            transition: background 0.2s;
+        /* SCOREBOARD MINIGAME */
+        #game-ui {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 20px; z-index: 50; pointer-events: none;
         }
-        .musica:hover { background-color: rgba(255, 255, 255, 0.1); }
-        .musica i { font-size: 200px; color: #888; }
-        .musica.music-on i { color: #0088ff; }
-        .musica.music-on { background-color: rgba(0, 100, 255, 0.2); border-color: #0088ff; }
+        .hud-box {
+            background: rgba(0, 0, 0, 0.7); border: 2px solid #555; padding: 10px 20px; border-radius: 10px;
+            color: #ffff00; font-size: 24px; text-shadow: 2px 2px 0 #000; text-align: center;
+        }
+        #freeze-warning {
+            color: #00ffff; display: none;
+        }
 
-        /* --- ALTRE UI --- */
         #instructions {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: white; background: rgba(0, 0, 0, 0.7); padding: 20px;
-            text-align: center; border-radius: 10px; z-index: 10; user-select: none; display: none;
-            font-size: 20px;
+            color: white; background: rgba(0, 0, 0, 0.7); padding: 20px; border-radius: 10px; z-index: 10; display: none; text-align: center;
         }
-
         #chat-container {
             position: absolute; bottom: 20px; right: 20px; width: 320px; height: 250px;
-            background: rgba(0, 0, 0, 0.5); border-radius: 8px; z-index: 50;
-            display: flex; flex-direction: column; padding: 10px; pointer-events: auto;
+            background: rgba(0, 0, 0, 0.5); border-radius: 8px; z-index: 50; display: flex; flex-direction: column; padding: 10px; pointer-events: auto;
         }
-        #chat-messages { flex-grow: 1; overflow-y: auto; color: white; font-size: 18px; margin-bottom: 5px; text-shadow: 1px 1px 1px black; }
+        #chat-messages { flex-grow: 1; overflow-y: auto; color: white; font-size: 18px; margin-bottom: 5px; }
         .chat-name { color: #ffff00; margin-right: 5px; }
-        #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 100%; font-size: 16px; }
-
-        #sh-logo { position: fixed; left: 10px; bottom: 10px; z-index: 80; width: 140px; height: auto; pointer-events: none; }
+        #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; }
     </style>
 </head>
 <body>
 
-    <div id="login-overlay" class="pointer-auto">
-        <h1 style="font-size: 50px; margin-bottom: 0px;">SputnikChat</h1>
-        <p style="font-size: 20px; color: #ccc; margin-bottom: 15px;">Parla</p>
-        <input id="nickname-input" type="text" placeholder="Scegli Nickname" maxlength="16" autofocus>
-        <button id="play-btn">Entra</button>
+    <div id="login-overlay" style="pointer-events: auto;">
+        <h1 style="font-size: 50px;">MudBall Arena</h1>
+        <input id="nickname-input" type="text" placeholder="Nickname" maxlength="12" autofocus>
+        <button id="play-btn">ENTRA</button>
     </div>
 
-    <!-- NUOVA SCHEDA GIOCATORE -->
+    <!-- HUD MINIGAME -->
+    <div id="game-ui">
+        <div class="hud-box">Punti: <span id="score-display">0</span></div>
+        <div class="hud-box" id="freeze-warning">CONGELATO!</div>
+    </div>
+
     <div id="ui-container-wrapper">
         <div id="ui-scale-wrapper">
             <div class="Texture">
-                <!-- Nome -->
-                <div class="nome_giocatore" id="hud-name">GIOCATORE</div>
-                
-                <!-- Label Skin -->
-                <div class="skin" id="skin-label">Skin: ...</div>
-                
-                <!-- Immagine + Frecce -->
-                <div class="immagine">
+                <div class="nome_giocatore incassato" id="hud-name">PLAYER</div>
+                <div class="skin incassato" id="skin-label">Skin: ...</div>
+                <div class="immagine incassato">
                     <button class="skin-arrow arrow-left" id="prev-skin-btn">&lt;</button>
                     <img id="hud-propic" src="" alt="Profile">
                     <button class="skin-arrow arrow-right" id="next-skin-btn">&gt;</button>
                 </div>
-
-                <!-- Microfono -->
-                <div class="microfono" id="mic-btn">
-                    <i class="fa-solid fa-microphone-slash" id="mic-icon"></i>
-                </div>
-
-                <!-- Musica -->
-                <div class="musica" id="music-btn">
-                    <i class="fa-solid fa-music" id="music-icon"></i>
-                </div>
+                <div class="microfono incassato" id="mic-btn"><i class="fa-solid fa-microphone-slash" id="mic-icon"></i></div>
+                <div class="musica incassato" id="music-btn"><i class="fa-solid fa-music" id="music-icon"></i></div>
             </div>
         </div>
     </div>
 
     <div id="instructions">
-        <h1 style="font-size: 40px;">Clicca per Giocare</h1>
-        <p>Muoviti: <b>WASD / Frecce</b> + <b>SPAZIO</b><br>Chat: <b>INVIO</b><br>Voce: <b>M</b> | Musica: <b>B</b><br>Guarda: <b>MOUSE</b></p>
+        <h1>Comandi</h1>
+        <p><b>WASD</b>: Muovi | <b>MOUSE</b>: Guarda<br><b>CLICK SX</b>: Spara Fango<br><b>INVIO</b>: Chat | <b>M</b>: Mic</p>
     </div>
 
     <div id="chat-container">
         <div id="chat-messages"></div>
-        <input id="chat-input" type="text" placeholder="Premi invio per scrivere..." autocomplete="off">
+        <input id="chat-input" type="text" placeholder="Scrivi..." autocomplete="off">
     </div>
-
-    <img id="sh-logo" src="./SH_Logo.gif" alt="Sputnik Homies">
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -329,32 +148,40 @@ border: 2px solid #111;
     <script type="module">
         import * as THREE from 'three';
 
-        // --- CONFIG ---
+        // --- CONFIGURAZIONE ---
         const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
         const MUSIC_FILE = "./soundtrack.mp3"; 
+        const MUD_SPEED = 25.0;     // Velocità palla
+        const SHOT_COOLDOWN = 500;  // ms
+        const FREEZE_HITS = 5;      // Colpi per congelare
+        const FREEZE_TIME = 5000;   // Durata congelamento
 
+        // Variabili Three.js
         let scene, camera, renderer, loader, socket;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let canJump = false, isLocked = false, isThirdPerson = false;
-        let playerGroup, avatarMesh, theta = 0, phi = 0;
+        let playerGroup, avatarMesh;
+        let moveForward=false, moveBackward=false, moveLeft=false, moveRight=false;
+        let canJump=false, isLocked=false, isThirdPerson=false;
         let velocity = new THREE.Vector3();
         const GRAVITY = 30.0;
-        
-        let mySkin = "plebeo.png";
-        let myName = "Anonimo";
-        let gameInitialized = false;
+        let theta = 0, phi = 0;
 
-        const remotePlayers = {}; 
-        const wallMeshes = [], colliders = [], torchLights = [];
-        const cameraRaycaster = new THREE.Raycaster();
+        // Variabili Gioco
+        let mySkin="plebeo.png", myName="Anonimo", gameInitialized=false;
+        const remotePlayers = {}; // id -> mesh
+        const wallMeshes=[], colliders=[], torchLights=[];
         let wallTexture, floorTexture, torchAnimatedTexture;
+        let bullets = []; // { mesh, velocity, shooterId, life }
+        
+        // Stato Minigame
+        let myScore = 0;
+        let myHitsTaken = 0;
+        let isFrozen = false;
+        let lastShotTime = 0;
+        let scores = {}; // id -> score
 
-        let localStream = null;
-        const peers = {}; 
-        let isMicActive = false;
-        let bgMusic = null;
-        let isMusicOn = false;
-
+        // Audio & Avatar
+        let localStream=null, bgMusic=null, isMusicOn=false, isMicActive=false;
+        const peers={};
         let currentSkinIndex = 0;
         const avatarOptions = [
             { label: "Ratto", file: "Personaggi/Rat.png", propic: "Personaggi/Rat_propic.png" },
@@ -362,590 +189,546 @@ border: 2px solid #111;
             { label: "Francesco", file: "Personaggi/Francesco.png", propic: "Personaggi/Francesco_propic.png" }
         ];
 
-        // --- UTILS PER TARGHETTE NOMI ---
-        function drawRoundRect(ctx, x, y, w, h, r) {
-            const rr = Math.min(r, w / 2, h / 2);
-            ctx.beginPath();
-            ctx.moveTo(x + rr, y);
-            ctx.arcTo(x + w, y, x + w, y + h, rr);
-            ctx.arcTo(x + w, y + h, x, y + h, rr);
-            ctx.arcTo(x, y + h, x, y, rr);
-            ctx.arcTo(x, y, x + w, y, rr);
-            ctx.closePath();
-        }
-
+        // --- UTILS GRAFICHE ---
         function createNameTagSprite(name) {
-            const text = (name && String(name).trim().length) ? String(name).trim() : "???";
-            const W = 256, H = 64;
-            const canvas = document.createElement('canvas');
-            canvas.width = W; canvas.height = H;
+            const canvas = document.createElement('canvas'); canvas.width=256; canvas.height=64;
             const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, W, H);
-            
-            // Sfondo
-            const pad = 6;
-            ctx.fillStyle = "rgba(0,0,0,0)";
-            drawRoundRect(ctx, pad, pad, W - pad*2, H - pad*2, 14);
-            ctx.fill();
-            // Testo
-            ctx.font = "28px Planewalker, sans-serif";
-            ctx.fillStyle = "#ffff00";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.shadowColor = "rgba(0,0,0,0.9)";
-            ctx.shadowBlur = 6;
-            ctx.fillText(text.slice(0, 16), W / 2, H / 2);
-
+            ctx.fillStyle = "rgba(0,0,0,0.5)"; 
+            ctx.beginPath(); ctx.roundRect(4,4,248,56,15); ctx.fill();
+            ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth=3; ctx.stroke();
+            ctx.font="28px Planewalker, sans-serif"; ctx.fillStyle="#ffff00"; ctx.textAlign="center"; ctx.textBaseline="middle";
+            ctx.fillText(name.slice(0,16), 128, 32);
             const tex = new THREE.CanvasTexture(canvas);
-            tex.colorSpace = THREE.SRGBColorSpace;
-            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-            const spr = new THREE.Sprite(mat);
-            spr.renderOrder = 999;
-            spr.scale.set(0.9, 0.2, 1);
-            spr.userData.__name = text;
+            const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+            spr.scale.set(2.0, 0.5, 1);
             return spr;
         }
 
-        function setOrUpdateNameTag(parentObj, newName) {
-            if(!parentObj) return;
-            const text = (newName && String(newName).trim().length) ? String(newName).trim() : "???";
-            const old = parentObj.userData.nameTag;
-            if (old && old.userData.__name === text) return;
-            if (old) {
-                if (old.material && old.material.map) old.material.map.dispose();
-                if (old.material) old.material.dispose();
-                parentObj.remove(old);
-            }
-            const tag = createNameTagSprite(text);
-            tag.position.set(0, 1.6, 0); 
-            parentObj.add(tag);
-            parentObj.userData.nameTag = tag;
+        function createCrownSprite() {
+            const canvas = document.createElement('canvas'); canvas.width=64; canvas.height=64;
+            const ctx = canvas.getContext('2d');
+            ctx.font="50px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+            ctx.fillText("👑", 32, 36); // Emoji Corona
+            const tex = new THREE.CanvasTexture(canvas);
+            const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+            spr.scale.set(1, 1, 1);
+            return spr;
         }
 
-        setupLogin();
+        function setOrUpdateNameTag(parent, name) {
+            if(parent.userData.tag) parent.remove(parent.userData.tag);
+            const tag = createNameTagSprite(name);
+            tag.position.set(0, 1.9, 0);
+            parent.add(tag);
+            parent.userData.tag = tag;
+            
+            // Aggiungi anche slot corona se non c'è
+            if(!parent.userData.crown) {
+                const crown = createCrownSprite();
+                crown.position.set(0, 2.4, 0);
+                crown.visible = false;
+                parent.add(crown);
+                parent.userData.crown = crown;
+            }
+        }
 
+        // --- LOGIN & AVVIO ---
+        setupLogin();
         function setupLogin() {
             const btn = document.getElementById('play-btn');
             const input = document.getElementById('nickname-input');
-            
-            const startGame = async () => {
-                if(gameInitialized) return; 
-                gameInitialized = true;
-
-                const val = input.value.trim();
-                if(val.length > 0) myName = val;
+            const start = async () => {
+                if(gameInitialized) return; gameInitialized=true;
+                myName = input.value.trim() || "Anonimo";
                 document.getElementById('hud-name').innerText = myName;
+                scores[socket?.id || 'me'] = 0; // init score
 
                 try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+                    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     localStream.getAudioTracks()[0].enabled = false;
-                    console.log("Microfono OK");
-                } catch (err) { 
-                    console.warn("Microfono negato o non disponibile:", err); 
-                    localStream = null; 
-                }
+                } catch(e) { console.log("No Mic"); }
 
-                setupMusic();
-                document.getElementById('login-overlay').style.display = 'none';
-                document.getElementById('instructions').style.display = 'block';
-                
-                init();
-                initSocket(); 
-                animate();
+                document.getElementById('login-overlay').style.display='none';
+                document.getElementById('instructions').style.display='block';
+                init(); initSocket(); animate();
             };
-
-            btn.addEventListener('click', startGame);
-            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
+            btn.onclick = start; input.onkeydown = e => { if(e.key==='Enter') start(); };
         }
 
+        // --- INIT THREEJS ---
         function init() {
             scene = new THREE.Scene();
-
-            // --- NUOVO CIELO CREPUSCOLARE (Stile Mario Kart DS) ---
-            const canvas = document.createElement('canvas');
-            canvas.width = 1;
-            canvas.height = 32;
-            const context = canvas.getContext('2d');
-            const gradient = context.createLinearGradient(0, 0, 0, 32);
             
-            // Gradiente: Blu scuro -> Viola -> Arancio
-            gradient.addColorStop(0.0, '#0b001a'); // Zenith
-            gradient.addColorStop(0.4, '#2d0a45'); 
-            gradient.addColorStop(0.7, '#751e5e'); 
-            gradient.addColorStop(1.0, '#ffaa00'); // Orizzonte
-
-            context.fillStyle = gradient;
-            context.fillRect(0, 0, 1, 32);
-
-            const skyTexture = new THREE.CanvasTexture(canvas);
-            skyTexture.colorSpace = THREE.SRGBColorSpace;
-            
-            scene.background = skyTexture;
-            // Nebbia viola per fondersi con il cielo
+            // CIELO CREPUSCOLARE
+            const cvs = document.createElement('canvas'); cvs.width=1; cvs.height=32;
+            const ctx = cvs.getContext('2d');
+            const grd = ctx.createLinearGradient(0,0,0,32);
+            grd.addColorStop(0, '#0b001a'); grd.addColorStop(0.4, '#2d0a45'); 
+            grd.addColorStop(0.7, '#751e5e'); grd.addColorStop(1, '#ffaa00');
+            ctx.fillStyle = grd; ctx.fillRect(0,0,1,32);
+            scene.background = new THREE.CanvasTexture(cvs);
             scene.fog = new THREE.Fog(0x2d0a45, 10, 60);
-            // -----------------------------------------------------
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
             scene.add(camera);
 
             loader = new THREE.TextureLoader();
-            const loadTex = (p) => loader.load(p, (t) => t.colorSpace = THREE.SRGBColorSpace);
-            
-            wallTexture = loadTex('./muro.jpg');
-            floorTexture = loadTex('./pavimento.jpg');
-            if(floorTexture) { floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(10, 10); }
+            wallTexture = loader.load('./muro.jpg');
+            floorTexture = loader.load('./pavimento.jpg');
+            if(floorTexture) { floorTexture.wrapS=floorTexture.wrapT=THREE.RepeatWrapping; floorTexture.repeat.set(15,15); }
 
-            const gifCanvas = document.createElement('canvas');
-            gifCanvas.width = 512; gifCanvas.height = 512;
-            torchAnimatedTexture = new THREE.CanvasTexture(gifCanvas);
-            torchAnimatedTexture.colorSpace = THREE.SRGBColorSpace;
-            torchAnimatedTexture.minFilter = THREE.LinearFilter; 
-            try { window.gifler('./torcia.gif').animate(gifCanvas); } catch(e){}
+            // Torcia Gif
+            const gCvs = document.createElement('canvas'); gCvs.width=512; gCvs.height=512;
+            torchAnimatedTexture = new THREE.CanvasTexture(gCvs);
+            try { window.gifler('./torcia.gif').animate(gCvs); } catch(e){}
 
+            // Player Locale
             playerGroup = new THREE.Group();
+            avatarMesh = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.8, 1.7), 
+                new THREE.MeshStandardMaterial({ transparent:true, side:THREE.DoubleSide, alphaTest:0.5 })
+            );
+            avatarMesh.position.set(0, 0.85, 0);
+            avatarMesh.visible = false; 
+            playerGroup.add(avatarMesh);
+            setOrUpdateNameTag(playerGroup, myName);
+            playerGroup.userData.tag.visible = false; // Nascondi tag locale in 1a persona
             scene.add(playerGroup);
 
-            const avatarGeo = new THREE.PlaneGeometry(0.8, 1.7);
-            const avatarMat = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 });
-            avatarMesh = new THREE.Mesh(avatarGeo, avatarMat);
-            avatarMesh.position.set(0, 0.85, 0); 
-            avatarMesh.visible = false;
-            playerGroup.add(avatarMesh);
-
-            setOrUpdateNameTag(playerGroup, myName);
-            if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = false;
-
-            setupAvatarUI();
-            setupMicButton();
+            setupAvatarUI(); setupMicButton(); setupMusic();
             buildLevel();
 
-            const ambient = new THREE.AmbientLight(0xffffff, 0.2);
-            scene.add(ambient);
-
+            scene.add(new THREE.AmbientLight(0xffffff, 0.3));
             renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(innerWidth, innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            const instructions = document.getElementById('instructions');
-            instructions.addEventListener('click', () => { if (!isLocked) document.body.requestPointerLock(); });
-            
+            // Input
+            document.addEventListener('click', () => {
+                if(!isLocked && document.getElementById('login-overlay').style.display==='none') document.body.requestPointerLock();
+                else if(isLocked) shootBall(); // SPARO COL CLICK
+            });
             document.addEventListener('pointerlockchange', () => {
                 isLocked = (document.pointerLockElement === document.body);
-                instructions.style.display = isLocked ? 'none' : 'block';
+                document.getElementById('instructions').style.display = isLocked ? 'none' : 'block';
             });
-
-            document.addEventListener('mousemove', (e) => {
-                if(!isLocked) return;
-                theta -= e.movementX * 0.002;
-                phi += e.movementY * 0.002; 
-                phi = Math.max(-1.5, Math.min(1.5, phi));
+            document.addEventListener('mousemove', e => {
+                if(isLocked && !isFrozen) {
+                    theta -= e.movementX * 0.002;
+                    phi = Math.max(-1.5, Math.min(1.5, phi + e.movementY * 0.002));
+                }
             });
-
-            const chatInput = document.getElementById('chat-input');
-            document.addEventListener('keydown', (e) => {
-                if (document.activeElement === chatInput) {
-                    if (e.code === 'Enter') {
-                        const txt = chatInput.value.trim();
-                        if (txt.length > 0 && socket) {
-                            socket.emit('chatMessage', txt);
-                            chatInput.value = '';
-                        }
-                    }
-                    if (e.code === 'Escape') { chatInput.blur(); document.body.requestPointerLock(); }
+            
+            // Tasti
+            const chatIn = document.getElementById('chat-input');
+            document.addEventListener('keydown', e => {
+                if(document.activeElement===chatIn) {
+                    if(e.code==='Enter' && chatIn.value.trim()) { socket.emit('chatMessage', chatIn.value.trim()); chatIn.value=''; }
+                    if(e.code==='Escape') { chatIn.blur(); document.body.requestPointerLock(); }
                     return;
                 }
-                if (e.code === 'Enter') { document.exitPointerLock(); chatInput.focus(); return; }
-                if (e.code === 'KeyM') toggleMic();
-                if (e.code === 'KeyB') toggleMusic();
+                if(e.code==='Enter') { document.exitPointerLock(); chatIn.focus(); return; }
+                if(isFrozen) return; // BLOCCO INPUT SE CONGELATO
+
+                if(e.code==='KeyM') toggleMic();
+                if(e.code==='KeyB') toggleMusic();
+                if(e.code==='KeyF') shootBall(); // SPARO CON F
 
                 switch(e.code) {
-                    case 'KeyW': case 'ArrowUp': moveForward = true; break;
-                    case 'KeyS': case 'ArrowDown': moveBackward = true; break;
-                    case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
-                    case 'KeyD': case 'ArrowRight': moveRight = true; break;
-                    case 'Space': if(canJump) { velocity.y += 12; canJump = false; } break;
+                    case 'KeyW': moveForward=true; break;
+                    case 'KeyS': moveBackward=true; break;
+                    case 'KeyA': moveLeft=true; break;
+                    case 'KeyD': moveRight=true; break;
+                    case 'Space': if(canJump) { velocity.y+=12; canJump=false; } break;
                     case 'KeyV': 
-                        isThirdPerson = !isThirdPerson; 
-                        avatarMesh.visible = isThirdPerson;
-                        if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = isThirdPerson;
+                        isThirdPerson=!isThirdPerson; avatarMesh.visible=isThirdPerson; 
+                        if(playerGroup.userData.tag) playerGroup.userData.tag.visible=isThirdPerson;
                         break;
                 }
             });
-
-            document.addEventListener('keyup', (e) => {
+            document.addEventListener('keyup', e => {
                 switch(e.code) {
-                    case 'KeyW': case 'ArrowUp': moveForward = false; break;
-                    case 'KeyS': case 'ArrowDown': moveBackward = false; break;
-                    case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
-                    case 'KeyD': case 'ArrowRight': moveRight = false; break;
+                    case 'KeyW': moveForward=false; break;
+                    case 'KeyS': moveBackward=false; break;
+                    case 'KeyA': moveLeft=false; break;
+                    case 'KeyD': moveRight=false; break;
                 }
             });
-            window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+            window.onresize = () => { camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); };
+        }
+
+        // --- LOGICA MINIGAME ---
+        function shootBall() {
+            if(isFrozen || !socket) return;
+            const now = Date.now();
+            if(now - lastShotTime < SHOT_COOLDOWN) return;
+            lastShotTime = now;
+
+            // Calcola direzione sparo
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            const startPos = playerGroup.position.clone();
+            startPos.y += 1.5; // Altezza occhi
+            
+            // Crea palla locale
+            createBullet(startPos, dir, socket.id);
+
+            // Invia agli altri (uso un evento custom 'gameEvent' per sicurezza)
+            socket.emit('chatMessage', `__SHOOT__:${startPos.x},${startPos.y},${startPos.z},${dir.x},${dir.y},${dir.z}`);
+        }
+
+        function createBullet(pos, dir, shooterId) {
+            const geo = new THREE.SphereGeometry(0.2, 8, 8);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Marrone fango
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(pos);
+            scene.add(mesh);
+            
+            bullets.push({
+                mesh: mesh,
+                velocity: dir.multiplyScalar(MUD_SPEED),
+                shooterId: shooterId,
+                life: 2.0 // secondi di vita
             });
         }
 
-
-        function setupMusic() {
-            bgMusic = new Audio(MUSIC_FILE);
-            bgMusic.loop = true;
-            bgMusic.volume = 0.3;
-            document.getElementById('music-btn').addEventListener('click', toggleMusic);
-        }
-
-        async function toggleMusic() {
-            // Se l'oggetto audio non esiste ancora, crealo
-            if(!bgMusic) { 
-                bgMusic = new Audio(MUSIC_FILE); 
-                bgMusic.loop = true; 
-                bgMusic.volume = 0.3; 
-            }
+        function handleHit(shooterId) {
+            if(isFrozen) return; // Già congelato, ignora
+            myHitsTaken++;
             
-            const btn = document.getElementById('music-btn');
-            const icon = document.getElementById('music-icon');
+            // Notifica che sono stato colpito
+            socket.emit('chatMessage', `__HIT__:${shooterId}:${socket.id}`);
             
-            // Inverti lo stato
-            isMusicOn = !isMusicOn;
-
-            if(isMusicOn) {
-                try { 
-                    await bgMusic.play(); 
-                    // Stile ATTIVO
-                    btn.classList.add('music-on'); 
-                    icon.style.color = "#0088ff"; // Colore acceso (Blu)
-                    icon.style.opacity = "1";
-                    // Opzionale: aggiungi effetto glow
-                    icon.style.filter = "drop-shadow(0 0 10px #0088ff)";
-                } 
-                catch(e) { 
-                    // Se fallisce (es. blocco browser), torna allo stato spento
-                    isMusicOn = false; 
-                    console.warn("Autoplay bloccato", e); 
-                }
-            } else { 
-                // Stile SPENTO
-                bgMusic.pause(); 
-                btn.classList.remove('music-on'); 
-                icon.style.color = "#888"; // Colore spento (Grigio)
-                icon.style.opacity = "0.5"; // Semitrasparente
-                icon.style.filter = "none";
+            if(myHitsTaken >= FREEZE_HITS) {
+                freezePlayer();
             }
         }
 
-
-        function setupMicButton() { document.getElementById('mic-btn').addEventListener('click', toggleMic); }
-        function toggleMic() {
-            if(!localStream) { alert("Microfono non disponibile."); return; }
-            isMicActive = !isMicActive;
-            localStream.getAudioTracks()[0].enabled = isMicActive;
-            const btn = document.getElementById('mic-btn');
-            const icon = document.getElementById('mic-icon');
-            if(isMicActive) { 
-                btn.classList.add('active'); 
-                icon.className = "fa-solid fa-microphone"; // Icona Microfono Attivo
-            } 
-            else { 
-                btn.classList.remove('active'); 
-                icon.className = "fa-solid fa-microphone-slash"; // Icona Muto
-            }
+        function freezePlayer() {
+            isFrozen = true;
+            document.getElementById('freeze-warning').style.display = 'block';
+            avatarMesh.material.color.setHex(0x00ffff); // Colore Ghiaccio
+            socket.emit('skinChange', "FROZEN"); // Hack visivo per gli altri
+            
+            setTimeout(() => {
+                isFrozen = false;
+                myHitsTaken = 0;
+                document.getElementById('freeze-warning').style.display = 'none';
+                avatarMesh.material.color.setHex(0xffffff); // Reset
+                socket.emit('skinChange', mySkin); // Ripristina skin
+            }, FREEZE_TIME);
         }
 
-        function initSocket() {
-            console.log("Inizializzazione Socket...");
-            socket = io(SOCKET_URL);
+        function updateBullets(dt) {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.life -= dt;
+                
+                // Movimento
+                const moveStep = b.velocity.clone().multiplyScalar(dt);
+                b.mesh.position.add(moveStep);
 
-            socket.on('connect', () => {
-                console.log("Connesso. ID:", socket.id);
-                socket.emit('playerMove', { 
-                    x: playerGroup.position.x, y: playerGroup.position.y + 0.85, z: playerGroup.position.z, 
-                    theta: theta, skin: mySkin, name: myName 
-                });
-                socket.emit('skinChange', mySkin);
-            });
+                // Collisione Muri (semplice check bounds o raycast futuro)
+                // Per ora rimuoviamo solo a tempo
 
-            socket.on('currentPlayers', (players) => {
-                Object.keys(players).forEach((id) => {
-                    if (id !== socket.id) {
-                        addRemotePlayer(id, players[id]);
-                        if(!peers[id]) createPeer(id, socket.id, localStream);
+                // Collisione con ME STESSO (Se non l'ho sparata io)
+                if (b.shooterId !== socket.id && !isFrozen) {
+                    const dist = b.mesh.position.distanceTo(playerGroup.position.clone().add(new THREE.Vector3(0,1,0)));
+                    if(dist < 0.8) {
+                        handleHit(b.shooterId);
+                        scene.remove(b.mesh);
+                        bullets.splice(i, 1);
+                        continue;
                     }
-                });
-            });
-
-            socket.on('newPlayer', (data) => {
-                console.log("Nuovo player:", data.id);
-                addRemotePlayer(data.id, data.player);
-            });
-
-            socket.on('userJoined', payload => {
-                const peer = addPeer(payload.signal, payload.callerID, localStream);
-                peers[payload.callerID] = peer;
-            });
-
-            socket.on('receivingReturnedSignal', payload => {
-                const item = peers[payload.id];
-                if(item) item.signal(payload.signal);
-            });
-
-            socket.on('playerMoved', (data) => {
-                const p = remotePlayers[data.id];
-                if (p) {
-                    p.position.set(data.x, data.y, data.z);
-                    p.rotation.y = data.theta + Math.PI;
-                    if (data.skin && p.userData.currentSkin !== data.skin) updateRemoteSkin(p, data.skin);
-                    if(data.name) setOrUpdateNameTag(p, data.name);
-                } else if(data.id !== socket.id) {
-                    addRemotePlayer(data.id, data);
                 }
-            });
 
-            socket.on('playerSkinChanged', (data) => {
-                const p = remotePlayers[data.id];
-                if (p) updateRemoteSkin(p, data.skin);
-            });
-
-            socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
-
-            socket.on('playerDisconnected', (id) => {
-                if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }
-                if (peers[id]) { peers[id].destroy(); delete peers[id]; }
-                const el = document.getElementById(`audio-${id}`);
-                if(el) el.remove();
-            });
+                if (b.life <= 0) {
+                    scene.remove(b.mesh);
+                    bullets.splice(i, 1);
+                }
+            }
         }
 
-        function createPeer(u, c, s) { 
-            const p = new SimplePeer({ initiator: true, trickle: false, stream: s }); 
-            p.on("signal", sig => socket.emit("sendingSignal", { userToSignal: u, callerID: c, signal: sig })); 
-            p.on("stream", st => addAudioElement(u, st)); 
-            peers[u] = p; 
-        }
-
-        function addPeer(sig, c, s) { 
-            const p = new SimplePeer({ initiator: false, trickle: false, stream: s }); 
-            p.on("signal", sig => socket.emit("returningSignal", { signal: sig, callerID: c })); 
-            p.on("stream", st => addAudioElement(c, st)); 
-            p.signal(sig); 
-            return p; 
-        }
-
-        function addAudioElement(id, s) { 
-            const a = document.createElement('audio'); a.srcObject = s; a.autoplay = true; a.id = `audio-${id}`; document.body.appendChild(a); 
-        }
-
-        function addChatMessage(n, t) { 
-            const c = document.getElementById('chat-messages'); 
-            const d = document.createElement('div'); 
-            d.innerHTML = `<span class="chat-name">${n}:</span> ${t}`; 
-            c.appendChild(d); c.scrollTop = c.scrollHeight; 
-        }
-        
-        function addRemotePlayer(id, data) { 
-            if(remotePlayers[id]) return;
-            const g = new THREE.PlaneGeometry(0.8, 1.7); 
-            const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); 
-            const mesh = new THREE.Mesh(g, m); 
-            const safeY = (data.y !== undefined && data.y !== null) ? Math.max(0.85, data.y) : 0.85;
-            mesh.position.set(data.x || 0, safeY, data.z || 0); 
+        function updateCrowns() {
+            // Trova ID con punteggio massimo
+            let maxScore = -1;
+            let winnerId = null;
             
-            updateRemoteSkin(mesh, data.skin || "plebeo.png"); 
-            setOrUpdateNameTag(mesh, data.name || "Anonimo");
+            // Includi me stesso
+            scores[socket.id] = myScore;
+            
+            for(let id in scores) {
+                if(scores[id] > maxScore) {
+                    maxScore = scores[id];
+                    winnerId = id;
+                }
+            }
 
-            scene.add(mesh); 
-            remotePlayers[id] = mesh; 
-        }
-        
-        function updateRemoteSkin(mesh, f) { 
-            const skinFile = f || "plebeo.png";
-            if (mesh.userData.currentSkin === skinFile) return;
-            loader.load(`./${skinFile}`, t => { 
-                t.colorSpace = THREE.SRGBColorSpace; 
-                mesh.material.map = t; 
-                mesh.material.needsUpdate = true; 
-                mesh.userData.currentSkin = skinFile;
-            }, undefined, (err) => {
-                if (skinFile !== "plebeo.png") updateRemoteSkin(mesh, "plebeo.png");
-            }); 
-        }
-        
-        function setupAvatarUI() { 
-            currentSkinIndex = Math.floor(Math.random() * avatarOptions.length);
-            updateLocalSkin();
-            document.getElementById('prev-skin-btn').addEventListener('click', () => {
-                currentSkinIndex--; if(currentSkinIndex < 0) currentSkinIndex = avatarOptions.length - 1; updateLocalSkin();
-            });
-            document.getElementById('next-skin-btn').addEventListener('click', () => {
-                currentSkinIndex++; if(currentSkinIndex >= avatarOptions.length) currentSkinIndex = 0; updateLocalSkin();
-            });
+            // Se pareggio o 0 punti, nessuno vince
+            // (Semplificazione: il primo trovato vince)
+
+            // Aggiorna visibilità corona locale
+            if(playerGroup.userData.crown) playerGroup.userData.crown.visible = (winnerId === socket.id && maxScore > 0);
+
+            // Aggiorna remoti
+            for(let id in remotePlayers) {
+                const p = remotePlayers[id];
+                if(p.userData.crown) p.userData.crown.visible = (id === winnerId && maxScore > 0);
+            }
         }
 
-        function updateLocalSkin() {
-            const opt = avatarOptions[currentSkinIndex];
-            mySkin = opt.file;
-            document.getElementById('skin-label').innerText = "Skin: " + opt.label;
-            if(opt.propic) document.getElementById('hud-propic').src = `./${opt.propic}`;
-
-            loader.load(`./${mySkin}`, t => { 
-                t.colorSpace = THREE.SRGBColorSpace; 
-                avatarMesh.material.map = t; 
-                avatarMesh.material.needsUpdate = true; 
-            }); 
-            if(socket && socket.connected) socket.emit('skinChange', mySkin);
-        }
-
-        function checkCol(pos) { const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5); const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5); const box = new THREE.Box3(min, max); return colliders.some(c => box.intersectsBox(c)); }
-        function createWall(x,y,z,w,h,d) { const g = new THREE.BoxGeometry(w,h,d); const t = wallTexture ? wallTexture.clone() : null; if(t) { t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(Math.max(w,d)/4, h/4); t.needsUpdate=true; } const m = new THREE.MeshStandardMaterial({ map: t, color: t ? 0xffffff : 0x888888 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(x,y,z); scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh); }
-        
+        // --- MAPPA & LIVELLO ---
         function buildLevel() {
-            // --- 1. PAVIMENTO ---
-            const floorGeo = new THREE.PlaneGeometry(150, 150);
-            if(floorTexture) floorTexture.repeat.set(15, 15);
-            const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture });
-            const floor = new THREE.Mesh(floorGeo, floorMat); 
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(150,150), new THREE.MeshStandardMaterial({map:floorTexture}));
             floor.rotation.x = -Math.PI/2; 
+            if(floorTexture) floorTexture.repeat.set(15,15);
             scene.add(floor);
 
-            // --- STANZA 1: L'ATRIO (SPAWN) ---
-            createWall(-6, 5, 0, 1, 10, 12); // Ovest
-            createWall(6, 5, 0, 1, 10, 12);  // Est
-            // Sud (Apertura larga)
-            createWall(-4.25, 5, 6, 4.5, 10, 1); 
-            createWall(4.25, 5, 6, 4.5, 10, 1);
-            // Nord (Apertura larga)
-            createWall(-4.25, 5, -6, 4.5, 10, 1);
-            createWall(4.25, 5, -6, 4.5, 10, 1);
-
-            // --- CORRIDOIO NORD ---
-            createWall(-4, 5, -11, 1, 10, 10); 
-            createWall(4, 5, -11, 1, 10, 10);  
-
-            // --- STANZA 2: LA SALA GRANDE ---
-            createWall(-8, 5, -16, 9, 10, 1); 
-            createWall(8, 5, -16, 9, 10, 1);  
-            createWall(0, 5, -36, 22, 10, 1); // Nord
-            
-            // Ovest
-            createWall(-11, 5, -21, 1, 10, 10); 
-            createWall(-11, 5, -33, 1, 10, 6);  
-            
-            // Est
-            createWall(11, 5, -21, 1, 10, 10);
-            createWall(11, 5, -33, 1, 10, 6);
-
-            // --- STANZA 3: L'ARMERIA (OVEST) ---
-            createWall(-25, 5, -36, 30, 10, 1); 
-            createWall(-25, 5, -16, 30, 10, 1); 
-            createWall(-40, 5, -26, 1, 10, 21); 
-
-            // --- STANZA 4: IL SANTUARIO (EST) ---
-            createWall(16, 5, -25, 10, 10, 1); 
-            createWall(16, 5, -31, 10, 10, 1); 
-            
-            // Muro Ovest con Buco
-            createWall(21, 5, -19.25, 1, 10, 11.5); 
-            createWall(21, 5, -34.75, 1, 10, 7.5);
-
-            // Muri esterni Santuario
-            createWall(35, 5, -26, 1, 10, 25); 
-            createWall(28, 5, -39, 15, 10, 1); 
-            createWall(28, 5, -13, 15, 10, 1); 
-            createWall(28, 5, -26, 4, 10, 4);  
-
-            // --- STANZA 5: LA CRIPTA SEGRETA (SUD) ---
-            createWall(-2.5, 5, 9, 1, 10, 6);
-            createWall(2.5, 5, 9, 1, 10, 6);
-            createWall(-5, 5, 12, 6, 10, 1); 
-            createWall(5, 5, 12, 6, 10, 1);  
-            createWall(-8, 5, 17, 1, 10, 10); 
-            createWall(8, 5, 17, 1, 10, 10);  
-            createWall(0, 5, 22, 17, 10, 1);  
-
-            // --- LUCI ALLINEATE ---
-            const createTorch = (x,y,z,rot) => {
-                const geo = new THREE.PlaneGeometry(2.0, 2.0); 
-                const mat = new THREE.MeshBasicMaterial({ 
-                    map: torchAnimatedTexture, 
-                    transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false 
-                });
-                const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
+            const createWindow = (x,y,z,w,rot) => {
+                const grp = new THREE.Group(); grp.position.set(x,y,z); grp.rotation.y = rot;
+                const mat = new THREE.MeshStandardMaterial({map:wallTexture, color:0xaaaaaa});
+                const glass = new THREE.MeshPhysicalMaterial({color:0x111111, metalness:0.9, roughness:0.1, transparent:true, opacity:0.5, side:2});
                 
-                // FIX LUCE:
-                const l = new THREE.PointLight(0xff6600, 2.0, 15); 
-                // Offset ridotto (0.2) e alzato (y+0.3) per centrare la fiamma
-                l.position.set(x + Math.sin(rot)*0.2, y + 0.3, z + Math.cos(rot)*0.2); 
+                const bot = new THREE.Mesh(new THREE.BoxGeometry(w,3,1), mat); bot.position.y=-3.5; grp.add(bot);
+                const top = new THREE.Mesh(new THREE.BoxGeometry(w,2,1), mat); top.position.y=4.0; grp.add(top);
+                const gl = new THREE.Mesh(new THREE.BoxGeometry(w,5,0.2), glass); gl.position.y=0.5; grp.add(gl);
+                scene.add(grp);
                 
-                scene.add(l);
-                torchLights.push({ light: l, speed: 2+Math.random()*3 });
+                const col = new THREE.Mesh(new THREE.BoxGeometry(w,10,1), new THREE.MeshBasicMaterial({visible:false}));
+                col.position.set(x,y,z); col.rotation.y=rot; scene.add(col);
+                colliders.push(new THREE.Box3().setFromObject(col));
             };
 
-            // Posizionamento Torce
-            createTorch(-5.4, 2.5, 0, Math.PI/2); 
-            createTorch(5.4, 2.5, 0, -Math.PI/2);
-            createTorch(-10.4, 3, -17, Math.PI/2);
-            createTorch(10.4, 3, -17, -Math.PI/2);
-            createTorch(0, 3, -35.4, Math.PI);
-            createTorch(-20, 2.5, -35.4, Math.PI);
-            createTorch(-30, 2.5, -35.4, Math.PI);
-            createTorch(-39.4, 2.5, -26, Math.PI/2);
-            createTorch(28, 2.5, -38.4, Math.PI);
-            createTorch(28, 2.5, -13.6, 0);       
-            createTorch(0, 2, 21.4, Math.PI);
+            const createWall = (x,y,z,w,h,d) => {
+                const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({map:wallTexture}));
+                m.position.set(x,y,z); scene.add(m); wallMeshes.push(m);
+                colliders.push(new THREE.Box3().setFromObject(m));
+            };
+
+            // Atrio
+            createWall(-6,5,0,1,10,12); createWall(6,5,0,1,10,12);
+            createWall(-4.25,5,6,4.5,10,1); createWall(4.25,5,6,4.5,10,1);
+            createWall(-4.25,5,-6,4.5,10,1); createWall(4.25,5,-6,4.5,10,1);
+            // Corridoio
+            createWall(-4,5,-11,1,10,10); createWall(4,5,-11,1,10,10);
+            // Sala Grande
+            createWall(-8,5,-16,9,10,1); createWall(8,5,-16,9,10,1);
+            createWindow(0,5,-36,22,0); // Finestra Nord
+            createWall(-11,5,-21,1,10,10); createWall(-11,5,-33,1,10,6);
+            createWall(11,5,-21,1,10,10); createWall(11,5,-33,1,10,6);
+            // Armeria
+            createWall(-25,5,-36,30,10,1); createWall(-25,5,-16,30,10,1);
+            createWindow(-40,5,-26,21,Math.PI/2); // Finestra Ovest
+            // Santuario
+            createWall(16,5,-25,10,10,1); createWall(16,5,-31,10,10,1);
+            createWall(21,5,-19.25,1,10,11.5); createWall(21,5,-34.75,1,10,7.5);
+            createWindow(35,5,-26,25,Math.PI/2); // Finestra Est
+            createWall(28,5,-39,15,10,1); createWall(28,5,-13,15,10,1); createWall(28,5,-26,4,10,4);
+            // Cripta
+            createWall(-2.5,5,9,1,10,6); createWall(2.5,5,9,1,10,6);
+            createWall(-5,5,12,6,10,1); createWall(5,5,12,6,10,1);
+            createWall(-8,5,17,1,10,10); createWall(8,5,17,1,10,10);
+            createWall(0,5,22,17,10,1);
+
+            // Luci
+            const addLight = (x,z,rot) => {
+                const l = new THREE.PointLight(0xff6600, 2, 15);
+                l.position.set(x+Math.sin(rot)*0.2, 2.8, z+Math.cos(rot)*0.2);
+                scene.add(l); torchLights.push({light:l, speed:2+Math.random()*3});
+                const plane = new THREE.Mesh(new THREE.PlaneGeometry(2,2), new THREE.MeshBasicMaterial({map:torchAnimatedTexture, transparent:true, blending:2, side:2, depthWrite:false}));
+                plane.position.set(x,2.5,z); plane.rotation.y=rot; scene.add(plane);
+            };
+            addLight(-5.4,0,1.57); addLight(5.4,0,-1.57);
+            addLight(-10.4,-17,1.57); addLight(10.4,-17,-1.57);
+            addLight(-20,-35.4,3.14); addLight(-30,-35.4,3.14); addLight(-39.4,-26,1.57);
+            addLight(28,-38.4,3.14); addLight(28,-13.6,0); addLight(0,21.4,3.14);
         }
 
-
+        // --- LOOP PRINCIPALE ---
         function animate() {
             requestAnimationFrame(animate);
-            if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
-            const t = performance.now() * 0.001;
-            torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
+            const dt = 0.016;
+            if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate=true;
+            const t = performance.now()*0.001;
+            torchLights.forEach(o => o.light.intensity=30+Math.sin(t*o.speed)*5);
 
-            if(isLocked) {
-                const dt = 0.016; 
-                velocity.y -= GRAVITY * dt;
-                velocity.x -= velocity.x * 10.0 * dt;
-                velocity.z -= velocity.z * 10.0 * dt;
+            updateBullets(dt);
 
-                const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
-                const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
-                const speed = 150.0;
+            if(isLocked && !isFrozen) {
+                // Fisica Movimento
+                velocity.y -= GRAVITY*dt;
+                velocity.x -= velocity.x*10*dt;
+                velocity.z -= velocity.z*10*dt;
+                
+                const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y=0; dir.normalize();
+                const right = new THREE.Vector3().crossVectors(camera.up, dir).normalize(); // Inversione corretta per ThreeJS (cross order)
+                
+                // Fix movimento laterale: WASD standard
+                // W = dir, S = -dir, A = right, D = -right
+                if(moveForward) velocity.add(dir.multiplyScalar(150*dt));
+                if(moveBackward) velocity.add(dir.multiplyScalar(-150*dt));
+                if(moveLeft) velocity.add(right.multiplyScalar(150*dt)); 
+                if(moveRight) velocity.add(right.multiplyScalar(-150*dt));
 
-                if(moveForward) velocity.add(fwd.clone().multiplyScalar(speed * dt));
-                if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-speed * dt));
-                if(moveLeft) velocity.add(right.clone().multiplyScalar(-speed * dt));
-                if(moveRight) velocity.add(right.clone().multiplyScalar(speed * dt));
+                playerGroup.position.x += velocity.x*dt;
+                if(checkCol(playerGroup.position)) { playerGroup.position.x-=velocity.x*dt; velocity.x=0; }
+                playerGroup.position.z += velocity.z*dt;
+                if(checkCol(playerGroup.position)) { playerGroup.position.z-=velocity.z*dt; velocity.z=0; }
+                
+                playerGroup.position.y += velocity.y*dt;
+                if(playerGroup.position.y < 0) { playerGroup.position.y=0; velocity.y=0; canJump=true; }
 
-                const dx = velocity.x * dt; playerGroup.position.x += dx;
-                if(checkCol(playerGroup.position)) { playerGroup.position.x -= dx; velocity.x = 0; }
-                const dz = velocity.z * dt; playerGroup.position.z += dz;
-                if(checkCol(playerGroup.position)) { playerGroup.position.z -= dz; velocity.z = 0; }
-                playerGroup.position.y += velocity.y * dt;
-                if(playerGroup.position.y < 0) { playerGroup.position.y = 0; velocity.y = 0; canJump = true; }
-
-                if (socket && socket.connected) {
-                    socket.emit('playerMove', { x: playerGroup.position.x, y: playerGroup.position.y + 0.85, z: playerGroup.position.z, theta: theta, skin: mySkin, name: myName });
-                }
+                if(socket?.connected) socket.emit('playerMove', { 
+                    x:playerGroup.position.x, y:playerGroup.position.y+0.85, z:playerGroup.position.z, 
+                    theta:theta, skin:mySkin, name:myName 
+                });
             }
-            updateCamera();
+
+            // Camera
+            const head = playerGroup.position.clone().add(new THREE.Vector3(0,1.6,0));
+            const dist = isThirdPerson ? 3.5 : 0.1;
+            const offset = new THREE.Vector3(Math.sin(theta)*Math.cos(phi), Math.sin(phi), Math.cos(theta)*Math.cos(phi)).multiplyScalar(dist);
+            camera.position.copy(head).add(offset);
+            camera.lookAt(head); // Guarda sempre la testa
+            if(isThirdPerson) avatarMesh.rotation.y = theta + Math.PI;
+
             renderer.render(scene, camera);
         }
-        function updateCamera() {
-            const headPos = new THREE.Vector3().copy(playerGroup.position).add(new THREE.Vector3(0, 1.6, 0));
-            let targetDist = isThirdPerson ? 3.5 : 0.1;
-            const camOffset = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.sin(phi), Math.cos(theta) * Math.cos(phi)).multiplyScalar(targetDist);
-            const idealCamPos = headPos.clone().add(camOffset);
-            if (isThirdPerson) {
-                const rayDir = new THREE.Vector3().subVectors(idealCamPos, headPos).normalize();
-                cameraRaycaster.set(headPos, rayDir);
-                cameraRaycaster.far = targetDist;
-                const hits = cameraRaycaster.intersectObjects(wallMeshes);
-                if(hits.length > 0) idealCamPos.copy(headPos).add(rayDir.multiplyScalar(hits[0].distance - 0.2));
-                avatarMesh.rotation.y = theta + Math.PI;
-            }
-            camera.position.copy(idealCamPos);
-            if (isThirdPerson) camera.lookAt(headPos);
-            else { const target = idealCamPos.clone().sub(camOffset.clone().normalize().multiplyScalar(10)); camera.lookAt(target); }
+
+        function checkCol(p) { 
+            const box = new THREE.Box3(new THREE.Vector3(p.x-0.4,0,p.z-0.4), new THREE.Vector3(p.x+0.4,2,p.z+0.4));
+            return colliders.some(c => box.intersectsBox(c)); 
+        }
+
+        // --- SOCKET ---
+        function initSocket() {
+            socket = io(SOCKET_URL);
+            socket.on('connect', () => { 
+                console.log("Connected"); 
+                scores[socket.id] = 0;
+            });
+            
+            // Gestione messaggi Custom (Hack per usare server chat)
+            socket.on('chatMessage', data => {
+                const txt = data.text || "";
+                
+                // EVENTO SPARO: __SHOOT__:x,y,z,vx,vy,vz
+                if(txt.startsWith("__SHOOT__:")) {
+                    const parts = txt.split(':')[1].split(',').map(parseFloat);
+                    // Crea palla remota
+                    createBullet(
+                        new THREE.Vector3(parts[0], parts[1], parts[2]),
+                        new THREE.Vector3(parts[3], parts[4], parts[5]),
+                        "remote"
+                    );
+                    return; 
+                }
+
+                // EVENTO COLPO: __HIT__:shooterID:victimID
+                if(txt.startsWith("__HIT__:")) {
+                    const parts = txt.split(':');
+                    const shooter = parts[1];
+                    const victim = parts[2];
+                    
+                    // Aumenta punti dello shooter
+                    if(!scores[shooter]) scores[shooter] = 0;
+                    scores[shooter]++;
+                    
+                    // Se sono io lo shooter, aggiorno la mia UI
+                    if(shooter === socket.id) {
+                        myScore++;
+                        document.getElementById('score-display').innerText = myScore;
+                    }
+                    
+                    updateCrowns();
+                    return;
+                }
+
+                // Chat normale
+                const div = document.createElement('div');
+                div.innerHTML = `<span class="chat-name">${data.name}:</span> ${txt}`;
+                document.getElementById('chat-messages').appendChild(div);
+            });
+
+            socket.on('playerMove', data => {
+                if(data.id===socket.id) return;
+                let p = remotePlayers[data.id];
+                if(!p) {
+                    // Nuovo Player Remoto
+                    const m = avatarMesh.clone(); 
+                    m.visible=true;
+                    scene.add(m); 
+                    setOrUpdateNameTag(m, data.name || "Anonimo");
+                    remotePlayers[data.id] = m;
+                    scores[data.id] = 0; // init score
+                    p = m;
+                    // WebRTC Peer
+                    if(!peers[data.id]) {
+                        const peer = new SimplePeer({initiator:true, stream:localStream});
+                        peer.on('signal', s => socket.emit('sendingSignal',{userToSignal:data.id, callerID:socket.id, signal:s}));
+                        peer.on('stream', s => { const a=document.createElement('audio'); a.srcObject=s; a.autoplay=true; document.body.appendChild(a); });
+                        peers[data.id] = peer;
+                    }
+                }
+                p.position.set(data.x, data.y, data.z);
+                p.rotation.y = data.theta + Math.PI;
+                if(data.name) setOrUpdateNameTag(p, data.name);
+                
+                // Cambio colore se congelato (skin hack)
+                if(data.skin === "FROZEN") p.material.color.setHex(0x00ffff);
+                else {
+                    p.material.color.setHex(0xffffff);
+                    if(p.userData.skin !== data.skin) {
+                        loader.load(`./${data.skin||'plebeo.png'}`, t => { t.colorSpace='srgb'; p.material.map=t; p.material.needsUpdate=true; });
+                        p.userData.skin = data.skin;
+                    }
+                }
+            });
+
+            socket.on('playerDisconnected', id => {
+                if(remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }
+                if(peers[id]) { peers[id].destroy(); delete peers[id]; }
+                delete scores[id];
+                updateCrowns();
+            });
+
+            // WebRTC Signals
+            socket.on('userJoined', p => {
+                const peer = new SimplePeer({initiator:false, stream:localStream});
+                peer.on('signal', s => socket.emit('returningSignal',{signal:s, callerID:p.callerID}));
+                peer.on('stream', s => { const a=document.createElement('audio'); a.srcObject=s; a.autoplay=true; document.body.appendChild(a); });
+                peers[p.callerID] = peer;
+            });
+            socket.on('receivingReturnedSignal', p => { if(peers[p.id]) peers[p.id].signal(p.signal); });
+        }
+        
+        // Setup UI base
+        function setupAvatarUI() {
+            const updateSkin = () => {
+                const s = avatarOptions[currentSkinIndex]; mySkin=s.file;
+                document.getElementById('skin-label').innerText = "Skin: "+s.label;
+                document.getElementById('hud-propic').src = s.propic;
+                loader.load(mySkin, t=>{t.colorSpace='srgb'; avatarMesh.material.map=t;});
+                if(socket) socket.emit('skinChange', mySkin);
+            };
+            document.getElementById('prev-skin-btn').onclick = () => { currentSkinIndex=(currentSkinIndex-1+3)%3; updateSkin(); };
+            document.getElementById('next-skin-btn').onclick = () => { currentSkinIndex=(currentSkinIndex+1)%3; updateSkin(); };
+            updateSkin();
+        }
+        function toggleMic() {
+            if(!localStream) return; isMicActive=!isMicActive;
+            localStream.getAudioTracks()[0].enabled = isMicActive;
+            document.getElementById('mic-icon').className = isMicActive ? "fa-solid fa-microphone" : "fa-solid fa-microphone-slash";
+            document.getElementById('mic-btn').classList.toggle('active', isMicActive);
+        }
+        async function setupMusic() {
+            document.getElementById('music-btn').onclick = async () => {
+                if(!bgMusic) { bgMusic=new Audio(MUSIC_FILE); bgMusic.loop=true; bgMusic.volume=0.3; }
+                isMusicOn = !isMusicOn;
+                if(isMusicOn) { await bgMusic.play(); document.getElementById('music-icon').className="fa-solid fa-music"; }
+                else { bgMusic.pause(); document.getElementById('music-icon').className="fa-solid fa-music"; document.getElementById('music-icon').style.opacity=0.5; }
+                document.getElementById('music-btn').classList.toggle('music-on', isMusicOn);
+            };
         }
     </script>
 </body>
