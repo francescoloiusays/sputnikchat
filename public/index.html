@@ -807,13 +807,65 @@ border: 2px solid #111;
             floor.rotation.x = -Math.PI/2; 
             scene.add(floor);
 
+            // --- HELPER: CREA FINESTRA (Nuovo) ---
+            const createWindow = (x, y, z, width, rotY) => {
+                const group = new THREE.Group();
+                group.position.set(x, y, z);
+                group.rotation.y = rotY;
+
+                // Materiale Muro
+                const wMat = new THREE.MeshStandardMaterial({ 
+                    map: wallTexture ? wallTexture.clone() : null, 
+                    color: 0xaaaaaa 
+                });
+                
+                // Materiale Vetro "Fumè"
+                const gMat = new THREE.MeshPhysicalMaterial({
+                    color: 0x111111,    // Nero/Grigio scuro
+                    metalness: 0.9,     // Riflettente
+                    roughness: 0.1,     // Liscio
+                    transparent: true,
+                    opacity: 0.5,       // Vedo attraverso al 50%
+                    side: THREE.DoubleSide
+                });
+
+                // 1. Muretto Basso (Sotto il vetro) - Alto 3m
+                const bot = new THREE.Mesh(new THREE.BoxGeometry(width, 3, 1), wMat);
+                bot.position.y = -3.5; // (rispetto al centro 5) -> y reale 1.5
+                group.add(bot);
+
+                // 2. Muretto Alto (Sopra il vetro) - Alto 2m
+                const top = new THREE.Mesh(new THREE.BoxGeometry(width, 2, 1), wMat);
+                top.position.y = 4.0; // -> y reale 9.0
+                group.add(top);
+
+                // 3. Vetro Centrale - Alto 5m
+                const glass = new THREE.Mesh(new THREE.BoxGeometry(width, 5, 0.2), gMat);
+                glass.position.y = 0.5; // Centro vetrata
+                group.add(glass);
+
+                // 4. Pilastri laterali (Cornice)
+                const frameGeo = new THREE.BoxGeometry(0.5, 5, 1.2);
+                const left = new THREE.Mesh(frameGeo, wMat); left.position.set(-width/2 + 0.25, 0.5, 0);
+                const right = new THREE.Mesh(frameGeo, wMat); right.position.set(width/2 - 0.25, 0.5, 0);
+                group.add(left); group.add(right);
+
+                scene.add(group);
+
+                // 5. Collider Invisibile (Per non cadere di sotto)
+                const colGeo = new THREE.BoxGeometry(width, 10, 1);
+                const colMesh = new THREE.Mesh(colGeo, new THREE.MeshBasicMaterial({visible:false}));
+                colMesh.position.set(x, y, z);
+                colMesh.rotation.y = rotY;
+                scene.add(colMesh);
+                colliders.push(new THREE.Box3().setFromObject(colMesh));
+            };
+
             // --- STANZA 1: L'ATRIO (SPAWN) ---
-            createWall(-6, 5, 0, 1, 10, 12); // Ovest
-            createWall(6, 5, 0, 1, 10, 12);  // Est
-            // Sud (Apertura larga)
+            createWall(-6, 5, 0, 1, 10, 12); 
+            createWall(6, 5, 0, 1, 10, 12);  
             createWall(-4.25, 5, 6, 4.5, 10, 1); 
             createWall(4.25, 5, 6, 4.5, 10, 1);
-            // Nord (Apertura larga)
             createWall(-4.25, 5, -6, 4.5, 10, 1);
             createWall(4.25, 5, -6, 4.5, 10, 1);
 
@@ -824,31 +876,34 @@ border: 2px solid #111;
             // --- STANZA 2: LA SALA GRANDE ---
             createWall(-8, 5, -16, 9, 10, 1); 
             createWall(8, 5, -16, 9, 10, 1);  
-            createWall(0, 5, -36, 22, 10, 1); // Nord
             
-            // Ovest
+            // *** FINESTRA PANORAMICA NORD ***
+            // Sostituisce il muro cieco a Nord
+            createWindow(0, 5, -36, 22, 0); 
+            
             createWall(-11, 5, -21, 1, 10, 10); 
             createWall(-11, 5, -33, 1, 10, 6);  
-            
-            // Est
             createWall(11, 5, -21, 1, 10, 10);
             createWall(11, 5, -33, 1, 10, 6);
 
             // --- STANZA 3: L'ARMERIA (OVEST) ---
             createWall(-25, 5, -36, 30, 10, 1); 
             createWall(-25, 5, -16, 30, 10, 1); 
-            createWall(-40, 5, -26, 1, 10, 21); 
+            
+            // *** VETRATA LATERALE ARMERIA ***
+            // Sostituisce il muro Ovest (-40)
+            createWindow(-40, 5, -26, 21, Math.PI/2); 
 
             // --- STANZA 4: IL SANTUARIO (EST) ---
             createWall(16, 5, -25, 10, 10, 1); 
             createWall(16, 5, -31, 10, 10, 1); 
-            
-            // Muro Ovest con Buco
             createWall(21, 5, -19.25, 1, 10, 11.5); 
             createWall(21, 5, -34.75, 1, 10, 7.5);
 
-            // Muri esterni Santuario
-            createWall(35, 5, -26, 1, 10, 25); 
+            // *** VETRATA SANTUARIO ***
+            // Sostituisce il muro Est (35)
+            createWindow(35, 5, -26, 25, Math.PI/2);
+
             createWall(28, 5, -39, 15, 10, 1); 
             createWall(28, 5, -13, 15, 10, 1); 
             createWall(28, 5, -26, 4, 10, 4);  
@@ -862,7 +917,7 @@ border: 2px solid #111;
             createWall(8, 5, 17, 1, 10, 10);  
             createWall(0, 5, 22, 17, 10, 1);  
 
-            // --- LUCI ALLINEATE ---
+            // --- LUCI ---
             const createTorch = (x,y,z,rot) => {
                 const geo = new THREE.PlaneGeometry(2.0, 2.0); 
                 const mat = new THREE.MeshBasicMaterial({ 
@@ -871,21 +926,17 @@ border: 2px solid #111;
                 });
                 const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
                 
-                // FIX LUCE:
                 const l = new THREE.PointLight(0xff6600, 2.0, 15); 
-                // Offset ridotto (0.2) e alzato (y+0.3) per centrare la fiamma
                 l.position.set(x + Math.sin(rot)*0.2, y + 0.3, z + Math.cos(rot)*0.2); 
-                
                 scene.add(l);
                 torchLights.push({ light: l, speed: 2+Math.random()*3 });
             };
 
-            // Posizionamento Torce
             createTorch(-5.4, 2.5, 0, Math.PI/2); 
             createTorch(5.4, 2.5, 0, -Math.PI/2);
             createTorch(-10.4, 3, -17, Math.PI/2);
             createTorch(10.4, 3, -17, -Math.PI/2);
-            createTorch(0, 3, -35.4, Math.PI);
+            // Nota: Ho rimosso la torcia sul muro Nord della sala grande perché ora c'è la finestra!
             createTorch(-20, 2.5, -35.4, Math.PI);
             createTorch(-30, 2.5, -35.4, Math.PI);
             createTorch(-39.4, 2.5, -26, Math.PI/2);
@@ -893,6 +944,7 @@ border: 2px solid #111;
             createTorch(28, 2.5, -13.6, 0);       
             createTorch(0, 2, 21.4, Math.PI);
         }
+
 
 
 
