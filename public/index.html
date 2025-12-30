@@ -327,6 +327,18 @@ border: 2px solid #111;
     </script>
 
     <script type="module">
+        // --- VARIABILI MINIGAME (AGGIUNGI QUESTE) ---
+        const MUD_SPEED = 25.0;     
+        const SHOT_COOLDOWN = 500;  
+        const FREEZE_HITS = 5;      
+        const FREEZE_TIME = 5000;   
+        let bullets = []; 
+        let myScore = 0;
+        let myHitsTaken = 0;
+        let isFrozen = false;
+        let lastShotTime = 0;
+        let scores = {}; 
+
         import * as THREE from 'three';
 
         // --- CONFIG ---
@@ -551,9 +563,12 @@ border: 2px solid #111;
                             chatInput.value = '';
                         }
                     }
+                    
                     if (e.code === 'Escape') { chatInput.blur(); document.body.requestPointerLock(); }
                     return;
                 }
+                if(isFrozen) return;
+                if (e.code === 'KeyF') shootBall();
                 if (e.code === 'Enter') { document.exitPointerLock(); chatInput.focus(); return; }
                 if (e.code === 'KeyM') toggleMic();
                 if (e.code === 'KeyB') toggleMusic();
@@ -571,6 +586,7 @@ border: 2px solid #111;
                         break;
                 }
             });
+    
 
             document.addEventListener('keyup', (e) => {
                 switch(e.code) {
@@ -897,11 +913,14 @@ border: 2px solid #111;
 
         function animate() {
             requestAnimationFrame(animate);
+            const dt = 0.016; // (o calcolato con clock)
             if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
             const t = performance.now() * 0.001;
             torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
 
-            if(isLocked) {
+             updateBullets(dt); 
+            
+            if(isLocked && !isFrozen) {
                 const dt = 0.016; 
                 velocity.y -= GRAVITY * dt;
                 velocity.x -= velocity.x * 10.0 * dt;
@@ -947,6 +966,70 @@ border: 2px solid #111;
             if (isThirdPerson) camera.lookAt(headPos);
             else { const target = idealCamPos.clone().sub(camOffset.clone().normalize().multiplyScalar(10)); camera.lookAt(target); }
         }
+// --- LOGICA PALLE DI FANGO (AGGIUNGI IN FONDO) ---
+function shootBall() {
+    if(isFrozen || !socket) return;
+    const now = Date.now();
+    if(now - lastShotTime < SHOT_COOLDOWN) return;
+    lastShotTime = now;
+
+    const dir = new THREE.Vector3(); 
+    camera.getWorldDirection(dir);
+    
+    // Punto di partenza: leggermente sopra e davanti al giocatore
+    const startPos = playerGroup.position.clone(); 
+    startPos.y += 1.5; 
+    
+    // Crea locale
+    createBullet(startPos, dir, socket.id); 
+    
+    // Invia remoto (HACK: usiamo la chat per inviare dati di gioco)
+    socket.emit('chatMessage', `__SHOOT__:${startPos.x},${startPos.y},${startPos.z},${dir.x},${dir.y},${dir.z}`); 
+}
+
+function createBullet(pos, dir, shooterId) {
+    const geo = new THREE.SphereGeometry(0.2, 8, 8);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); 
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(pos);
+    scene.add(mesh);
+    bullets.push({ mesh, velocity: dir.multiplyScalar(MUD_SPEED), shooterId, life: 2.0 });
+}
+
+function updateBullets(dt) {
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.life -= dt;
+        b.mesh.position.add(b.velocity.clone().multiplyScalar(dt));
+
+        // Collisione con ME STESSO (se sparato da altri)
+        if (b.shooterId !== socket.id && !isFrozen) {
+            // Distanza semplice (hitbox sferica raggio 0.8)
+            if(b.mesh.position.distanceTo(playerGroup.position.clone().add(new THREE.Vector3(0,1,0))) < 0.8) {
+                // COLITO!
+                myHitsTaken++;
+                socket.emit('chatMessage', `__HIT__:${b.shooterId}:${socket.id}`);
+                
+                if(myHitsTaken >= FREEZE_HITS) {
+                    isFrozen = true;
+                    // Mostra effetto congelamento (cambia colore avatar locale)
+                    avatarMesh.material.color.setHex(0x00ffff); 
+                    socket.emit('skinChange', "FROZEN"); // Segnale visivo agli altri
+                    
+                    setTimeout(() => {
+                        isFrozen = false; myHitsTaken = 0;
+                        avatarMesh.material.color.setHex(0xffffff);
+                        socket.emit('skinChange', mySkin);
+                    }, FREEZE_TIME);
+                }
+                
+                scene.remove(b.mesh); bullets.splice(i, 1);
+                continue;
+            }
+        }
+        if (b.life <= 0) { scene.remove(b.mesh); bullets.splice(i, 1); }
+    }
+}   
     </script>
 </body>
 </html>
