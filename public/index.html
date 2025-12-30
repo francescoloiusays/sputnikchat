@@ -775,7 +775,7 @@ border: 2px solid #111;
         function checkCol(pos) { const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5); const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5); const box = new THREE.Box3(min, max); return colliders.some(c => box.intersectsBox(c)); }
         function createWall(x,y,z,w,h,d) { const g = new THREE.BoxGeometry(w,h,d); const t = wallTexture ? wallTexture.clone() : null; if(t) { t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(Math.max(w,d)/4, h/4); t.needsUpdate=true; } const m = new THREE.MeshStandardMaterial({ map: t, color: t ? 0xffffff : 0x888888 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(x,y,z); scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh); }
         
-        function buildLevel() {
+                function buildLevel() {
             // --- 1. PAVIMENTO ---
             const floorGeo = new THREE.PlaneGeometry(150, 150);
             if(floorTexture) floorTexture.repeat.set(15, 15);
@@ -787,69 +787,68 @@ border: 2px solid #111;
             // --- STANZA 1: L'ATRIO (SPAWN) ---
             createWall(-6, 5, 0, 1, 10, 12); // Ovest
             createWall(6, 5, 0, 1, 10, 12);  // Est
-            
-            // Sud (Modificato: Apertura allargata a 3 unità)
-            // I muri ora sono più corti (width 4.5 invece di 6) e spostati più ai lati
+            // Sud (Apertura larga)
             createWall(-4.25, 5, 6, 4.5, 10, 1); 
             createWall(4.25, 5, 6, 4.5, 10, 1);
-            
-            // Nord (Modificato: Apertura allargata a 3 unità)
+            // Nord (Apertura larga)
             createWall(-4.25, 5, -6, 4.5, 10, 1);
             createWall(4.25, 5, -6, 4.5, 10, 1);
 
-            // --- CORRIDOIO NORD (Allargato) ---
-            // Spostati i muri laterali da +/-3 a +/-4 per allargare il corridoio
-            createWall(-4, 5, -11, 1, 10, 10); // Lato Sx
-            createWall(4, 5, -11, 1, 10, 10);  // Lato Dx
+            // --- CORRIDOIO NORD ---
+            createWall(-4, 5, -11, 1, 10, 10); 
+            createWall(4, 5, -11, 1, 10, 10);  
 
             // --- STANZA 2: LA SALA GRANDE ---
-            // Muro Sud (ingresso dal corridoio allargato)
-            createWall(-8, 5, -16, 9, 10, 1); // Allargato verso sinistra
-            createWall(8, 5, -16, 9, 10, 1);  // Allargato verso destra
-            
+            // Muro Sud
+            createWall(-8, 5, -16, 9, 10, 1); 
+            createWall(8, 5, -16, 9, 10, 1);  
             // Muro Nord (Chiuso)
             createWall(0, 5, -36, 22, 10, 1);
             
             // Muro Ovest (con passaggio per Armeria)
-            createWall(-11, 5, -21, 1, 10, 10); // Parte alta
-            createWall(-11, 5, -33, 1, 10, 6);  // Parte bassa (Buco verticale invariato, era già largo)
+            // Gap tra -21 e -33 (Largo e sicuro)
+            createWall(-11, 5, -21, 1, 10, 10); 
+            createWall(-11, 5, -33, 1, 10, 6);  
             
-            // Muro Est (con passaggio per Santuario)
-            createWall(11, 5, -21, 1, 10, 10);
-            createWall(11, 5, -33, 1, 10, 6);
+            // Muro Est (con passaggio per Santuario) - FIXATO
+            // Gap tra -26 e -30.
+            createWall(11, 5, -21, 1, 10, 10); // Finisce a -26
+            createWall(11, 5, -33, 1, 10, 6);  // Inizia a -30
 
             // --- STANZA 3: L'ARMERIA (OVEST) ---
-            createWall(-25, 5, -36, 30, 10, 1); // Nord
-            createWall(-25, 5, -16, 30, 10, 1); // Sud
-            createWall(-40, 5, -26, 1, 10, 21); // Ovest Chiusura
+            createWall(-25, 5, -36, 30, 10, 1); 
+            createWall(-25, 5, -16, 30, 10, 1); 
+            createWall(-40, 5, -26, 1, 10, 21); 
 
             // --- STANZA 4: IL SANTUARIO (EST) ---
-            // Corridoio Est (Allargato leggermente)
-            createWall(16, 5, -24, 10, 10, 1); // Sud corridoio
-            createWall(16, 5, -28, 10, 10, 1); // Nord corridoio
+            // FIX: Corridoio ora allineato perfettamente con i muri della sala grande per non lasciare buchi
+            // Muro Sud Corridoio: A z=-25 (Si sovrappone col muro sala che finisce a -26)
+            createWall(16, 5, -25, 10, 10, 1); 
+            // Muro Nord Corridoio: A z=-31 (Si sovrappone col muro sala che inizia a -30)
+            createWall(16, 5, -31, 10, 10, 1); 
             
-            // La Stanza
-            createWall(21, 5, -26, 1, 10, 25); // Muro Ovest interno
-            createWall(35, 5, -26, 1, 10, 25); // Muro Est esterno
-            createWall(28, 5, -39, 15, 10, 1); // Fondo Nord
-            createWall(28, 5, -13, 15, 10, 1); // Fondo Sud
-            createWall(28, 5, -26, 4, 10, 4);  // Pilastro centrale
+            // FIX: Muro Ovest del Santuario ora ha un BUCO per entrare (prima era solido)
+            // Parte Sud del muro
+            createWall(21, 5, -19.25, 1, 10, 11.5); 
+            // Parte Nord del muro
+            createWall(21, 5, -34.75, 1, 10, 7.5);
+
+            // Muri esterni Santuario
+            createWall(35, 5, -26, 1, 10, 25); // Est
+            createWall(28, 5, -39, 15, 10, 1); // Nord
+            createWall(28, 5, -13, 15, 10, 1); // Sud
+            createWall(28, 5, -26, 4, 10, 4);  // Pilastro
 
             // --- STANZA 5: LA CRIPTA SEGRETA (SUD) ---
-            // Corridoio d'accesso (Allargato a 3 unità interne)
-            // Prima erano a +/- 1.5, ora a +/- 2.5
             createWall(-2.5, 5, 9, 1, 10, 6);
             createWall(2.5, 5, 9, 1, 10, 6);
-            
-            // La Stanza
-            createWall(-5, 5, 12, 6, 10, 1); // Nord Sx (Accorciato per far spazio all'ingresso)
-            createWall(5, 5, 12, 6, 10, 1);  // Nord Dx
-            createWall(-8, 5, 17, 1, 10, 10); // Ovest
-            createWall(8, 5, 17, 1, 10, 10);  // Est
-            createWall(0, 5, 22, 17, 10, 1);  // Sud (Fondo)
+            createWall(-5, 5, 12, 6, 10, 1); 
+            createWall(5, 5, 12, 6, 10, 1);  
+            createWall(-8, 5, 17, 1, 10, 10); 
+            createWall(8, 5, 17, 1, 10, 10);  
+            createWall(0, 5, 22, 17, 10, 1);  
 
-
-            // --- LUCI / TORCE ---
+            // --- LUCI ---
             const createTorch = (x,y,z,rot) => {
                 const geo = new THREE.PlaneGeometry(2.0, 2.0); 
                 const mat = new THREE.MeshBasicMaterial({ 
@@ -873,7 +872,6 @@ border: 2px solid #111;
             createTorch(28, 2.5, -13.6, 0);       
             createTorch(0, 2, 21.4, Math.PI);
         }
-
 
 
         function animate() {
