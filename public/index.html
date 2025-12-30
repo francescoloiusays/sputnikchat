@@ -723,6 +723,19 @@ border: 2px solid #111;
             });
 
             socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
+            socket.on('chatMessage', (data) => {
+    const txt = data.text || "";
+    
+    // --- BLOCCO MINIGAME DA AGGIUNGERE ---
+    if(txt.startsWith("__SHOOT__:")) {
+        const p = txt.split(':')[1].split(',').map(parseFloat);
+        createBullet(new THREE.Vector3(p[0],p[1],p[2]), new THREE.Vector3(p[3],p[4],p[5]), "remote");
+        return; // Non stampare in chat
+    } 
+    if(txt.startsWith("__HIT__:")) {
+        // Logica punteggio (opzionale se non vuoi UI complessa)
+        return; 
+    }
 
             socket.on('playerDisconnected', (id) => {
                 if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }
