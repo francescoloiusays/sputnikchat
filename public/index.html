@@ -327,6 +327,8 @@ border: 2px solid #111;
     </script>
 
     <script type="module">
+        const mudTexture = new THREE.TextureLoader().load('./mudball.png');
+        mudTexture.colorSpace = THREE.SRGBColorSpace; // Importante per i colori corretti
         // --- VARIABILI MINIGAME (AGGIUNGI QUESTE) ---
         const MUD_SPEED = 25.0;     
         const SHOT_COOLDOWN = 500;  
@@ -988,12 +990,22 @@ function shootBall() {
 }
 
 function createBullet(pos, dir, shooterId) {
-    const geo = new THREE.SphereGeometry(0.2, 8, 8);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); 
-    const mesh = new THREE.Mesh(geo, mat);
+    // Invece di SphereGeometry, usiamo uno SpriteMaterial
+    const mat = new THREE.SpriteMaterial({ map: mudTexture });
+    const mesh = new THREE.Sprite(mat);
+    
+    // Dimensione della palla (aggiusta 0.5 in base alla grandezza della tua png)
+    mesh.scale.set(0.5, 0.5, 1); 
+    
     mesh.position.copy(pos);
     scene.add(mesh);
-    bullets.push({ mesh, velocity: dir.multiplyScalar(MUD_SPEED), shooterId, life: 2.0 });
+    
+    bullets.push({ 
+        mesh, 
+        velocity: dir.multiplyScalar(MUD_SPEED), 
+        shooterId, 
+        life: 2.0 
+    });
 }
 
 function updateBullets(dt) {
