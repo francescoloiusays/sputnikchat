@@ -985,9 +985,6 @@ function shootBall() {
     // Crea locale
     createBullet(startPos, dir, socket.id); 
     
-    // Invia remoto (HACK: usiamo la chat per inviare dati di gioco)
-    socket.emit('chatMessage', `__SHOOT__:${startPos.x},${startPos.y},${startPos.z},${dir.x},${dir.y},${dir.z}`); 
-}
 
 function createBullet(pos, dir, shooterId) {
     // Invece di SphereGeometry, usiamo uno SpriteMaterial
