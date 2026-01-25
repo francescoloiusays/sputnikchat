@@ -2,14 +2,13 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SputnikChat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SputnikChat Mobile</title>
     
-    <!-- Librerie -->
     <script src="https://unpkg.com/gifler@0.1.0/gifler.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
-    <!-- FontAwesome per le icone -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
     <style>
@@ -22,13 +21,14 @@
         }
 
         /* RESET BOX MODEL */
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; -webkit-touch-callout: none; user-select: none; }
 
         body { 
             margin: 0; 
             overflow: hidden; 
             font-family: 'Planewalker', sans-serif; 
-            background: #111; 
+            background: #111;
+            overscroll-behavior: none; /* Previene refresh su pull-down mobile */
         }
 
         button, input, select, textarea { font-family: 'Planewalker', sans-serif; }
@@ -40,6 +40,7 @@
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 100; color: white;
+            padding: 20px;
         }
         
         #nickname-input { 
@@ -47,7 +48,7 @@
             background-color: #222; color: #ffff00;
             border: 2px solid #555; border-radius: 8px;
             box-shadow: inset 4px 4px 8px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.5);
-            outline: none; transition: all 0.2s; width: 300px;
+            outline: none; transition: all 0.2s; width: 300px; max-width: 90%;
         }
         #nickname-input:focus { border-color: #ffff00; box-shadow: 0 0 20px rgba(255, 170, 0, 0.4); }
 
@@ -58,205 +59,76 @@
         }
         #play-btn:active { transform: translateY(4px); text-shadow: 0 0 0 #000; }
 
-        /* --- NUOVA UI SCHEDA GIOCATORE (SCALATA) --- */
+        /* --- UI SCHEDA GIOCATORE --- */
         #ui-container-wrapper {
             position: absolute;
             top: 10px;
             left: 10px;
-            width: 300px; /* Spazio riservato sullo schermo */
+            width: 300px;
             height: 400px;
             z-index: 20;
-            pointer-events: none; /* Lascia passare i click fuori */
+            pointer-events: none;
+            transition: transform 0.3s, opacity 0.3s;
         }
 
-        /* Contenitore che applica la scala per adattare le dimensioni giganti del CSS originale */
         #ui-scale-wrapper {
-            transform: scale(0.13); /* Riduce tutto al 13% circa */
+            transform: scale(0.13);
             transform-origin: top left;
             position: relative;
-            width: 2106px; /* Larghezza originale del design */
+            width: 2106px;
             height: 2956px;
-            pointer-events: auto; /* Riattiva i click sugli elementi interni */
+            pointer-events: auto;
         }
 
-        /* CSS ORIGINALE FORNITO (con correzioni sintassi) */
         .Texture {
             background-image: url("Texture.png"); 
-            border: 10px solid #333;   /* Bordo fittizio per vedere i confini senza img */
+            border: 10px solid #333;
             border-radius: 40px;
             position: absolute;
             left: 0px; top: 0px;
             width: 2106px; height: 2956px;
             z-index: 1;
-                /* Bordo esterno scuro (il taglio della carta) */
-    border: 10px solid #333; 
-
-    /* Aggiungi questo per il BORDO BIANCO INTERNO */
-    box-shadow: 
-        /* Bordo bianco interno netto (spessore 20px) */
-        inset 0 0 0 60px rgba(255, 255, 255, 0.9),
-        
-        /* (Opzionale) Leggera ombra interna per dare profondità sotto il bordo bianco */
-        inset 0 0 20px 20px rgba(0,0,0,0.2);
+            box-shadow: inset 0 0 0 60px rgba(255, 255, 255, 0.9), inset 0 0 20px 20px rgba(0,0,0,0.2);
         }
 
+        /* Elementi interni texture (invariati ma compressi per leggibilità) */
         .nome_giocatore {
-            background-color: rgba(34, 32, 30, 0.6);
-            position: absolute;
-            left: 269px; top: 144px;
-            width: 1560px; height: 212px;
-            z-index: 2;
-            /* Stile Testo */
-            color: #ffff00;
-            font-size: 140px;
-            display: flex; align-items: center; justify-content: center;
-
-/* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-
+            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 269px; top: 144px; width: 1560px; height: 212px; z-index: 2; color: #ffff00; font-size: 140px; display: flex; align-items: center; justify-content: center; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111;
         }
-
         .skin {
-            background-color: rgba(34, 32, 30, 0.6);
-            position: absolute;
-            left: 269px; top: 411px;
-            width: 1560px; height: 211px;
-            z-index: 3;
-            /* Stile Testo */
-            color: #ccc;
-            font-size: 100px;
-            display: flex; align-items: center; justify-content: center;
-            /* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-
+            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 269px; top: 411px; width: 1560px; height: 211px; z-index: 3; color: #ccc; font-size: 100px; display: flex; align-items: center; justify-content: center; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111;
         }
-
         .immagine {
-            background-color: rgb(34, 32, 30);
-            position: absolute;
-            left: 270px; top: 694px;
-            width: 1559px; height: 1560px;
-            z-index: 6;
-            /* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-            overflow: hidden;
-            display: flex; align-items: center; justify-content: center;
+            background-color: rgb(34, 32, 30); position: absolute; left: 270px; top: 694px; width: 1559px; height: 1560px; z-index: 6; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111; overflow: hidden; display: flex; align-items: center; justify-content: center;
         }
-
-        .immagine img {
-            width: 100%; height: 100%; object-fit: cover;
-        }
-
-        /* Pulsanti Frecce (Sovrapposti alla ProPic) */
+        .immagine img { width: 100%; height: 100%; object-fit: cover; }
         .skin-arrow {
-            position: absolute; top: 0; bottom: 0; width: 200px;
-            background: rgba(0,0,0,0); border: none; color: white;
-            font-size: 150px; cursor: pointer; z-index: 10;
-            display: flex; align-items: center; justify-content: center;
-            font-family: 'Planewalker', sans-serif;
-            transition: background 0.2s;
+            position: absolute; top: 0; bottom: 0; width: 200px; background: rgba(0,0,0,0); border: none; color: white; font-size: 150px; cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; font-family: 'Planewalker', sans-serif; transition: background 0.2s;
         }
         .skin-arrow:hover { background: rgba(255, 187, 0, 0.4); color: #ffff00; }
         .arrow-left { left: 0; }
         .arrow-right { right: 0; }
-
         .microfono {
-            background-color: rgba(34, 32, 30, 0.6);
-            position: absolute;
-            left: 269px; top: 2326px;
-            width: 752px; height: 492px;
-            z-index: 4;
-            cursor: pointer;
-            /* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-
-            display: flex; align-items: center; justify-content: center;
-            transition: background 0.2s;
+            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 269px; top: 2326px; width: 752px; height: 492px; z-index: 4; cursor: pointer; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111; display: flex; align-items: center; justify-content: center; transition: background 0.2s;
         }
         .microfono:hover { background-color: rgba(255, 255, 255, 0.1); }
-        .microfono i { font-size: 200px; color: #cc0000; } /* Icona OFF */
+        .microfono i { font-size: 200px; color: #cc0000; }
         .microfono.active { background-color: rgba(0, 204, 0, 0.3); border-color: #00ff00; }
         .microfono.active i { color: #00ff00; }
-
         .musica {
-            background-color: rgba(34, 32, 30, 0.6);
-            position: absolute;
-            left: 1078px; top: 2326px;
-            width: 751px; height: 492px;
-            z-index: 5;
-            cursor: pointer;
-            /* Effetto "Scavato" con luce da Alto-Destra */
-box-shadow: 
-    /* Ombra scura interna sui lati ALTO e DESTRO (inset -x +y) */
-    inset -6px 6px 12px rgba(0, 0, 0, 0.9),
-    
-    /* Riflesso chiaro interno sui lati BASSO e SINISTRO (inset +x -y) */
-    inset 3px -3px 6px rgba(255, 255, 255, 0.1),
-    
-    /* Ombra esterna per stacco (opzionale) */
-    0 2px 4px rgba(0,0,0,0.5);
-
-/* Bordo scuro per definire il taglio */
-border: 2px solid #111;
-
-            display: flex; align-items: center; justify-content: center;
-            transition: background 0.2s;
+            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 1078px; top: 2326px; width: 751px; height: 492px; z-index: 5; cursor: pointer; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111; display: flex; align-items: center; justify-content: center; transition: background 0.2s;
         }
         .musica:hover { background-color: rgba(255, 255, 255, 0.1); }
         .musica i { font-size: 200px; color: #888; }
         .musica.music-on i { color: #0088ff; }
         .musica.music-on { background-color: rgba(0, 100, 255, 0.2); border-color: #0088ff; }
 
-        /* --- ALTRE UI --- */
+        /* UI GENERALE */
         #instructions {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             color: white; background: rgba(0, 0, 0, 0.7); padding: 20px;
             text-align: center; border-radius: 10px; z-index: 10; user-select: none; display: none;
-            font-size: 20px;
+            font-size: 20px; width: 80%;
         }
 
         #chat-container {
@@ -269,6 +141,81 @@ border: 2px solid #111;
         #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 100%; font-size: 16px; }
 
         #sh-logo { position: fixed; left: 10px; bottom: 10px; z-index: 80; width: 140px; height: auto; pointer-events: none; }
+
+        /* ================= MOBILE CONTROLS ================= */
+        #mobile-controls {
+            display: none; /* Nascosto su PC */
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; /* Lascia passare i tocchi per la rotazione camera */
+            z-index: 90;
+        }
+
+        #joystick-zone {
+            position: absolute;
+            bottom: 40px; left: 40px;
+            width: 120px; height: 120px;
+            pointer-events: auto; /* Attiva il tocco per il joystick */
+        }
+
+        #action-buttons {
+            position: absolute;
+            bottom: 40px; right: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        .mob-btn {
+            width: 70px; height: 70px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            color: white; font-size: 24px;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+            touch-action: manipulation;
+        }
+        .mob-btn:active { background: rgba(255, 255, 0, 0.4); border-color: #ffff00; }
+        
+        #btn-shoot { background: rgba(255, 0, 0, 0.3); border-color: red; }
+        #btn-jump { margin-bottom: 20px; }
+
+        /* ================= MEDIA QUERIES (RESPONSIVE) ================= */
+        @media (max-width: 768px) {
+            /* Attiva controlli mobile */
+            #mobile-controls { display: block; }
+
+            /* Nascondi istruzioni PC */
+            #instructions { display: none !important; }
+
+            /* Riduci la scheda giocatore e mettila in alto a sinistra piccola */
+            #ui-container-wrapper {
+                transform-origin: top left;
+                transform: scale(0.6); 
+                top: 0; left: 0;
+            }
+
+            /* Pulsante per minimizzare UI (Opzionale, per ora la lasciamo piccola) */
+            
+            /* Adatta Chat */
+            #chat-container {
+                width: 70%;
+                height: 150px;
+                bottom: 120px; /* Sopra i bottoni */
+                right: 10px;
+                background: rgba(0,0,0,0.2);
+            }
+            #chat-input { font-size: 14px; padding: 5px; }
+
+            /* Nascondi Logo o riducilo */
+            #sh-logo { width: 80px; bottom: 5px; left: 5px; opacity: 0.5; }
+
+            /* Overlay Login responsive */
+            h1 { font-size: 35px !important; }
+            #play-btn { font-size: 30px; }
+        }
     </style>
 </head>
 <body>
@@ -280,29 +227,19 @@ border: 2px solid #111;
         <button id="play-btn">Entra</button>
     </div>
 
-    <!-- NUOVA SCHEDA GIOCATORE -->
     <div id="ui-container-wrapper">
         <div id="ui-scale-wrapper">
             <div class="Texture">
-                <!-- Nome -->
                 <div class="nome_giocatore" id="hud-name">GIOCATORE</div>
-                
-                <!-- Label Skin -->
                 <div class="skin" id="skin-label">Skin: ...</div>
-                
-                <!-- Immagine + Frecce -->
                 <div class="immagine">
                     <button class="skin-arrow arrow-left" id="prev-skin-btn">&lt;</button>
                     <img id="hud-propic" src="" alt="Profile">
                     <button class="skin-arrow arrow-right" id="next-skin-btn">&gt;</button>
                 </div>
-
-                <!-- Microfono -->
                 <div class="microfono" id="mic-btn">
                     <i class="fa-solid fa-microphone-slash" id="mic-icon"></i>
                 </div>
-
-                <!-- Musica -->
                 <div class="musica" id="music-btn">
                     <i class="fa-solid fa-music" id="music-icon"></i>
                 </div>
@@ -317,10 +254,19 @@ border: 2px solid #111;
 
     <div id="chat-container">
         <div id="chat-messages"></div>
-        <input id="chat-input" type="text" placeholder="Premi invio per scrivere..." autocomplete="off">
+        <input id="chat-input" type="text" placeholder="Scrivi..." autocomplete="off">
     </div>
 
     <img id="sh-logo" src="./SH_Logo.gif" alt="Sputnik Homies">
+
+    <div id="mobile-controls">
+        <div id="joystick-zone"></div>
+        <div id="action-buttons">
+            <div class="mob-btn" id="btn-cam"><i class="fa-solid fa-eye"></i></div>
+            <div class="mob-btn" id="btn-jump"><i class="fa-solid fa-arrow-up"></i></div>
+            <div class="mob-btn" id="btn-shoot"><i class="fa-solid fa-crosshairs"></i></div>
+        </div>
+    </div>
 
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -328,8 +274,8 @@ border: 2px solid #111;
 
     <script type="module">
         const mudTexture = new THREE.TextureLoader().load('./mudball.png');
-        mudTexture.colorSpace = THREE.SRGBColorSpace; // Importante per i colori corretti
-        // --- VARIABILI MINIGAME (AGGIUNGI QUESTE) ---
+        mudTexture.colorSpace = THREE.SRGBColorSpace; 
+        
         const MUD_SPEED = 25.0;     
         const SHOT_COOLDOWN = 500;  
         const FREEZE_HITS = 5;      
@@ -341,6 +287,9 @@ border: 2px solid #111;
         let lastShotTime = 0;
         let scores = {}; 
 
+        // Rilevamento Mobile
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
         import * as THREE from 'three';
 
         // --- CONFIG ---
@@ -396,12 +345,10 @@ border: 2px solid #111;
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, W, H);
             
-            // Sfondo
             const pad = 6;
             ctx.fillStyle = "rgba(0,0,0,0)";
             drawRoundRect(ctx, pad, pad, W - pad*2, H - pad*2, 14);
             ctx.fill();
-            // Testo
             ctx.font = "28px Planewalker, sans-serif";
             ctx.fillStyle = "#ffff00";
             ctx.textAlign = "center";
@@ -461,43 +408,124 @@ border: 2px solid #111;
 
                 setupMusic();
                 document.getElementById('login-overlay').style.display = 'none';
-                document.getElementById('instructions').style.display = 'block';
                 
+                // Se non è mobile, mostra istruzioni PC
+                if(!isMobile) {
+                    document.getElementById('instructions').style.display = 'block';
+                }
+
                 init();
                 initSocket(); 
+                
+                // Se Mobile, inizializza Joystick
+                if(isMobile) setupMobileControls();
+
                 animate();
             };
 
             btn.addEventListener('click', startGame);
             input.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
+            // Supporto touch per il bottone play
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); startGame(); });
+        }
+
+        function setupMobileControls() {
+            // JOYSTICK (Sinistra)
+            const zone = document.getElementById('joystick-zone');
+            const manager = nipplejs.create({
+                zone: zone,
+                mode: 'static',
+                position: { left: '50%', top: '50%' },
+                color: 'white'
+            });
+
+            manager.on('move', (evt, data) => {
+                if (data.vector) {
+                    // Mappa il vettore su movement
+                    const forward = data.vector.y;
+                    const turn = data.vector.x;
+
+                    // Soglia per movimento
+                    moveForward = (forward > 0.3);
+                    moveBackward = (forward < -0.3);
+                    moveRight = (turn > 0.3);
+                    moveLeft = (turn < -0.3);
+                }
+            });
+
+            manager.on('end', () => {
+                moveForward = moveBackward = moveLeft = moveRight = false;
+            });
+
+            // CAMERA TOUCH (Tutto lo schermo tranne UI)
+            let lastTouchX = 0;
+            let lastTouchY = 0;
+            
+            document.addEventListener('touchstart', (e) => {
+                // Se tocchiamo il joystick o i bottoni, ignoriamo la rotazione
+                if(e.target.closest('#joystick-zone') || e.target.closest('.mob-btn') || e.target.closest('#chat-container')) return;
+                lastTouchX = e.touches[0].clientX;
+                lastTouchY = e.touches[0].clientY;
+            }, {passive: false});
+
+            document.addEventListener('touchmove', (e) => {
+                if(e.target.closest('#joystick-zone') || e.target.closest('.mob-btn') || e.target.closest('#chat-container')) return;
+                
+                const touchX = e.touches[0].clientX;
+                const touchY = e.touches[0].clientY;
+
+                const deltaX = touchX - lastTouchX;
+                const deltaY = touchY - lastTouchY;
+
+                theta -= deltaX * 0.005; 
+                phi += deltaY * 0.005;
+                phi = Math.max(-1.5, Math.min(1.5, phi));
+
+                lastTouchX = touchX;
+                lastTouchY = touchY;
+            }, {passive: false});
+
+            // BOTTONI
+            document.getElementById('btn-jump').addEventListener('touchstart', (e) => { 
+                e.preventDefault();
+                if(canJump) { velocity.y += 12; canJump = false; }
+            });
+            
+            document.getElementById('btn-shoot').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                shootBall();
+            });
+
+            document.getElementById('btn-cam').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                toggleThirdPerson();
+            });
+        }
+
+        function toggleThirdPerson() {
+            isThirdPerson = !isThirdPerson; 
+            avatarMesh.visible = isThirdPerson;
+            if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = isThirdPerson;
         }
 
         function init() {
             scene = new THREE.Scene();
 
-            // --- NUOVO CIELO CREPUSCOLARE (Stile Mario Kart DS) ---
+            // --- CIELO ---
             const canvas = document.createElement('canvas');
-            canvas.width = 1;
-            canvas.height = 32;
+            canvas.width = 1; canvas.height = 32;
             const context = canvas.getContext('2d');
             const gradient = context.createLinearGradient(0, 0, 0, 32);
-            
-            // Gradiente: Blu scuro -> Viola -> Arancio
-            gradient.addColorStop(0.0, '#0b001a'); // Zenith
+            gradient.addColorStop(0.0, '#0b001a');
             gradient.addColorStop(0.4, '#2d0a45'); 
             gradient.addColorStop(0.7, '#751e5e'); 
-            gradient.addColorStop(1.0, '#ffaa00'); // Orizzonte
-
+            gradient.addColorStop(1.0, '#ffaa00');
             context.fillStyle = gradient;
             context.fillRect(0, 0, 1, 32);
-
             const skyTexture = new THREE.CanvasTexture(canvas);
             skyTexture.colorSpace = THREE.SRGBColorSpace;
-            
             scene.background = skyTexture;
-            // Nebbia viola per fondersi con il cielo
             scene.fog = new THREE.Fog(0x2d0a45, 10, 60);
-            // -----------------------------------------------------
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             scene.add(camera);
@@ -541,19 +569,23 @@ border: 2px solid #111;
             document.body.appendChild(renderer.domElement);
 
             const instructions = document.getElementById('instructions');
-            instructions.addEventListener('click', () => { if (!isLocked) document.body.requestPointerLock(); });
             
-            document.addEventListener('pointerlockchange', () => {
-                isLocked = (document.pointerLockElement === document.body);
-                instructions.style.display = isLocked ? 'none' : 'block';
-            });
+            // Solo su Desktop attiviamo il Pointer Lock al click
+            if (!isMobile) {
+                instructions.addEventListener('click', () => { if (!isLocked) document.body.requestPointerLock(); });
+                
+                document.addEventListener('pointerlockchange', () => {
+                    isLocked = (document.pointerLockElement === document.body);
+                    instructions.style.display = isLocked ? 'none' : 'block';
+                });
 
-            document.addEventListener('mousemove', (e) => {
-                if(!isLocked) return;
-                theta -= e.movementX * 0.002;
-                phi += e.movementY * 0.002; 
-                phi = Math.max(-1.5, Math.min(1.5, phi));
-            });
+                document.addEventListener('mousemove', (e) => {
+                    if(!isLocked) return;
+                    theta -= e.movementX * 0.002;
+                    phi += e.movementY * 0.002; 
+                    phi = Math.max(-1.5, Math.min(1.5, phi));
+                });
+            }
 
             const chatInput = document.getElementById('chat-input');
             document.addEventListener('keydown', (e) => {
@@ -565,15 +597,23 @@ border: 2px solid #111;
                             chatInput.value = '';
                         }
                     }
-                    
-                    if (e.code === 'Escape') { chatInput.blur(); document.body.requestPointerLock(); }
+                    if (e.code === 'Escape') { 
+                        chatInput.blur(); 
+                        if(!isMobile) document.body.requestPointerLock(); 
+                    }
                     return;
                 }
                 if(isFrozen) return;
+                
+                // Shortcut PC
                 if (e.code === 'KeyF') shootBall();
-                if (e.code === 'Enter') { document.exitPointerLock(); chatInput.focus(); return; }
+                if (e.code === 'Enter') { 
+                    if(!isMobile) document.exitPointerLock(); 
+                    chatInput.focus(); return; 
+                }
                 if (e.code === 'KeyM') toggleMic();
                 if (e.code === 'KeyB') toggleMusic();
+                if (e.code === 'KeyV') toggleThirdPerson();
 
                 switch(e.code) {
                     case 'KeyW': case 'ArrowUp': moveForward = true; break;
@@ -581,14 +621,8 @@ border: 2px solid #111;
                     case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
                     case 'KeyD': case 'ArrowRight': moveRight = true; break;
                     case 'Space': if(canJump) { velocity.y += 12; canJump = false; } break;
-                    case 'KeyV': 
-                        isThirdPerson = !isThirdPerson; 
-                        avatarMesh.visible = isThirdPerson;
-                        if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = isThirdPerson;
-                        break;
                 }
             });
-    
 
             document.addEventListener('keyup', (e) => {
                 switch(e.code) {
@@ -598,6 +632,7 @@ border: 2px solid #111;
                     case 'KeyD': case 'ArrowRight': moveRight = false; break;
                 }
             });
+
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
@@ -614,40 +649,32 @@ border: 2px solid #111;
         }
 
         async function toggleMusic() {
-            // Se l'oggetto audio non esiste ancora, crealo
             if(!bgMusic) { 
                 bgMusic = new Audio(MUSIC_FILE); 
                 bgMusic.loop = true; 
                 bgMusic.volume = 0.3; 
             }
-            
             const btn = document.getElementById('music-btn');
             const icon = document.getElementById('music-icon');
-            
-            // Inverti lo stato
             isMusicOn = !isMusicOn;
 
             if(isMusicOn) {
                 try { 
                     await bgMusic.play(); 
-                    // Stile ATTIVO
                     btn.classList.add('music-on'); 
-                    icon.style.color = "#0088ff"; // Colore acceso (Blu)
+                    icon.style.color = "#0088ff";
                     icon.style.opacity = "1";
-                    // Opzionale: aggiungi effetto glow
                     icon.style.filter = "drop-shadow(0 0 10px #0088ff)";
                 } 
                 catch(e) { 
-                    // Se fallisce (es. blocco browser), torna allo stato spento
                     isMusicOn = false; 
                     console.warn("Autoplay bloccato", e); 
                 }
             } else { 
-                // Stile SPENTO
                 bgMusic.pause(); 
                 btn.classList.remove('music-on'); 
-                icon.style.color = "#888"; // Colore spento (Grigio)
-                icon.style.opacity = "0.5"; // Semitrasparente
+                icon.style.color = "#888";
+                icon.style.opacity = "0.5";
                 icon.style.filter = "none";
             }
         }
@@ -662,11 +689,11 @@ border: 2px solid #111;
             const icon = document.getElementById('mic-icon');
             if(isMicActive) { 
                 btn.classList.add('active'); 
-                icon.className = "fa-solid fa-microphone"; // Icona Microfono Attivo
+                icon.className = "fa-solid fa-microphone"; 
             } 
             else { 
                 btn.classList.remove('active'); 
-                icon.className = "fa-solid fa-microphone-slash"; // Icona Muto
+                icon.className = "fa-solid fa-microphone-slash"; 
             }
         }
 
@@ -826,12 +853,10 @@ border: 2px solid #111;
             scene.add(floor);
 
             // --- STANZA 1: L'ATRIO (SPAWN) ---
-            createWall(-6, 5, 0, 1, 10, 12); // Ovest
-            createWall(6, 5, 0, 1, 10, 12);  // Est
-            // Sud (Apertura larga)
+            createWall(-6, 5, 0, 1, 10, 12); 
+            createWall(6, 5, 0, 1, 10, 12);  
             createWall(-4.25, 5, 6, 4.5, 10, 1); 
             createWall(4.25, 5, 6, 4.5, 10, 1);
-            // Nord (Apertura larga)
             createWall(-4.25, 5, -6, 4.5, 10, 1);
             createWall(4.25, 5, -6, 4.5, 10, 1);
 
@@ -842,13 +867,11 @@ border: 2px solid #111;
             // --- STANZA 2: LA SALA GRANDE ---
             createWall(-8, 5, -16, 9, 10, 1); 
             createWall(8, 5, -16, 9, 10, 1);  
-            createWall(0, 5, -36, 22, 10, 1); // Nord
+            createWall(0, 5, -36, 22, 10, 1); 
             
-            // Ovest
             createWall(-11, 5, -21, 1, 10, 10); 
             createWall(-11, 5, -33, 1, 10, 6);  
             
-            // Est
             createWall(11, 5, -21, 1, 10, 10);
             createWall(11, 5, -33, 1, 10, 6);
 
@@ -860,12 +883,9 @@ border: 2px solid #111;
             // --- STANZA 4: IL SANTUARIO (EST) ---
             createWall(16, 5, -25, 10, 10, 1); 
             createWall(16, 5, -31, 10, 10, 1); 
-            
-            // Muro Ovest con Buco
             createWall(21, 5, -19.25, 1, 10, 11.5); 
             createWall(21, 5, -34.75, 1, 10, 7.5);
 
-            // Muri esterni Santuario
             createWall(35, 5, -26, 1, 10, 25); 
             createWall(28, 5, -39, 15, 10, 1); 
             createWall(28, 5, -13, 15, 10, 1); 
@@ -889,16 +909,12 @@ border: 2px solid #111;
                 });
                 const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
                 
-                // FIX LUCE:
                 const l = new THREE.PointLight(0xff6600, 2.0, 15); 
-                // Offset ridotto (0.2) e alzato (y+0.3) per centrare la fiamma
                 l.position.set(x + Math.sin(rot)*0.2, y + 0.3, z + Math.cos(rot)*0.2); 
-                
                 scene.add(l);
                 torchLights.push({ light: l, speed: 2+Math.random()*3 });
             };
 
-            // Posizionamento Torce
             createTorch(-5.4, 2.5, 0, Math.PI/2); 
             createTorch(5.4, 2.5, 0, -Math.PI/2);
             createTorch(-10.4, 3, -17, Math.PI/2);
@@ -912,18 +928,17 @@ border: 2px solid #111;
             createTorch(0, 2, 21.4, Math.PI);
         }
 
-
         function animate() {
             requestAnimationFrame(animate);
-            const dt = 0.016; // (o calcolato con clock)
+            const dt = 0.016; 
             if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
             const t = performance.now() * 0.001;
             torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
 
-             updateBullets(dt); 
+            updateBullets(dt); 
             
-            if(isLocked && !isFrozen) {
-                const dt = 0.016; 
+            // Logica Movimento: Se Locked (PC) o Mobile (Touch)
+            if((isLocked || isMobile) && !isFrozen) {
                 velocity.y -= GRAVITY * dt;
                 velocity.x -= velocity.x * 10.0 * dt;
                 velocity.z -= velocity.z * 10.0 * dt;
@@ -951,6 +966,7 @@ border: 2px solid #111;
             updateCamera();
             renderer.render(scene, camera);
         }
+
         function updateCamera() {
             const headPos = new THREE.Vector3().copy(playerGroup.position).add(new THREE.Vector3(0, 1.6, 0));
             let targetDist = isThirdPerson ? 3.5 : 0.1;
@@ -968,77 +984,64 @@ border: 2px solid #111;
             if (isThirdPerson) camera.lookAt(headPos);
             else { const target = idealCamPos.clone().sub(camOffset.clone().normalize().multiplyScalar(10)); camera.lookAt(target); }
         }
-// --- LOGICA PALLE DI FANGO (AGGIUNGI IN FONDO) ---
-function shootBall() {
-    if(isFrozen || !socket) return;
-    const now = Date.now();
-    if(now - lastShotTime < SHOT_COOLDOWN) return;
-    lastShotTime = now;
 
-    const dir = new THREE.Vector3(); 
-    camera.getWorldDirection(dir);
-    
-    // Punto di partenza: leggermente sopra e davanti al giocatore
-    const startPos = playerGroup.position.clone(); 
-    startPos.y += 1.5; 
-    
-    // Crea locale
-    createBullet(startPos, dir, socket.id); 
-}
+        function shootBall() {
+            if(isFrozen || !socket) return;
+            const now = Date.now();
+            if(now - lastShotTime < SHOT_COOLDOWN) return;
+            lastShotTime = now;
 
-function createBullet(pos, dir, shooterId) {
-    // Invece di SphereGeometry, usiamo uno SpriteMaterial
-    const mat = new THREE.SpriteMaterial({ map: mudTexture });
-    const mesh = new THREE.Sprite(mat);
-    
-    // Dimensione della palla (aggiusta 0.5 in base alla grandezza della tua png)
-    mesh.scale.set(0.5, 0.5, 1); 
-    
-    mesh.position.copy(pos);
-    scene.add(mesh);
-    
-    bullets.push({ 
-        mesh, 
-        velocity: dir.multiplyScalar(MUD_SPEED), 
-        shooterId, 
-        life: 2.0 
-    });
-}
-
-function updateBullets(dt) {
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        const b = bullets[i];
-        b.life -= dt;
-        b.mesh.position.add(b.velocity.clone().multiplyScalar(dt));
-
-        // Collisione con ME STESSO (se sparato da altri)
-        if (b.shooterId !== socket.id && !isFrozen) {
-            // Distanza semplice (hitbox sferica raggio 0.8)
-            if(b.mesh.position.distanceTo(playerGroup.position.clone().add(new THREE.Vector3(0,1,0))) < 0.8) {
-                // COLITO!
-                myHitsTaken++;
-                socket.emit('chatMessage', `__HIT__:${b.shooterId}:${socket.id}`);
-                
-                if(myHitsTaken >= FREEZE_HITS) {
-                    isFrozen = true;
-                    // Mostra effetto congelamento (cambia colore avatar locale)
-                    avatarMesh.material.color.setHex(0x00ffff); 
-                    socket.emit('skinChange', "FROZEN"); // Segnale visivo agli altri
-                    
-                    setTimeout(() => {
-                        isFrozen = false; myHitsTaken = 0;
-                        avatarMesh.material.color.setHex(0xffffff);
-                        socket.emit('skinChange', mySkin);
-                    }, FREEZE_TIME);
-                }
-                
-                scene.remove(b.mesh); bullets.splice(i, 1);
-                continue;
-            }
+            const dir = new THREE.Vector3(); 
+            camera.getWorldDirection(dir);
+            const startPos = playerGroup.position.clone(); 
+            startPos.y += 1.5; 
+            createBullet(startPos, dir, socket.id); 
         }
-        if (b.life <= 0) { scene.remove(b.mesh); bullets.splice(i, 1); }
-    }
-}   
+
+        function createBullet(pos, dir, shooterId) {
+            const mat = new THREE.SpriteMaterial({ map: mudTexture });
+            const mesh = new THREE.Sprite(mat);
+            mesh.scale.set(0.5, 0.5, 1); 
+            mesh.position.copy(pos);
+            scene.add(mesh);
+            bullets.push({ 
+                mesh, 
+                velocity: dir.multiplyScalar(MUD_SPEED), 
+                shooterId, 
+                life: 2.0 
+            });
+        }
+
+        function updateBullets(dt) {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.life -= dt;
+                b.mesh.position.add(b.velocity.clone().multiplyScalar(dt));
+
+                if (b.shooterId !== socket.id && !isFrozen) {
+                    if(b.mesh.position.distanceTo(playerGroup.position.clone().add(new THREE.Vector3(0,1,0))) < 0.8) {
+                        myHitsTaken++;
+                        socket.emit('chatMessage', `__HIT__:${b.shooterId}:${socket.id}`);
+                        
+                        if(myHitsTaken >= FREEZE_HITS) {
+                            isFrozen = true;
+                            avatarMesh.material.color.setHex(0x00ffff); 
+                            socket.emit('skinChange', "FROZEN"); 
+                            
+                            setTimeout(() => {
+                                isFrozen = false; myHitsTaken = 0;
+                                avatarMesh.material.color.setHex(0xffffff);
+                                socket.emit('skinChange', mySkin);
+                            }, FREEZE_TIME);
+                        }
+                        
+                        scene.remove(b.mesh); bullets.splice(i, 1);
+                        continue;
+                    }
+                }
+                if (b.life <= 0) { scene.remove(b.mesh); bullets.splice(i, 1); }
+            }
+        }   
     </script>
 </body>
 </html>
