@@ -3,1045 +3,203 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SputnikChat Mobile</title>
-    
-    <script src="https://unpkg.com/gifler@0.1.0/gifler.min.js"></script>
+    <title>SputnikChat — L'Isola Fantasma</title>
+    <meta name="theme-color" content="#0b0612">
+    <link rel="icon" href="./img/propic_rat.jpg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,700;1,400&family=Almendra:ital,wght@0,400;0,700;1,400&family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500;600;700;900&display=swap">
+    <link rel="stylesheet" href="./css/style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    
-    <style>
-        /* FONT */
-        @font-face {
-            font-family: 'Planewalker';
-            src: url('./Planewalker.woff') format('woff');
-            font-weight: normal;
-            font-style: normal;
-        }
-
-        /* RESET BOX MODEL */
-        * { box-sizing: border-box; -webkit-touch-callout: none; user-select: none; }
-
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            font-family: 'Planewalker', sans-serif; 
-            background: #111;
-            overscroll-behavior: none; /* Previene refresh su pull-down mobile */
-        }
-
-        button, input, select, textarea { font-family: 'Planewalker', sans-serif; }
-        canvas { display: block; }
-        .pointer-auto { pointer-events: auto; }
-
-        /* Login Overlay */
-        #login-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 100; color: white;
-            padding: 20px;
-        }
-        
-        #nickname-input { 
-            padding: 15px; font-size: 24px; text-align: center;
-            background-color: #222; color: #ffff00;
-            border: 2px solid #555; border-radius: 8px;
-            box-shadow: inset 4px 4px 8px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.5);
-            outline: none; transition: all 0.2s; width: 300px; max-width: 90%;
-        }
-        #nickname-input:focus { border-color: #ffff00; box-shadow: 0 0 20px rgba(255, 170, 0, 0.4); }
-
-        #play-btn { 
-            margin-top: 20px; padding: 10px 30px; font-size: 50px; cursor: pointer; 
-            letter-spacing: 1px; background: transparent; color: #ffff00; border: none;
-            text-shadow: 0 4px 0 #000; transition: transform 0.1s;
-        }
-        #play-btn:active { transform: translateY(4px); text-shadow: 0 0 0 #000; }
-
-        /* --- UI SCHEDA GIOCATORE --- */
-        #ui-container-wrapper {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            width: 300px;
-            height: 400px;
-            z-index: 20;
-            pointer-events: none;
-            transition: transform 0.3s, opacity 0.3s;
-        }
-
-        #ui-scale-wrapper {
-            transform: scale(0.13);
-            transform-origin: top left;
-            position: relative;
-            width: 2106px;
-            height: 2956px;
-            pointer-events: auto;
-        }
-
-        .Texture {
-            background-image: url("Texture.png"); 
-            border: 10px solid #333;
-            border-radius: 40px;
-            position: absolute;
-            left: 0px; top: 0px;
-            width: 2106px; height: 2956px;
-            z-index: 1;
-            box-shadow: inset 0 0 0 60px rgba(255, 255, 255, 0.9), inset 0 0 20px 20px rgba(0,0,0,0.2);
-        }
-
-        /* Elementi interni texture (invariati ma compressi per leggibilità) */
-        .nome_giocatore {
-            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 269px; top: 144px; width: 1560px; height: 212px; z-index: 2; color: #ffff00; font-size: 140px; display: flex; align-items: center; justify-content: center; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111;
-        }
-        .skin {
-            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 269px; top: 411px; width: 1560px; height: 211px; z-index: 3; color: #ccc; font-size: 100px; display: flex; align-items: center; justify-content: center; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111;
-        }
-        .immagine {
-            background-color: rgb(34, 32, 30); position: absolute; left: 270px; top: 694px; width: 1559px; height: 1560px; z-index: 6; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111; overflow: hidden; display: flex; align-items: center; justify-content: center;
-        }
-        .immagine img { width: 100%; height: 100%; object-fit: cover; }
-        .skin-arrow {
-            position: absolute; top: 0; bottom: 0; width: 200px; background: rgba(0,0,0,0); border: none; color: white; font-size: 150px; cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; font-family: 'Planewalker', sans-serif; transition: background 0.2s;
-        }
-        .skin-arrow:hover { background: rgba(255, 187, 0, 0.4); color: #ffff00; }
-        .arrow-left { left: 0; }
-        .arrow-right { right: 0; }
-        .microfono {
-            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 269px; top: 2326px; width: 752px; height: 492px; z-index: 4; cursor: pointer; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111; display: flex; align-items: center; justify-content: center; transition: background 0.2s;
-        }
-        .microfono:hover { background-color: rgba(255, 255, 255, 0.1); }
-        .microfono i { font-size: 200px; color: #cc0000; }
-        .microfono.active { background-color: rgba(0, 204, 0, 0.3); border-color: #00ff00; }
-        .microfono.active i { color: #00ff00; }
-        .musica {
-            background-color: rgba(34, 32, 30, 0.6); position: absolute; left: 1078px; top: 2326px; width: 751px; height: 492px; z-index: 5; cursor: pointer; box-shadow: inset -6px 6px 12px rgba(0, 0, 0, 0.9), inset 3px -3px 6px rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0,0,0,0.5); border: 2px solid #111; display: flex; align-items: center; justify-content: center; transition: background 0.2s;
-        }
-        .musica:hover { background-color: rgba(255, 255, 255, 0.1); }
-        .musica i { font-size: 200px; color: #888; }
-        .musica.music-on i { color: #0088ff; }
-        .musica.music-on { background-color: rgba(0, 100, 255, 0.2); border-color: #0088ff; }
-
-        /* UI GENERALE */
-        #instructions {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: white; background: rgba(0, 0, 0, 0.7); padding: 20px;
-            text-align: center; border-radius: 10px; z-index: 10; user-select: none; display: none;
-            font-size: 20px; width: 80%;
-        }
-
-        #chat-container {
-            position: absolute; bottom: 20px; right: 20px; width: 320px; height: 250px;
-            background: rgba(0, 0, 0, 0.5); border-radius: 8px; z-index: 50;
-            display: flex; flex-direction: column; padding: 10px; pointer-events: auto;
-        }
-        #chat-messages { flex-grow: 1; overflow-y: auto; color: white; font-size: 18px; margin-bottom: 5px; text-shadow: 1px 1px 1px black; }
-        .chat-name { color: #ffff00; margin-right: 5px; }
-        #chat-input { background: rgba(255,255,255,0.1); border: 1px solid #555; color: white; padding: 8px; border-radius: 4px; width: 100%; font-size: 16px; }
-
-        #sh-logo { position: fixed; left: 10px; bottom: 10px; z-index: 80; width: 140px; height: auto; pointer-events: none; }
-
-        /* ================= MOBILE CONTROLS ================= */
-        #mobile-controls {
-            display: none; /* Nascosto su PC */
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; /* Lascia passare i tocchi per la rotazione camera */
-            z-index: 90;
-        }
-
-        #joystick-zone {
-            position: absolute;
-            bottom: 40px; left: 40px;
-            width: 120px; height: 120px;
-            pointer-events: auto; /* Attiva il tocco per il joystick */
-        }
-
-        #action-buttons {
-            position: absolute;
-            bottom: 40px; right: 40px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            pointer-events: auto;
-        }
-
-        .mob-btn {
-            width: 70px; height: 70px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            color: white; font-size: 24px;
-            display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(4px);
-            touch-action: manipulation;
-        }
-        .mob-btn:active { background: rgba(255, 255, 0, 0.4); border-color: #ffff00; }
-        
-        #btn-shoot { background: rgba(255, 0, 0, 0.3); border-color: red; }
-        #btn-jump { margin-bottom: 20px; }
-
-        /* ================= MEDIA QUERIES (RESPONSIVE) ================= */
-        @media (max-width: 768px) {
-            /* Attiva controlli mobile */
-            #mobile-controls { display: block; }
-
-            /* Nascondi istruzioni PC */
-            #instructions { display: none !important; }
-
-            /* Riduci la scheda giocatore e mettila in alto a sinistra piccola */
-            #ui-container-wrapper {
-                transform-origin: top left;
-                transform: scale(0.6); 
-                top: 0; left: 0;
-            }
-
-            /* Pulsante per minimizzare UI (Opzionale, per ora la lasciamo piccola) */
-            
-            /* Adatta Chat */
-            #chat-container {
-                width: 70%;
-                height: 150px;
-                bottom: 120px; /* Sopra i bottoni */
-                right: 10px;
-                background: rgba(0,0,0,0.2);
-            }
-            #chat-input { font-size: 14px; padding: 5px; }
-
-            /* Nascondi Logo o riducilo */
-            #sh-logo { width: 80px; bottom: 5px; left: 5px; opacity: 0.5; }
-
-            /* Overlay Login responsive */
-            h1 { font-size: 35px !important; }
-            #play-btn { font-size: 30px; }
-        }
-    </style>
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+    </script>
 </head>
 <body>
+    <div id="vignette"></div>
 
-    <div id="login-overlay" class="pointer-auto">
-        <h1 style="font-size: 50px; margin-bottom: 0px;">SputnikChat</h1>
-        <p style="font-size: 20px; color: #ccc; margin-bottom: 15px;">Parla</p>
-        <input id="nickname-input" type="text" placeholder="Scegli Nickname" maxlength="16" autofocus>
-        <button id="play-btn">Entra</button>
+    <!-- SCHERMATA INIZIALE -->
+    <div id="title-screen" class="overlay">
+        <div class="fog fog-a"></div><div class="fog fog-b"></div>
+        <div class="title-inner">
+            <img src="./SH_Logo.gif" alt="Sputnik Homies" class="title-logo">
+            <h1 class="title-name">SputnikChat</h1>
+            <div class="title-sub"><span class="flourish"></span>L'Isola Fantasma<span class="flourish r"></span></div>
+            <button id="play-btn" class="play-btn"><span>Entra</span></button>
+            <p id="title-status" class="title-status">Le lanterne si accendono...</p>
+        </div>
     </div>
 
-    <div id="ui-container-wrapper">
-        <div id="ui-scale-wrapper">
-            <div class="Texture">
-                <div class="nome_giocatore" id="hud-name">GIOCATORE</div>
-                <div class="skin" id="skin-label">Skin: ...</div>
-                <div class="immagine">
-                    <button class="skin-arrow arrow-left" id="prev-skin-btn">&lt;</button>
-                    <img id="hud-propic" src="" alt="Profile">
-                    <button class="skin-arrow arrow-right" id="next-skin-btn">&gt;</button>
-                </div>
-                <div class="microfono" id="mic-btn">
-                    <i class="fa-solid fa-microphone-slash" id="mic-icon"></i>
-                </div>
-                <div class="musica" id="music-btn">
-                    <i class="fa-solid fa-music" id="music-icon"></i>
-                </div>
+    <!-- CREAZIONE PERSONAGGIO E CARD -->
+    <div id="creator" class="overlay hidden">
+        <div class="creator-stage">
+            <div id="creator-preview" class="creator-preview"></div>
+            <div class="creator-hint">Trascina per girare il personaggio</div>
+        </div>
+        <div class="creator-side tome">
+            <div class="creator-steps">
+                <span class="step" data-step="0"><b>I</b> Il Viandante</span>
+                <span class="step" data-step="1"><b>II</b> La Card del Potere</span>
+            </div>
+            <div id="creator-body" class="creator-body"></div>
+            <div class="creator-nav">
+                <button id="creator-back" class="btn">Indietro</button>
+                <button id="creator-next" class="btn btn-primary">Avanti</button>
             </div>
         </div>
     </div>
 
-    <div id="instructions">
-        <h1 style="font-size: 40px;">Clicca per Giocare</h1>
-        <p>Muoviti: <b>WASD / Frecce</b> + <b>SPAZIO</b><br>Chat: <b>INVIO</b><br>Voce: <b>M</b> | Musica: <b>B</b><br>Guarda: <b>MOUSE</b> <br> <b>Spara: </b> <b>F</b></p>
+    <!-- HUD DI GIOCO -->
+    <div id="hud" class="hidden">
+        <div id="power-card" title="La tua Card del Potere (C)">
+            <canvas id="power-card-canvas" width="315" height="440"></canvas>
+            <span class="kbd kbd-corner">C</span>
+        </div>
+
+        <div id="profile-card">
+            <div class="uf">
+                <div class="uf-portrait">
+                    <canvas id="pc-portrait" width="128" height="128"></canvas>
+                    <span class="uf-level" id="pc-level" title="Livello">1</span>
+                    <span id="net-dot" class="net-dot" title="Il portale"></span>
+                </div>
+                <div class="uf-plate">
+                    <div id="pc-name" class="pc-name">Viandante</div>
+                    <div id="pc-meta" class="pc-meta">Gloria 1000</div>
+                    <div class="pc-coins"><span class="sc-coin" data-icon="satellite"></span><span id="pc-coins">0</span></div>
+                </div>
+            </div>
+            <div class="actionbar">
+                <button class="slot-btn off" id="btn-mic" title="Voce (M)" data-icon="mic"><span class="kbd-mini">M</span></button>
+                <button class="slot-btn off" id="btn-music" title="Musica (B)" data-icon="music"><span class="kbd-mini">B</span></button>
+                <button class="slot-btn" data-panel="inventario" title="Bisaccia (I)" data-icon="bag"><span class="kbd-mini">I</span></button>
+                <button class="slot-btn" data-panel="card" title="Card del Potere (C)" data-icon="card"><span class="kbd-mini">C</span></button>
+                <button class="slot-btn" data-panel="amici" title="Compagnia (O)" data-icon="friends"><span class="kbd-mini">O</span><span id="req-badge" class="badge hidden">0</span></button>
+                <button class="slot-btn" data-panel="classifica" title="Albo dei Campioni (Tab)" data-icon="trophy"><span class="kbd-mini">Tab</span></button>
+                <button class="slot-btn" data-panel="collezione" title="Album delle Card (K)" data-icon="album"><span class="kbd-mini">K</span></button>
+                <button class="slot-btn" data-panel="impostazioni" title="Opzioni (P)" data-icon="cog"><span class="kbd-mini">P</span></button>
+            </div>
+        </div>
+
+        <div id="crest">
+            <img src="./SH_Logo.gif" alt="" class="crest-logo">
+            <div id="zone-name" class="zone-name">Isola Fantasma</div>
+            <div id="room-name" class="room-name hidden"></div>
+        </div>
+        <div id="zone-banner"><span class="zb-line"></span><span id="zone-banner-text"></span><span class="zb-line r"></span></div>
+
+        <div id="toasts"></div>
+        <div id="duel-ticker"></div>
+
+        <div id="minimap-wrap" title="Mappa (N)">
+            <canvas id="minimap" width="360" height="360"></canvas>
+            <div class="mm-north">N</div>
+        </div>
+
+        <div id="chat">
+            <div class="chat-tab">Taverna</div>
+            <div id="chat-messages"></div>
+            <input id="chat-input" type="text" placeholder="Invio per parlare..." maxlength="200" autocomplete="off">
+        </div>
+
+        <div id="prompt" class="hidden"></div>
+        <div id="crosshair" class="hidden"></div>
+        <div id="click-to-play" class="hidden">
+            <div class="ctp-box scroll">
+                <h2>Clicca per entrare nel mondo</h2>
+                <div class="keys">
+                    <span><i class="kbd">W</i><i class="kbd">A</i><i class="kbd">S</i><i class="kbd">D</i> cammina</span>
+                    <span><i class="kbd">Shift</i> corri</span>
+                    <span><i class="kbd">Spazio</i> salta</span>
+                    <span><i class="kbd">E</i> interagisci</span>
+                    <span><i class="kbd">F</i> lancia fango</span>
+                    <span><i class="kbd">1</i>-<i class="kbd">4</i> gesti</span>
+                    <span><i class="kbd">V</i> visuale</span>
+                    <span><i class="kbd">Invio</i> parla</span>
+                </div>
+                <p class="ctp-foot">Mouse per guardarti intorno · rotella per allontanare la visuale</p>
+            </div>
+        </div>
+        <div id="mud-splat" class="hidden"></div>
     </div>
 
-    <div id="chat-container">
-        <div id="chat-messages"></div>
-        <input id="chat-input" type="text" placeholder="Scrivi..." autocomplete="off">
-    </div>
-
-    <img id="sh-logo" src="./SH_Logo.gif" alt="Sputnik Homies">
-
-    <div id="mobile-controls">
-        <div id="joystick-zone"></div>
-        <div id="action-buttons">
-            <div class="mob-btn" id="btn-cam"><i class="fa-solid fa-eye"></i></div>
-            <div class="mob-btn" id="btn-jump"><i class="fa-solid fa-arrow-up"></i></div>
-            <div class="mob-btn" id="btn-shoot"><i class="fa-solid fa-crosshairs"></i></div>
+    <!-- MAPPA GRANDE -->
+    <div id="bigmap" class="overlay hidden">
+        <div class="bigmap-box">
+            <canvas id="bigmap-canvas" width="720" height="720"></canvas>
+            <button class="btn" id="bigmap-close">Arrotola la mappa</button>
         </div>
     </div>
 
-    <script type="importmap">
-        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
-    </script>
-
-    <script type="module">
-        const mudTexture = new THREE.TextureLoader().load('./mudball.png');
-        mudTexture.colorSpace = THREE.SRGBColorSpace; 
-        
-        const MUD_SPEED = 25.0;     
-        const SHOT_COOLDOWN = 500;  
-        const FREEZE_HITS = 5;      
-        const FREEZE_TIME = 5000;   
-        let bullets = []; 
-        let myScore = 0;
-        let myHitsTaken = 0;
-        let isFrozen = false;
-        let lastShotTime = 0;
-        let scores = {}; 
-
-        // Rilevamento Mobile
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
-        import * as THREE from 'three';
-
-        // --- CONFIG ---
-        const SOCKET_URL = "https://sputnikchat-1.onrender.com"; 
-        const MUSIC_FILE = "./soundtrack.mp3"; 
-
-        let scene, camera, renderer, loader, socket;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let canJump = false, isLocked = false, isThirdPerson = false;
-        let playerGroup, avatarMesh, theta = 0, phi = 0;
-        let velocity = new THREE.Vector3();
-        const GRAVITY = 30.0;
-        
-        let mySkin = "plebeo.png";
-        let myName = "Anonimo";
-        let gameInitialized = false;
-
-        const remotePlayers = {}; 
-        const wallMeshes = [], colliders = [], torchLights = [];
-        const cameraRaycaster = new THREE.Raycaster();
-        let wallTexture, floorTexture, torchAnimatedTexture;
-
-        let localStream = null;
-        const peers = {}; 
-        let isMicActive = false;
-        let bgMusic = null;
-        let isMusicOn = false;
-
-        let currentSkinIndex = 0;
-        const avatarOptions = [
-            { label: "Ratto", file: "Personaggi/Rat.png", propic: "Personaggi/Rat_propic.png" },
-            { label: "Alessandro", file: "Personaggi/Alessandro.png", propic: "Personaggi/Alessandro_propic.png" },
-            { label: "Francesco", file: "Personaggi/Francesco.png", propic: "Personaggi/Francesco_propic.png" }
-        ];
-
-        // --- UTILS PER TARGHETTE NOMI ---
-        function drawRoundRect(ctx, x, y, w, h, r) {
-            const rr = Math.min(r, w / 2, h / 2);
-            ctx.beginPath();
-            ctx.moveTo(x + rr, y);
-            ctx.arcTo(x + w, y, x + w, y + h, rr);
-            ctx.arcTo(x + w, y + h, x, y + h, rr);
-            ctx.arcTo(x, y + h, x, y, rr);
-            ctx.arcTo(x, y, x + w, y, rr);
-            ctx.closePath();
-        }
-
-        function createNameTagSprite(name) {
-            const text = (name && String(name).trim().length) ? String(name).trim() : "???";
-            const W = 256, H = 64;
-            const canvas = document.createElement('canvas');
-            canvas.width = W; canvas.height = H;
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, W, H);
-            
-            const pad = 6;
-            ctx.fillStyle = "rgba(0,0,0,0)";
-            drawRoundRect(ctx, pad, pad, W - pad*2, H - pad*2, 14);
-            ctx.fill();
-            ctx.font = "28px Planewalker, sans-serif";
-            ctx.fillStyle = "#ffff00";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.shadowColor = "rgba(0,0,0,0.9)";
-            ctx.shadowBlur = 6;
-            ctx.fillText(text.slice(0, 16), W / 2, H / 2);
-
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.colorSpace = THREE.SRGBColorSpace;
-            const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-            const spr = new THREE.Sprite(mat);
-            spr.renderOrder = 999;
-            spr.scale.set(0.9, 0.2, 1);
-            spr.userData.__name = text;
-            return spr;
-        }
-
-        function setOrUpdateNameTag(parentObj, newName) {
-            if(!parentObj) return;
-            const text = (newName && String(newName).trim().length) ? String(newName).trim() : "???";
-            const old = parentObj.userData.nameTag;
-            if (old && old.userData.__name === text) return;
-            if (old) {
-                if (old.material && old.material.map) old.material.map.dispose();
-                if (old.material) old.material.dispose();
-                parentObj.remove(old);
-            }
-            const tag = createNameTagSprite(text);
-            tag.position.set(0, 1.6, 0); 
-            parentObj.add(tag);
-            parentObj.userData.nameTag = tag;
-        }
-
-        setupLogin();
-
-        function setupLogin() {
-            const btn = document.getElementById('play-btn');
-            const input = document.getElementById('nickname-input');
-            
-            const startGame = async () => {
-                if(gameInitialized) return; 
-                gameInitialized = true;
-
-                const val = input.value.trim();
-                if(val.length > 0) myName = val;
-                document.getElementById('hud-name').innerText = myName;
-
-                try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-                    localStream.getAudioTracks()[0].enabled = false;
-                    console.log("Microfono OK");
-                } catch (err) { 
-                    console.warn("Microfono negato o non disponibile:", err); 
-                    localStream = null; 
-                }
-
-                setupMusic();
-                document.getElementById('login-overlay').style.display = 'none';
-                
-                // Se non è mobile, mostra istruzioni PC
-                if(!isMobile) {
-                    document.getElementById('instructions').style.display = 'block';
-                }
-
-                init();
-                initSocket(); 
-                
-                // Se Mobile, inizializza Joystick
-                if(isMobile) setupMobileControls();
-
-                animate();
-            };
-
-            btn.addEventListener('click', startGame);
-            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
-            // Supporto touch per il bottone play
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); startGame(); });
-        }
-
-        function setupMobileControls() {
-            // JOYSTICK (Sinistra)
-            const zone = document.getElementById('joystick-zone');
-            const manager = nipplejs.create({
-                zone: zone,
-                mode: 'static',
-                position: { left: '50%', top: '50%' },
-                color: 'white'
-            });
-
-            manager.on('move', (evt, data) => {
-                if (data.vector) {
-                    // Mappa il vettore su movement
-                    const forward = data.vector.y;
-                    const turn = data.vector.x;
-
-                    // Soglia per movimento
-                    moveForward = (forward > 0.3);
-                    moveBackward = (forward < -0.3);
-                    moveRight = (turn > 0.3);
-                    moveLeft = (turn < -0.3);
-                }
-            });
-
-            manager.on('end', () => {
-                moveForward = moveBackward = moveLeft = moveRight = false;
-            });
-
-            // CAMERA TOUCH (Tutto lo schermo tranne UI)
-            let lastTouchX = 0;
-            let lastTouchY = 0;
-            
-            document.addEventListener('touchstart', (e) => {
-                // Se tocchiamo il joystick o i bottoni, ignoriamo la rotazione
-                if(e.target.closest('#joystick-zone') || e.target.closest('.mob-btn') || e.target.closest('#chat-container')) return;
-                lastTouchX = e.touches[0].clientX;
-                lastTouchY = e.touches[0].clientY;
-            }, {passive: false});
-
-            document.addEventListener('touchmove', (e) => {
-                if(e.target.closest('#joystick-zone') || e.target.closest('.mob-btn') || e.target.closest('#chat-container')) return;
-                
-                const touchX = e.touches[0].clientX;
-                const touchY = e.touches[0].clientY;
-
-                const deltaX = touchX - lastTouchX;
-                const deltaY = touchY - lastTouchY;
-
-                theta -= deltaX * 0.005; 
-                phi += deltaY * 0.005;
-                phi = Math.max(-1.5, Math.min(1.5, phi));
-
-                lastTouchX = touchX;
-                lastTouchY = touchY;
-            }, {passive: false});
-
-            // BOTTONI
-            document.getElementById('btn-jump').addEventListener('touchstart', (e) => { 
-                e.preventDefault();
-                if(canJump) { velocity.y += 12; canJump = false; }
-            });
-            
-            document.getElementById('btn-shoot').addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                shootBall();
-            });
-
-            document.getElementById('btn-cam').addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                toggleThirdPerson();
-            });
-        }
-
-        function toggleThirdPerson() {
-            isThirdPerson = !isThirdPerson; 
-            avatarMesh.visible = isThirdPerson;
-            if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = isThirdPerson;
-        }
-
-        function init() {
-            scene = new THREE.Scene();
-
-            // --- CIELO ---
-            const canvas = document.createElement('canvas');
-            canvas.width = 1; canvas.height = 32;
-            const context = canvas.getContext('2d');
-            const gradient = context.createLinearGradient(0, 0, 0, 32);
-            gradient.addColorStop(0.0, '#0b001a');
-            gradient.addColorStop(0.4, '#2d0a45'); 
-            gradient.addColorStop(0.7, '#751e5e'); 
-            gradient.addColorStop(1.0, '#ffaa00');
-            context.fillStyle = gradient;
-            context.fillRect(0, 0, 1, 32);
-            const skyTexture = new THREE.CanvasTexture(canvas);
-            skyTexture.colorSpace = THREE.SRGBColorSpace;
-            scene.background = skyTexture;
-            scene.fog = new THREE.Fog(0x2d0a45, 10, 60);
-
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            scene.add(camera);
-
-            loader = new THREE.TextureLoader();
-            const loadTex = (p) => loader.load(p, (t) => t.colorSpace = THREE.SRGBColorSpace);
-            
-            wallTexture = loadTex('./muro.jpg');
-            floorTexture = loadTex('./pavimento.jpg');
-            if(floorTexture) { floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(10, 10); }
-
-            const gifCanvas = document.createElement('canvas');
-            gifCanvas.width = 512; gifCanvas.height = 512;
-            torchAnimatedTexture = new THREE.CanvasTexture(gifCanvas);
-            torchAnimatedTexture.colorSpace = THREE.SRGBColorSpace;
-            torchAnimatedTexture.minFilter = THREE.LinearFilter; 
-            try { window.gifler('./torcia.gif').animate(gifCanvas); } catch(e){}
-
-            playerGroup = new THREE.Group();
-            scene.add(playerGroup);
-
-            const avatarGeo = new THREE.PlaneGeometry(0.8, 1.7);
-            const avatarMat = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 });
-            avatarMesh = new THREE.Mesh(avatarGeo, avatarMat);
-            avatarMesh.position.set(0, 0.85, 0); 
-            avatarMesh.visible = false;
-            playerGroup.add(avatarMesh);
-
-            setOrUpdateNameTag(playerGroup, myName);
-            if(playerGroup.userData.nameTag) playerGroup.userData.nameTag.visible = false;
-
-            setupAvatarUI();
-            setupMicButton();
-            buildLevel();
-
-            const ambient = new THREE.AmbientLight(0xffffff, 0.2);
-            scene.add(ambient);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            const instructions = document.getElementById('instructions');
-            
-            // Solo su Desktop attiviamo il Pointer Lock al click
-            if (!isMobile) {
-                instructions.addEventListener('click', () => { if (!isLocked) document.body.requestPointerLock(); });
-                
-                document.addEventListener('pointerlockchange', () => {
-                    isLocked = (document.pointerLockElement === document.body);
-                    instructions.style.display = isLocked ? 'none' : 'block';
-                });
-
-                document.addEventListener('mousemove', (e) => {
-                    if(!isLocked) return;
-                    theta -= e.movementX * 0.002;
-                    phi += e.movementY * 0.002; 
-                    phi = Math.max(-1.5, Math.min(1.5, phi));
-                });
-            }
-
-            const chatInput = document.getElementById('chat-input');
-            document.addEventListener('keydown', (e) => {
-                if (document.activeElement === chatInput) {
-                    if (e.code === 'Enter') {
-                        const txt = chatInput.value.trim();
-                        if (txt.length > 0 && socket) {
-                            socket.emit('chatMessage', txt);
-                            chatInput.value = '';
-                        }
-                    }
-                    if (e.code === 'Escape') { 
-                        chatInput.blur(); 
-                        if(!isMobile) document.body.requestPointerLock(); 
-                    }
-                    return;
-                }
-                if(isFrozen) return;
-                
-                // Shortcut PC
-                if (e.code === 'KeyF') shootBall();
-                if (e.code === 'Enter') { 
-                    if(!isMobile) document.exitPointerLock(); 
-                    chatInput.focus(); return; 
-                }
-                if (e.code === 'KeyM') toggleMic();
-                if (e.code === 'KeyB') toggleMusic();
-                if (e.code === 'KeyV') toggleThirdPerson();
-
-                switch(e.code) {
-                    case 'KeyW': case 'ArrowUp': moveForward = true; break;
-                    case 'KeyS': case 'ArrowDown': moveBackward = true; break;
-                    case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
-                    case 'KeyD': case 'ArrowRight': moveRight = true; break;
-                    case 'Space': if(canJump) { velocity.y += 12; canJump = false; } break;
-                }
-            });
-
-            document.addEventListener('keyup', (e) => {
-                switch(e.code) {
-                    case 'KeyW': case 'ArrowUp': moveForward = false; break;
-                    case 'KeyS': case 'ArrowDown': moveBackward = false; break;
-                    case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
-                    case 'KeyD': case 'ArrowRight': moveRight = false; break;
-                }
-            });
-
-            window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
-        }
-
-
-        function setupMusic() {
-            bgMusic = new Audio(MUSIC_FILE);
-            bgMusic.loop = true;
-            bgMusic.volume = 0.3;
-            document.getElementById('music-btn').addEventListener('click', toggleMusic);
-        }
-
-        async function toggleMusic() {
-            if(!bgMusic) { 
-                bgMusic = new Audio(MUSIC_FILE); 
-                bgMusic.loop = true; 
-                bgMusic.volume = 0.3; 
-            }
-            const btn = document.getElementById('music-btn');
-            const icon = document.getElementById('music-icon');
-            isMusicOn = !isMusicOn;
-
-            if(isMusicOn) {
-                try { 
-                    await bgMusic.play(); 
-                    btn.classList.add('music-on'); 
-                    icon.style.color = "#0088ff";
-                    icon.style.opacity = "1";
-                    icon.style.filter = "drop-shadow(0 0 10px #0088ff)";
-                } 
-                catch(e) { 
-                    isMusicOn = false; 
-                    console.warn("Autoplay bloccato", e); 
-                }
-            } else { 
-                bgMusic.pause(); 
-                btn.classList.remove('music-on'); 
-                icon.style.color = "#888";
-                icon.style.opacity = "0.5";
-                icon.style.filter = "none";
-            }
-        }
-
-
-        function setupMicButton() { document.getElementById('mic-btn').addEventListener('click', toggleMic); }
-        function toggleMic() {
-            if(!localStream) { alert("Microfono non disponibile."); return; }
-            isMicActive = !isMicActive;
-            localStream.getAudioTracks()[0].enabled = isMicActive;
-            const btn = document.getElementById('mic-btn');
-            const icon = document.getElementById('mic-icon');
-            if(isMicActive) { 
-                btn.classList.add('active'); 
-                icon.className = "fa-solid fa-microphone"; 
-            } 
-            else { 
-                btn.classList.remove('active'); 
-                icon.className = "fa-solid fa-microphone-slash"; 
-            }
-        }
-
-        function initSocket() {
-            console.log("Inizializzazione Socket...");
-            socket = io(SOCKET_URL);
-
-            socket.on('connect', () => {
-                console.log("Connesso. ID:", socket.id);
-                socket.emit('playerMove', { 
-                    x: playerGroup.position.x, y: playerGroup.position.y + 0.85, z: playerGroup.position.z, 
-                    theta: theta, skin: mySkin, name: myName 
-                });
-                socket.emit('skinChange', mySkin);
-            });
-
-            socket.on('currentPlayers', (players) => {
-                Object.keys(players).forEach((id) => {
-                    if (id !== socket.id) {
-                        addRemotePlayer(id, players[id]);
-                        if(!peers[id]) createPeer(id, socket.id, localStream);
-                    }
-                });
-            });
-
-            socket.on('newPlayer', (data) => {
-                console.log("Nuovo player:", data.id);
-                addRemotePlayer(data.id, data.player);
-            });
-
-            socket.on('userJoined', payload => {
-                const peer = addPeer(payload.signal, payload.callerID, localStream);
-                peers[payload.callerID] = peer;
-            });
-
-            socket.on('receivingReturnedSignal', payload => {
-                const item = peers[payload.id];
-                if(item) item.signal(payload.signal);
-            });
-
-            socket.on('playerMoved', (data) => {
-                const p = remotePlayers[data.id];
-                if (p) {
-                    p.position.set(data.x, data.y, data.z);
-                    p.rotation.y = data.theta + Math.PI;
-                    if (data.skin && p.userData.currentSkin !== data.skin) updateRemoteSkin(p, data.skin);
-                    if(data.name) setOrUpdateNameTag(p, data.name);
-                } else if(data.id !== socket.id) {
-                    addRemotePlayer(data.id, data);
-                }
-            });
-
-            socket.on('playerSkinChanged', (data) => {
-                const p = remotePlayers[data.id];
-                if (p) updateRemoteSkin(p, data.skin);
-            });
-
-            socket.on('chatMessage', (data) => addChatMessage(data.name, data.text));
-
-            socket.on('playerDisconnected', (id) => {
-                if (remotePlayers[id]) { scene.remove(remotePlayers[id]); delete remotePlayers[id]; }
-                if (peers[id]) { peers[id].destroy(); delete peers[id]; }
-                const el = document.getElementById(`audio-${id}`);
-                if(el) el.remove();
-            });
-        }
-
-        function createPeer(u, c, s) { 
-            const p = new SimplePeer({ initiator: true, trickle: false, stream: s }); 
-            p.on("signal", sig => socket.emit("sendingSignal", { userToSignal: u, callerID: c, signal: sig })); 
-            p.on("stream", st => addAudioElement(u, st)); 
-            peers[u] = p; 
-        }
-
-        function addPeer(sig, c, s) { 
-            const p = new SimplePeer({ initiator: false, trickle: false, stream: s }); 
-            p.on("signal", sig => socket.emit("returningSignal", { signal: sig, callerID: c })); 
-            p.on("stream", st => addAudioElement(c, st)); 
-            p.signal(sig); 
-            return p; 
-        }
-
-        function addAudioElement(id, s) { 
-            const a = document.createElement('audio'); a.srcObject = s; a.autoplay = true; a.id = `audio-${id}`; document.body.appendChild(a); 
-        }
-
-        function addChatMessage(n, t) { 
-            const c = document.getElementById('chat-messages'); 
-            const d = document.createElement('div'); 
-            d.innerHTML = `<span class="chat-name">${n}:</span> ${t}`; 
-            c.appendChild(d); c.scrollTop = c.scrollHeight; 
-        }
-        
-        function addRemotePlayer(id, data) { 
-            if(remotePlayers[id]) return;
-            const g = new THREE.PlaneGeometry(0.8, 1.7); 
-            const m = new THREE.MeshStandardMaterial({ transparent: true, side: THREE.DoubleSide, alphaTest: 0.5 }); 
-            const mesh = new THREE.Mesh(g, m); 
-            const safeY = (data.y !== undefined && data.y !== null) ? Math.max(0.85, data.y) : 0.85;
-            mesh.position.set(data.x || 0, safeY, data.z || 0); 
-            
-            updateRemoteSkin(mesh, data.skin || "plebeo.png"); 
-            setOrUpdateNameTag(mesh, data.name || "Anonimo");
-
-            scene.add(mesh); 
-            remotePlayers[id] = mesh; 
-        }
-        
-        function updateRemoteSkin(mesh, f) { 
-            const skinFile = f || "plebeo.png";
-            if (mesh.userData.currentSkin === skinFile) return;
-            loader.load(`./${skinFile}`, t => { 
-                t.colorSpace = THREE.SRGBColorSpace; 
-                mesh.material.map = t; 
-                mesh.material.needsUpdate = true; 
-                mesh.userData.currentSkin = skinFile;
-            }, undefined, (err) => {
-                if (skinFile !== "plebeo.png") updateRemoteSkin(mesh, "plebeo.png");
-            }); 
-        }
-        
-        function setupAvatarUI() { 
-            currentSkinIndex = Math.floor(Math.random() * avatarOptions.length);
-            updateLocalSkin();
-            document.getElementById('prev-skin-btn').addEventListener('click', () => {
-                currentSkinIndex--; if(currentSkinIndex < 0) currentSkinIndex = avatarOptions.length - 1; updateLocalSkin();
-            });
-            document.getElementById('next-skin-btn').addEventListener('click', () => {
-                currentSkinIndex++; if(currentSkinIndex >= avatarOptions.length) currentSkinIndex = 0; updateLocalSkin();
-            });
-        }
-
-        function updateLocalSkin() {
-            const opt = avatarOptions[currentSkinIndex];
-            mySkin = opt.file;
-            document.getElementById('skin-label').innerText = "Skin: " + opt.label;
-            if(opt.propic) document.getElementById('hud-propic').src = `./${opt.propic}`;
-
-            loader.load(`./${mySkin}`, t => { 
-                t.colorSpace = THREE.SRGBColorSpace; 
-                avatarMesh.material.map = t; 
-                avatarMesh.material.needsUpdate = true; 
-            }); 
-            if(socket && socket.connected) socket.emit('skinChange', mySkin);
-        }
-
-        function checkCol(pos) { const min = new THREE.Vector3(pos.x - 0.5, 0, pos.z - 0.5); const max = new THREE.Vector3(pos.x + 0.5, 2, pos.z + 0.5); const box = new THREE.Box3(min, max); return colliders.some(c => box.intersectsBox(c)); }
-        function createWall(x,y,z,w,h,d) { const g = new THREE.BoxGeometry(w,h,d); const t = wallTexture ? wallTexture.clone() : null; if(t) { t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(Math.max(w,d)/4, h/4); t.needsUpdate=true; } const m = new THREE.MeshStandardMaterial({ map: t, color: t ? 0xffffff : 0x888888 }); const mesh = new THREE.Mesh(g, m); mesh.position.set(x,y,z); scene.add(mesh); colliders.push(new THREE.Box3().setFromObject(mesh)); wallMeshes.push(mesh); }
-        
-        function buildLevel() {
-            // --- 1. PAVIMENTO ---
-            const floorGeo = new THREE.PlaneGeometry(150, 150);
-            if(floorTexture) floorTexture.repeat.set(15, 15);
-            const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture });
-            const floor = new THREE.Mesh(floorGeo, floorMat); 
-            floor.rotation.x = -Math.PI/2; 
-            scene.add(floor);
-
-            // --- STANZA 1: L'ATRIO (SPAWN) ---
-            createWall(-6, 5, 0, 1, 10, 12); 
-            createWall(6, 5, 0, 1, 10, 12);  
-            createWall(-4.25, 5, 6, 4.5, 10, 1); 
-            createWall(4.25, 5, 6, 4.5, 10, 1);
-            createWall(-4.25, 5, -6, 4.5, 10, 1);
-            createWall(4.25, 5, -6, 4.5, 10, 1);
-
-            // --- CORRIDOIO NORD ---
-            createWall(-4, 5, -11, 1, 10, 10); 
-            createWall(4, 5, -11, 1, 10, 10);  
-
-            // --- STANZA 2: LA SALA GRANDE ---
-            createWall(-8, 5, -16, 9, 10, 1); 
-            createWall(8, 5, -16, 9, 10, 1);  
-            createWall(0, 5, -36, 22, 10, 1); 
-            
-            createWall(-11, 5, -21, 1, 10, 10); 
-            createWall(-11, 5, -33, 1, 10, 6);  
-            
-            createWall(11, 5, -21, 1, 10, 10);
-            createWall(11, 5, -33, 1, 10, 6);
-
-            // --- STANZA 3: L'ARMERIA (OVEST) ---
-            createWall(-25, 5, -36, 30, 10, 1); 
-            createWall(-25, 5, -16, 30, 10, 1); 
-            createWall(-40, 5, -26, 1, 10, 21); 
-
-            // --- STANZA 4: IL SANTUARIO (EST) ---
-            createWall(16, 5, -25, 10, 10, 1); 
-            createWall(16, 5, -31, 10, 10, 1); 
-            createWall(21, 5, -19.25, 1, 10, 11.5); 
-            createWall(21, 5, -34.75, 1, 10, 7.5);
-
-            createWall(35, 5, -26, 1, 10, 25); 
-            createWall(28, 5, -39, 15, 10, 1); 
-            createWall(28, 5, -13, 15, 10, 1); 
-            createWall(28, 5, -26, 4, 10, 4);  
-
-            // --- STANZA 5: LA CRIPTA SEGRETA (SUD) ---
-            createWall(-2.5, 5, 9, 1, 10, 6);
-            createWall(2.5, 5, 9, 1, 10, 6);
-            createWall(-5, 5, 12, 6, 10, 1); 
-            createWall(5, 5, 12, 6, 10, 1);  
-            createWall(-8, 5, 17, 1, 10, 10); 
-            createWall(8, 5, 17, 1, 10, 10);  
-            createWall(0, 5, 22, 17, 10, 1);  
-
-            // --- LUCI ALLINEATE ---
-            const createTorch = (x,y,z,rot) => {
-                const geo = new THREE.PlaneGeometry(2.0, 2.0); 
-                const mat = new THREE.MeshBasicMaterial({ 
-                    map: torchAnimatedTexture, 
-                    transparent: true, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false 
-                });
-                const mesh = new THREE.Mesh(geo, mat); mesh.position.set(x,y,z); mesh.rotation.y = rot; scene.add(mesh);
-                
-                const l = new THREE.PointLight(0xff6600, 2.0, 15); 
-                l.position.set(x + Math.sin(rot)*0.2, y + 0.3, z + Math.cos(rot)*0.2); 
-                scene.add(l);
-                torchLights.push({ light: l, speed: 2+Math.random()*3 });
-            };
-
-            createTorch(-5.4, 2.5, 0, Math.PI/2); 
-            createTorch(5.4, 2.5, 0, -Math.PI/2);
-            createTorch(-10.4, 3, -17, Math.PI/2);
-            createTorch(10.4, 3, -17, -Math.PI/2);
-            createTorch(0, 3, -35.4, Math.PI);
-            createTorch(-20, 2.5, -35.4, Math.PI);
-            createTorch(-30, 2.5, -35.4, Math.PI);
-            createTorch(-39.4, 2.5, -26, Math.PI/2);
-            createTorch(28, 2.5, -38.4, Math.PI);
-            createTorch(28, 2.5, -13.6, 0);       
-            createTorch(0, 2, 21.4, Math.PI);
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const dt = 0.016; 
-            if(torchAnimatedTexture) torchAnimatedTexture.needsUpdate = true;
-            const t = performance.now() * 0.001;
-            torchLights.forEach(l => l.intensity = 30 + Math.sin(t*l.speed)*5 + Math.random()*2);
-
-            updateBullets(dt); 
-            
-            // Logica Movimento: Se Locked (PC) o Mobile (Touch)
-            if((isLocked || isMobile) && !isFrozen) {
-                velocity.y -= GRAVITY * dt;
-                velocity.x -= velocity.x * 10.0 * dt;
-                velocity.z -= velocity.z * 10.0 * dt;
-
-                const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).normalize().negate();
-                const right = new THREE.Vector3(Math.sin(theta - Math.PI/2), 0, Math.cos(theta - Math.PI/2)).normalize().negate();
-                const speed = 150.0;
-
-                if(moveForward) velocity.add(fwd.clone().multiplyScalar(speed * dt));
-                if(moveBackward) velocity.add(fwd.clone().multiplyScalar(-speed * dt));
-                if(moveLeft) velocity.add(right.clone().multiplyScalar(-speed * dt));
-                if(moveRight) velocity.add(right.clone().multiplyScalar(speed * dt));
-
-                const dx = velocity.x * dt; playerGroup.position.x += dx;
-                if(checkCol(playerGroup.position)) { playerGroup.position.x -= dx; velocity.x = 0; }
-                const dz = velocity.z * dt; playerGroup.position.z += dz;
-                if(checkCol(playerGroup.position)) { playerGroup.position.z -= dz; velocity.z = 0; }
-                playerGroup.position.y += velocity.y * dt;
-                if(playerGroup.position.y < 0) { playerGroup.position.y = 0; velocity.y = 0; canJump = true; }
-
-                if (socket && socket.connected) {
-                    socket.emit('playerMove', { x: playerGroup.position.x, y: playerGroup.position.y + 0.85, z: playerGroup.position.z, theta: theta, skin: mySkin, name: myName });
-                }
-            }
-            updateCamera();
-            renderer.render(scene, camera);
-        }
-
-        function updateCamera() {
-            const headPos = new THREE.Vector3().copy(playerGroup.position).add(new THREE.Vector3(0, 1.6, 0));
-            let targetDist = isThirdPerson ? 3.5 : 0.1;
-            const camOffset = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.sin(phi), Math.cos(theta) * Math.cos(phi)).multiplyScalar(targetDist);
-            const idealCamPos = headPos.clone().add(camOffset);
-            if (isThirdPerson) {
-                const rayDir = new THREE.Vector3().subVectors(idealCamPos, headPos).normalize();
-                cameraRaycaster.set(headPos, rayDir);
-                cameraRaycaster.far = targetDist;
-                const hits = cameraRaycaster.intersectObjects(wallMeshes);
-                if(hits.length > 0) idealCamPos.copy(headPos).add(rayDir.multiplyScalar(hits[0].distance - 0.2));
-                avatarMesh.rotation.y = theta + Math.PI;
-            }
-            camera.position.copy(idealCamPos);
-            if (isThirdPerson) camera.lookAt(headPos);
-            else { const target = idealCamPos.clone().sub(camOffset.clone().normalize().multiplyScalar(10)); camera.lookAt(target); }
-        }
-
-        function shootBall() {
-            if(isFrozen || !socket) return;
-            const now = Date.now();
-            if(now - lastShotTime < SHOT_COOLDOWN) return;
-            lastShotTime = now;
-
-            const dir = new THREE.Vector3(); 
-            camera.getWorldDirection(dir);
-            const startPos = playerGroup.position.clone(); 
-            startPos.y += 1.5; 
-            createBullet(startPos, dir, socket.id); 
-        }
-
-        function createBullet(pos, dir, shooterId) {
-            const mat = new THREE.SpriteMaterial({ map: mudTexture });
-            const mesh = new THREE.Sprite(mat);
-            mesh.scale.set(0.5, 0.5, 1); 
-            mesh.position.copy(pos);
-            scene.add(mesh);
-            bullets.push({ 
-                mesh, 
-                velocity: dir.multiplyScalar(MUD_SPEED), 
-                shooterId, 
-                life: 2.0 
-            });
-        }
-
-        function updateBullets(dt) {
-            for (let i = bullets.length - 1; i >= 0; i--) {
-                const b = bullets[i];
-                b.life -= dt;
-                b.mesh.position.add(b.velocity.clone().multiplyScalar(dt));
-
-                if (b.shooterId !== socket.id && !isFrozen) {
-                    if(b.mesh.position.distanceTo(playerGroup.position.clone().add(new THREE.Vector3(0,1,0))) < 0.8) {
-                        myHitsTaken++;
-                        socket.emit('chatMessage', `__HIT__:${b.shooterId}:${socket.id}`);
-                        
-                        if(myHitsTaken >= FREEZE_HITS) {
-                            isFrozen = true;
-                            avatarMesh.material.color.setHex(0x00ffff); 
-                            socket.emit('skinChange', "FROZEN"); 
-                            
-                            setTimeout(() => {
-                                isFrozen = false; myHitsTaken = 0;
-                                avatarMesh.material.color.setHex(0xffffff);
-                                socket.emit('skinChange', mySkin);
-                            }, FREEZE_TIME);
-                        }
-                        
-                        scene.remove(b.mesh); bullets.splice(i, 1);
-                        continue;
-                    }
-                }
-                if (b.life <= 0) { scene.remove(b.mesh); bullets.splice(i, 1); }
-            }
-        }   
-    </script>
+    <!-- PANNELLI -->
+    <div id="panel-root" class="hidden">
+        <div class="panel">
+            <div class="panel-head">
+                <h2 id="panel-title">Pannello</h2>
+                <button class="panel-close" id="panel-close" aria-label="Chiudi" data-icon="close"></button>
+            </div>
+            <div id="panel-body" class="panel-body"></div>
+        </div>
+    </div>
+
+    <!-- HUD DUELLO -->
+    <div id="duel-hud" class="hidden">
+        <div class="dh-top">
+            <div class="dh-side dh-a">
+                <img class="dh-portrait" id="dh-portrait-a" alt="">
+                <div class="dh-barbox">
+                    <div class="dh-name" id="dh-name-a">A</div>
+                    <div class="dh-bar"><div class="dh-trail" id="dh-trail-a"></div><div class="dh-fill" id="dh-fill-a"></div></div>
+                    <div class="dh-rounds" id="dh-rounds-a"></div>
+                </div>
+            </div>
+            <div class="dh-timer" id="dh-timer">60</div>
+            <div class="dh-side dh-b">
+                <div class="dh-barbox">
+                    <div class="dh-name" id="dh-name-b">B</div>
+                    <div class="dh-bar"><div class="dh-trail" id="dh-trail-b"></div><div class="dh-fill" id="dh-fill-b"></div></div>
+                    <div class="dh-rounds" id="dh-rounds-b"></div>
+                </div>
+                <img class="dh-portrait" id="dh-portrait-b" alt="">
+            </div>
+        </div>
+        <div class="dh-meters">
+            <div class="dh-meter"><div class="dh-meter-fill" id="dh-meter-a"></div><span>Super</span></div>
+            <div class="dh-meter dh-meter-b"><div class="dh-meter-fill" id="dh-meter-b"></div><span>Super</span></div>
+        </div>
+        <div id="dh-announce" class="dh-announce"></div>
+        <div id="dh-combo-a" class="dh-combo dh-combo-a"></div>
+        <div id="dh-combo-b" class="dh-combo dh-combo-b"></div>
+        <div id="dh-spect" class="dh-spect hidden"></div>
+        <div id="dh-help" class="dh-help"></div>
+        <div id="dh-vs" class="dh-vs hidden"></div>
+        <div id="dh-result" class="dh-result hidden"></div>
+        <button id="dh-exit" class="btn dh-exit hidden">Esci</button>
+    </div>
+
+    <!-- CONTROLLI MOBILE -->
+    <div id="mobile-controls" class="hidden">
+        <div id="joystick-zone"></div>
+        <div id="mc-world" class="mc-buttons">
+            <div class="mob-btn" id="mb-cam" data-icon="eye"></div>
+            <div class="mob-btn" id="mb-use"><b>E</b></div>
+            <div class="mob-btn" id="mb-mud" data-icon="fango"></div>
+            <div class="mob-btn mob-big" id="mb-jump" data-icon="jump"></div>
+        </div>
+        <div id="mc-duel" class="mc-buttons hidden">
+            <div class="mob-btn" id="mb-block" data-icon="shield"></div>
+            <div class="mob-btn" id="mb-dash" data-icon="wind"></div>
+            <div class="mob-btn mob-sp" id="mb-special" data-icon="star"></div>
+            <div class="mob-btn" id="mb-heavy" data-icon="hammer"></div>
+            <div class="mob-btn mob-big" id="mb-light" data-icon="fist"></div>
+            <div class="mob-btn" id="mb-djump" data-icon="jump"></div>
+        </div>
+    </div>
+
+    <div id="loading" class="overlay hidden"><img src="./SH_Logo.gif" alt="" class="loading-logo"><p id="loading-text">Evocazione dell'isola...</p></div>
+
+    <script type="module" src="./js/main.js"></script>
 </body>
 </html>
