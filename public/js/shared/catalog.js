@@ -194,6 +194,88 @@ export const ITEMS = {
     felpa_sh:         { slot: 'torso', shop: 'armadio', shirt: 'hoodie', name: 'Felpa Sputnik Homies',            price: 90, color: '#1d1b22', print: '#ffe100', desc: 'Con cappuccio e tasca davanti, come quella che si vede in poltrona.' },
 };
 
+// --- RARITÀ E LIVELLO RICHIESTO ---
+export const TIERS = {
+    com: { name: 'Comune', lv: 1 },
+    unc: { name: 'Non comune', lv: 4 },
+    rar: { name: 'Raro', lv: 8 },
+    epi: { name: 'Epico', lv: 14 },
+    leg: { name: 'Leggendario', lv: 20 },
+};
+// Statistiche dei capi: atk/def/spd/sup sono frazioni (0.05 = +5%), hp punti vita, harmony punti di Dissonanza tolti.
+// syn = seme in sintonia (rende una volta e mezza), rep = seme in ripulsa (rende la metà, aggiunge Dissonanza).
+export const GEAR = {
+    cappuccio:       { tier: 'com', sup: 0.05, syn: 'spettro' },
+    benda:           { tier: 'com', atk: 0.02, syn: 'fango' },
+    monocolo:        { tier: 'com', harmony: 3, syn: 'ghiaccio' },
+    grembiule:       { tier: 'com', def: 0.02, syn: 'fuoco' },
+    piuma:           { tier: 'unc', spd: 0.03, syn: 'tempesta', rep: 'pietra' },
+    strega:          { tier: 'unc', sup: 0.08, syn: 'palude', rep: 'fuoco' },
+    mantello_nero:   { tier: 'unc', spd: 0.03, syn: 'spettro' },
+    mantello_rosso:  { tier: 'unc', atk: 0.03, syn: 'fuoco', rep: 'ghiaccio' },
+    mantello_viola:  { tier: 'unc', sup: 0.06, syn: 'spettro', rep: 'palude' },
+    tricorno:        { tier: 'rar', airAtk: 0.04, syn: 'fango', rep: 'ghiaccio' },
+    tunica_mago:     { tier: 'rar', sup: 0.10, syn: 'tempesta', rep: 'pietra' },
+    cotta:           { tier: 'rar', def: 0.07, weight: 5, syn: 'pietra', rep: 'tempesta' },
+    corna:           { tier: 'rar', atk: 0.05, syn: 'fuoco', rep: 'ghiaccio' },
+    elmo:            { tier: 'rar', def: 0.06, weight: 3, syn: 'pietra', rep: 'spettro' },
+    peste:           { tier: 'epi', cleanse: true, syn: 'palude', rep: 'fuoco' },
+    ossa:            { tier: 'epi', def: 0.06, leech: 0.15, syn: 'spettro', rep: 'palude' },
+    mantello_regale: { tier: 'epi', def: 0.05, hp: 6, syn: 'pietra', rep: 'tempesta' },
+    ali:             { tier: 'epi', glide: true, syn: 'tempesta', rep: 'pietra' },
+    aureola:         { tier: 'leg', hp: 8, regen: 0.4, syn: 'tempesta', rep: 'fango' },
+    corazza:         { tier: 'leg', def: 0.12, weight: 8, syn: 'pietra', rep: 'tempesta' },
+    corona:          { tier: 'leg', sup: 0.12, atk: 0.04, syn: 'spettro', rep: 'palude' },
+    maglia_sh_bianca: { tier: 'com', charisma: 0.05 },
+    maglia_sh_nera:   { tier: 'com', charisma: 0.05 },
+    maglia_sh_gialla: { tier: 'com', charisma: 0.05 },
+    maglia_sh_grigia: { tier: 'com', charisma: 0.05 },
+    felpa_sh:         { tier: 'unc', charisma: 0.05 },
+};
+// Tre pezzi (o due più l'arma giusta) dello stesso corredo danno un bonus in più
+export const SETS = [
+    { id: 'negromante', name: 'Corredo del Negromante', items: ['cappuccio', 'mantello_viola', 'ossa'], desc: 'Ogni colpo pesante a segno ti ridà 3 punti vita.' },
+    { id: 'pirata', name: 'Corredo del Pirata', items: ['tricorno', 'benda'], weapon: ['falce', 'pugnale'], desc: 'Con una falce o un pugnale: +15% di danni in aria.' },
+    { id: 'peste', name: 'Corredo della Peste', items: ['peste', 'strega', 'tunica_mago'], desc: 'Ogni round comincia con un quarto di barra SUPER.' },
+    { id: 'regale', name: 'Corredo Regale', items: ['corona', 'mantello_regale', 'corazza'], desc: '+10% di danni e difesa, +10 punti vita, −10% di velocità.' },
+];
+export const itemTier = (id) => GEAR[id]?.tier || 'com';
+export const itemLevel = (id) => TIERS[itemTier(id)].lv;
+// Livello richiesto per i pezzi della Forgia
+export const MATERIAL_LEVEL = { legno: 1, ferro: 1, osso: 3, ossidiana: 8, argento: 14, oro: 18 };
+export const HANDLE_LEVEL = { legno: 1, cuoio: 1, osso: 3, seta: 6, oro: 12 };
+export const GEM_LEVEL = 6;
+export function weaponLevel(spec) {
+    if (!spec) return 1;
+    return Math.max(MATERIAL_LEVEL[spec.material] || 1, HANDLE_LEVEL[spec.handle] || 1, spec.gem && spec.gem !== 'nessuna' ? GEM_LEVEL : 1);
+}
+// Come si comporta un capo con un seme: 'syn' in sintonia, 'rep' in ripulsa, null neutro
+export function gearAffinity(id, element) {
+    const G = GEAR[id];
+    if (!G) return null;
+    return G.syn === element ? 'syn' : G.rep === element ? 'rep' : null;
+}
+const GEAR_STAT_TEXT = {
+    atk: v => `+${pct(v)} di danni`, def: v => `+${pct(v)} di difesa`, spd: v => `+${pct(v)} di velocità`,
+    sup: v => `SUPER +${pct(v)} più rapida`, hp: v => `+${fmtN(v)} punti vita`, regen: v => `rigenera ${fmtN(v)} PV al secondo`,
+    leech: v => `ruba il ${pct(v)} dei danni inflitti`, airAtk: v => `+${pct(v)} di danni in aria`,
+    harmony: v => `Dissonanza −${fmtN(v)}`, charisma: v => `Carisma: +${pct(v)} di monete dalle scommesse vinte`,
+};
+const pct = v => `${Math.round(v * 1000) / 10}%`.replace('.', ',');
+const fmtN = v => `${Math.round(v * 10) / 10}`.replace('.', ',');
+// Righe di testo con le statistiche di un capo (già moltiplicate per sintonia o ripulsa)
+export function gearLines(id, element) {
+    const G = GEAR[id];
+    if (!G) return [];
+    const aff = gearAffinity(id, element), k = aff === 'syn' ? 1.5 : aff === 'rep' ? 0.5 : 1;
+    const out = [];
+    for (const [s, f] of Object.entries(GEAR_STAT_TEXT)) if (G[s]) out.push(f(G[s] * k));
+    if (G.weight) out.push(`peso ${G.weight}`);
+    if (G.cleanse) out.push('immune a veleno e rallentamento');
+    if (G.glide) out.push('planata: tieni premuto su mentre cadi');
+    return out;
+}
+
 // --- ASPETTO DEL PERSONAGGIO ---
 export const APPEARANCE = {
     species: ['umano', 'elfo', 'ratto', 'scheletro', 'spettro'],
@@ -279,14 +361,181 @@ export function sanitizeCard(c) {
 }
 export function isCardImage(s) { return typeof s === 'string' && s.length < 400000 && /^data:image\/(jpeg|png|webp);base64,/.test(s); }
 
+// Vecchio calcolo del livello (solo vittorie, massimo 12): serve per convertire i profili esistenti
 export function levelFromWins(w) { return Math.min(12, 1 + Math.floor(Math.sqrt((w || 0) * 1.5))); }
 
-// Numeri ATK/DEF stampati sulla card (stile Yu-Gi-Oh)
-export function cardPower(element, weaponSpec, level) {
-    const el = ELEMENTS[element] || ELEMENTS.fango;
-    const w = weaponStats(weaponSpec);
-    const atk = Math.round((1200 * (1 + el.mods.atk) * w.dmg + level * 100) / 50) * 50;
-    const def = Math.round((1000 * (1 + el.mods.def + el.mods.hp * 0.5) + level * 80) / 50) * 50;
+// =====================================================================
+//  PROGRESSIONE (Il Libro dei Sette Semi, fase 1)
+// =====================================================================
+export const MAX_LEVEL = 30;
+// Esperienza per passare dal livello L al successivo: 50 × L^1,5 (arrotondata alle decine)
+export const xpToNext = (L) => Math.round(50 * Math.pow(L, 1.5) / 10) * 10;
+const XP_TOTAL = [0, 0];
+for (let L = 2; L <= MAX_LEVEL; L++) XP_TOTAL[L] = XP_TOTAL[L - 1] + xpToNext(L - 1);
+export const xpForLevel = (L) => XP_TOTAL[Math.max(1, Math.min(MAX_LEVEL, L | 0))];
+export function levelFromXp(xp) {
+    let L = 1;
+    while (L < MAX_LEVEL && (xp || 0) >= XP_TOTAL[L + 1]) L++;
+    return L;
+}
+export function levelProgress(xp) {
+    const level = levelFromXp(xp);
+    if (level >= MAX_LEVEL) return { level, into: 0, need: 0, pct: 1 };
+    const into = (xp || 0) - XP_TOTAL[level], need = XP_TOTAL[level + 1] - XP_TOTAL[level];
+    return { level, into, need, pct: into / need };
+}
+export function titleFor(L) {
+    if (L >= 30) return "Leggenda dell'Isola";
+    if (L >= 25) return 'Signore dei Semi';
+    if (L >= 20) return 'Campione';
+    if (L >= 15) return 'Cavaliere della Nebbia';
+    if (L >= 10) return 'Cavaliere';
+    if (L >= 5) return 'Scudiero';
+    return 'Viandante';
+}
+// Da dove arriva l'esperienza
+export const XP = {
+    WIN: 120, WIN_PER_LEVEL: 10, WIN_LEVEL_MAX: 60, LOSS: 40, DRAW: 60,
+    FIRST_WIN: 2,                 // la prima vittoria del giorno vale doppio
+    REST_HOURS: 8, REST_MAX: 3,   // ogni 8 ore lontano dall'isola, un duello vale doppio (massimo 3)
+    PRACTICE: { 1: 15, 2: 30, 3: 50 }, PRACTICE_LOSS: 5, PRACTICE_DAILY: 10,
+    BET_WIN: 10, DAILY: 50,
+};
+export const RESPEC_COST = 200;
+export const ALTAR = { x: 30, z: 56.5, r: 7 };   // l'altare della Cappella in Rovina
+
+// --- I TRE RAMI DELLA MAESTRIA ---
+export const TALENT_CAP = 15;
+export const TALENT_IDS = ['forza', 'tempra', 'maestria'];
+export const TALENTS = {
+    forza: {
+        name: 'Forza', icon: 'fist', per: '+1,5% di danni',
+        traits: {
+            5: { id: 'slancio', name: 'Slancio', desc: 'Dal terzo colpo leggero di una combo fai il 20% di danni in più.' },
+            10: { id: 'spaccascudi', name: 'Spaccascudi', desc: 'Il colpo pesante sfonda la parata: la parata ferma solo metà del danno.' },
+            15: { id: 'furia', name: 'Furia del Campione', desc: 'Sotto il 30% di vita fai il 15% di danni in più.' },
+        },
+    },
+    tempra: {
+        name: 'Tempra', icon: 'shield', per: '+1% di difesa e +2 punti vita',
+        traits: {
+            5: { id: 'pelledura', name: 'Pelle Dura', desc: 'Cadere dal palco costa il 20% di vita in meno.' },
+            10: { id: 'radici', name: 'Radici', desc: 'Subisci il 25% di contraccolpo in meno.' },
+            15: { id: 'ultimo', name: 'Ultimo Respiro', desc: 'Una volta per duello resti in piedi con 1 punto vita.' },
+        },
+    },
+    maestria: {
+        name: 'Maestria del Seme', icon: 'star', per: 'SUPER +3% più rapida, effetti del seme +5% più lunghi',
+        traits: {
+            5: { id: 'eco', name: 'Eco del Seme', desc: 'La passiva del tuo seme vale una volta e mezza.' },
+            10: { id: 'risonanza', name: 'Risonanza', desc: 'Ogni round comincia con un quarto di barra SUPER.' },
+            15: { id: 'puro', name: 'Seme Puro', desc: 'Niente più Dissonanza, e la tua SUPER si accende d\'oro.' },
+        },
+    },
+};
+export const talentPoints = (level) => Math.max(0, Math.min(MAX_LEVEL, level) - 1);
+export function sanitizeTalents(t, level = MAX_LEVEL) {
+    const o = { forza: 0, tempra: 0, maestria: 0 };
+    let left = talentPoints(level);
+    for (const k of TALENT_IDS) {
+        const v = Math.max(0, Math.min(TALENT_CAP, Math.floor(+(t?.[k]) || 0), left));
+        o[k] = v; left -= v;
+    }
+    return o;
+}
+
+// --- LA RUOTA DEI SEMI ---
+// Ognuno batte il seme che lo segue. Gli opposti si disturbano (Dissonanza). Il Fango sta fuori dalla ruota.
+export const RING = ['fuoco', 'ghiaccio', 'palude', 'pietra', 'tempesta', 'spettro'];
+export const OPPOSITE = { fuoco: 'pietra', pietra: 'fuoco', ghiaccio: 'tempesta', tempesta: 'ghiaccio', palude: 'spettro', spettro: 'palude' };
+export const WHEEL = {
+    ADV_DMG: 1.15, ADV_METER: 1.2, DISADV_DMG: 0.9, SAME_METER: 1.1,
+    DISS_HIT: 12, DISS_SUPER: 25,         // probabilità (%) che un colpo sfrigoli o che la SUPER si dissolva fra opposti
+    REP_HIT: 5, REP_SUPER: 10,            // in più per ogni capo in ripulsa, in qualunque duello
+    GEM_HARMONY: 4, MUD_TIME: 3,
+};
+// Rapporto fra chi attacca (a) e chi si difende (d): 'up' vantaggio, 'down' svantaggio, 'opp' opposti, 'same', 'n' neutro
+export function seedRelation(a, d) {
+    if (a === d) return 'same';
+    const ia = RING.indexOf(a), id = RING.indexOf(d);
+    if (ia < 0 || id < 0) return 'n';
+    if ((ia + 1) % 6 === id) return 'up';
+    if ((id + 1) % 6 === ia) return 'down';
+    if (OPPOSITE[a] === d) return 'opp';
+    return 'n';
+}
+export function matchup(a, d) {
+    const rel = seedRelation(a, d);
+    return { rel, dmg: rel === 'up' ? WHEEL.ADV_DMG : rel === 'down' ? WHEEL.DISADV_DMG : 1, meter: rel === 'up' ? WHEEL.ADV_METER : rel === 'same' ? WHEEL.SAME_METER : 1 };
+}
+// Probabilità (0..1) che un colpo sfrigoli e che la SUPER si dissolva, per chi ha queste statistiche contro quel seme
+export function dissonance(st, foeElement) {
+    if (st.immune) return { hit: 0, sp: 0 };
+    const opp = OPPOSITE[st.element] === foeElement;
+    const hit = (opp ? WHEEL.DISS_HIT : 0) + st.rep * WHEEL.REP_HIT - st.harmony;
+    const sp = (opp ? WHEEL.DISS_SUPER : 0) + st.rep * WHEEL.REP_SUPER - st.harmony * 2;
+    return { hit: Math.max(0, Math.min(40, hit)) / 100, sp: Math.max(0, Math.min(60, sp)) / 100 };
+}
+
+// --- STATISTICHE DI COMBATTIMENTO ---
+// Seme, arma, talenti, vestiti e corredi. Le usano il motore dei duelli, il Libro della Maestria e la card.
+export const STAT_CAP = 0.35;   // talenti + vestiti insieme non superano il +35% su danni e difesa
+export function computeStats(setup = {}) {
+    const el = ELEMENTS[setup.element] ? setup.element : 'fango';
+    const E = ELEMENTS[el];
+    const T = sanitizeTalents(setup.talents, setup.level || MAX_LEVEL);
+    const tr = {
+        slancio: T.forza >= 5, spaccascudi: T.forza >= 10, furia: T.forza >= 15,
+        pelledura: T.tempra >= 5, radici: T.tempra >= 10, ultimo: T.tempra >= 15,
+        eco: T.maestria >= 5, risonanza: T.maestria >= 10, puro: T.maestria >= 15,
+    };
+    const mods = { ...E.mods };
+    if (tr.eco) for (const k of Object.keys(mods)) if (mods[k] > 0) mods[k] *= 1.5;
+    const w = weaponStats(setup.weapon || null);
+    const gemMatch = !!w.gem && w.gem === el;
+    const gear = [...new Set((setup.gear || []).filter(id => GEAR[id]))];
+    const g = { atk: 0, def: 0, spd: 0, sup: 0, hp: 0, regen: 0, leech: 0, airAtk: 0, harmony: 0, charisma: 0, weight: 0, rep: 0, cleanse: false, glide: false };
+    for (const id of gear) {
+        const G = GEAR[id], aff = gearAffinity(id, el), k = aff === 'syn' ? 1.5 : aff === 'rep' ? 0.5 : 1;
+        if (aff === 'rep') g.rep++;
+        for (const s of ['atk', 'def', 'spd', 'sup', 'hp', 'regen', 'leech', 'airAtk', 'harmony', 'charisma']) if (G[s]) g[s] += G[s] * k;
+        g.weight += G.weight || 0;
+        if (G.cleanse) g.cleanse = true;
+        if (G.glide) g.glide = true;
+    }
+    const sets = SETS.filter(s => s.items.every(i => gear.includes(i)) && (!s.weapon || s.weapon.includes(setup.weapon?.type))).map(s => s.id);
+    if (sets.includes('pirata')) g.airAtk += 0.15;
+    if (sets.includes('regale')) { g.atk += 0.1; g.def += 0.1; g.hp += 10; g.spd -= 0.1; }
+    const cap = (10 + T.tempra * 0.5) * (el === 'pietra' ? 1.5 : 1);
+    const over = Math.max(0, g.weight - cap);
+    const atkBonus = Math.min(STAT_CAP, T.forza * 0.015 + g.atk);
+    const defBonus = Math.min(STAT_CAP, T.tempra * 0.01 + g.def);
+    return {
+        element: el, special: E.special.id, talents: T, traits: tr, sets, gear,
+        atk: (1 + mods.atk) * w.dmg * (gemMatch ? 1.1 : 1) * (1 + atkBonus),
+        def: Math.min(0.6, mods.def + defBonus),
+        spd: Math.max(0.5, (1 + mods.spd + g.spd) * (1 - over * 0.02)),
+        weight: Math.max(0.6, 1 + mods.weight),
+        hpMax: Math.round(100 * (1 + mods.hp) + T.tempra * 2 + g.hp),
+        regen: (el === 'palude' ? 0.8 * (tr.eco ? 1.5 : 1) : 0) + g.regen,
+        meterGain: (1 + w.meter) * (1 + T.maestria * 0.03 + g.sup),
+        effMul: 1 + T.maestria * 0.05,
+        reach: w.reach, aspd: w.speed, kbm: w.kb,
+        maxJumps: el === 'spettro' ? 3 : 2,
+        dashMul: el === 'tempesta' ? (tr.eco ? 1.75 : 1.5) : 1,
+        startMeter: tr.risonanza || sets.includes('peste') ? 25 : 0,
+        leech: g.leech, airAtk: g.airAtk, cleanse: g.cleanse, glide: g.glide, charisma: g.charisma,
+        heavyHeal: sets.includes('negromante') ? 3 : 0,
+        rep: g.rep, harmony: g.harmony + (gemMatch ? WHEEL.GEM_HARMONY : 0), immune: el === 'fango' || tr.puro,
+        load: g.weight, cap, over, atkBonus, defBonus,
+    };
+}
+
+// Numeri ATK/DEF stampati sulla card (stile Yu-Gi-Oh), dalle statistiche vere
+export function cardPower(element, weaponSpec, level, extra = {}) {
+    const st = computeStats({ element, weapon: weaponSpec, level, talents: extra.talents, gear: extra.gear });
+    const atk = Math.round((1000 * st.atk + level * 40) / 50) * 50;
+    const def = Math.round((900 * (1 + st.def) * st.hpMax / 100 + level * 30) / 50) * 50;
     return { atk, def };
 }
 

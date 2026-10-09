@@ -17,7 +17,7 @@ import { GameAudio } from './audio.js';
 import { composeCard } from './cards.js';
 import { Net, SOCKET_URL, IS_MOBILE, store, $, h, toast, fmt } from './util.js';
 import { installTheme, icon, iconSVG, drawIcon } from './icons.js';
-import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, levelFromWins, sanitizeCard, sanitizeAppearance, STARTER_WEAPON } from './shared/catalog.js';
+import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, sanitizeCard, sanitizeAppearance, STARTER_WEAPON, levelProgress, titleFor, talentPoints, TALENT_IDS } from './shared/catalog.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
@@ -41,7 +41,7 @@ class RemotePlayer {
     }
     updateTag() {
         const friend = this.app.isFriend(this.info.id);
-        this.ch.setNameTag(this.info.name, `${this.info.duel ? '⚔ ' : ''}Lv ${this.info.level || 1} · ${this.info.rating || 1000}`, friend ? '#7aff9a' : '#ffff00');
+        this.ch.setNameTag(this.info.name, `${this.info.duel ? '⚔ ' : ''}${titleFor(this.info.level || 1)} · Lv ${this.info.level || 1}`, friend ? '#7aff9a' : '#ffff00');
     }
     setState(s) { this.target.set(s[0], s[1], s[2]); this.ry = s[3]; this.anim = s[4] | 0; }
     setLook(d) {
@@ -195,7 +195,7 @@ class Game {
     offlineMe() {
         return {
             id: 'offline', name: this.local.name || 'Viandante', appearance: sanitizeAppearance(this.local.appearance), card: sanitizeCard(this.local.card),
-            coins: 0, rating: 1000, wins: 0, losses: 0, level: 1, inventory: [], equipment: {}, friends: [], requests: [], offline: true,
+            coins: 0, rating: 1000, wins: 0, losses: 0, level: 1, xp: 0, talents: { forza: 0, tempra: 0, maestria: 0 }, inventory: [], equipment: {}, friends: [], requests: [], offline: true,
         };
     }
     look() {
@@ -207,10 +207,13 @@ class Game {
         }
         return o;
     }
+    // id dei vestiti indossati (servono a statistiche, corredi e card)
+    gear() { const l = this.look(); return ['head', 'face', 'cape', 'torso'].map(s => l[s]).filter(Boolean); }
+    unspentPoints() { const t = this.me?.talents || {}; return Math.max(0, talentPoints(this.me?.level || 1) - TALENT_IDS.reduce((a, k) => a + (t[k] || 0), 0)); }
     isFriend(id) { return !!this.me?.friends?.some(f => f.id === id); }
     buildMyCharacter() {
         if (this.myChar) this.myChar.dispose();
-        this.myChar = new Character(this.me.appearance, this.look(), { name: this.me.name, sub: `Lv ${this.me.level || 1}`, color: '#ffd23a' });
+        this.myChar = new Character(this.me.appearance, this.look(), { name: this.me.name, sub: `${titleFor(this.me.level || 1)} · Lv ${this.me.level || 1}`, color: '#ffd23a' });
         this.myChar.root.position.copy(this.player.pos);
         this.myChar.root.rotation.y = this.player.yaw;
         if (this.myChar.tag) this.myChar.tag.visible = false;
@@ -218,11 +221,11 @@ class Game {
     }
     cardSignature() {
         const l = this.look();
-        return JSON.stringify([this.me.card, this.me.appearance, l, this.me.level, this.me.name]);
+        return JSON.stringify([this.me.card, this.me.appearance, l, this.me.level, this.me.name, this.me.talents]);
     }
     async regenerateCard(upload = true) {
         const card = sanitizeCard(this.me.card || this.local.card);
-        const c = await composeCard({ card, appearance: this.me.appearance, look: this.look(), level: this.me.level || 1, id: this.me.id, name: this.me.name }, this.studio, 420);
+        const c = await composeCard({ card, appearance: this.me.appearance, look: this.look(), level: this.me.level || 1, talents: this.me.talents, id: this.me.id, name: this.me.name }, this.studio, 420);
         this.local.cardImage = c.toDataURL('image/jpeg', 0.86);
         this.local.cardSig = this.cardSignature();
         this.saveLocal();
@@ -270,7 +273,7 @@ class Game {
         const reqN = (p.requests || []).length;
         $('#req-badge').textContent = reqN; $('#req-badge').classList.toggle('hidden', !reqN);
         if (this.local.cardSig !== this.cardSignature()) { clearTimeout(this.cardTimer); this.cardTimer = setTimeout(() => this.regenerateCard(true), 800); }
-        this.panels.refresh(['inventario', 'sartoria', 'forgia', 'amici']);
+        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria']);
     }
 
     // --- RETE ---
@@ -292,7 +295,8 @@ class Game {
             const wasOffline = this.me?.offline;
             this.applyMe(r.profile);
             if (wasOffline || !hasLocal) this.buildMyCharacter();
-            if (r.daily) { toast(h('div', {}, h('b', {}, 'Tributo del giorno'), h('div', {}, `Il tesoriere dell'isola ti consegna ${r.daily} Sputnik Coin.`)), { kind: 'coin' }); this.audio.play('coin'); }
+            if (r.daily) { toast(h('div', {}, h('b', {}, 'Tributo del giorno'), h('div', {}, `Il tesoriere dell'isola ti consegna ${r.daily} Sputnik Coin${r.dailyXp ? ` e ${r.dailyXp} punti esperienza` : ''}.`)), { kind: 'coin' }); this.audio.play('coin'); }
+            if (r.profile.rest > 0) toast(h('div', {}, h('b', {}, 'Ben riposato'), h('div', {}, `Sei stato lontano dall'isola: i prossimi ${r.profile.rest} duelli valgono doppia esperienza.`)), { kind: 'ok', icon: 'lantern' });
             if (r.created) toast(h('div', {}, h('b', {}, 'Il tuo nome è inciso nell\'Albo'), h('div', {}, 'Ricevi 150 Sputnik Coin e una Spada di Legno. La Sartoria e la Forgia ti aspettano.')), { kind: 'coin', duration: 9000 });
             if (!this.local.cardImage || !hasLocal) this.regenerateCard(true);
             this.net.request('lb:get').then(lb => { if (lb.ok) this.world.setLeaderboard(lb.rating); });
@@ -341,6 +345,11 @@ class Game {
         N.on('player:look', (d) => {
             if (d.id === this.me?.id) return;
             this.players.get(d.id)?.setLook(d);
+        });
+        N.on('levelup', (u) => {
+            this.audio.play('special');
+            toast(h('div', {}, h('b', {}, `Livello ${u.level}: ${u.title}`), h('div', {}, u.points > 0 ? `Hai ${u.points} ${u.points === 1 ? 'punto' : 'punti'} Maestria da spendere nel Libro della Maestria (L).` : 'Nuovi capi e materiali ti aspettano nelle botteghe.')),
+                { kind: 'coin', icon: 'star', duration: 9000, actions: u.points > 0 ? [{ label: 'Apri il Libro', primary: true, fn: () => this.openPanel('maestria') }] : null });
         });
         N.on('player:stats', (s) => {
             const p = this.players.get(s.id);
@@ -442,7 +451,7 @@ class Game {
 
     // --- DUELLI ---
     myFighterInfo() {
-        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look: this.look(), element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, cardImage: this.local.cardImage };
+        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look: this.look(), element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), cardImage: this.local.cardImage };
     }
     enterDuel(info, role, side) {
         if (this.duel) this.exitDuel(true);
@@ -480,11 +489,21 @@ class Game {
             id: 'fantasma', name: 'Il Fantasma', element: el, rating: Math.round(800 + level * 300), level: Math.round(level * 4),
             appearance: { ...randomAppearance(), species: 'spettro', eyes: 'luminosi', eyeColor: ELEMENTS[el].glow, top: '#1a1030' },
             look: { weapon: { type: types[Math.floor(Math.random() * types.length)], material: level > 1.2 ? 'ossidiana' : 'ferro', handle: 'osso', gem: 'nessuna', name: 'Lama Spettrale' }, cape: 'mantello_nero' },
+            gear: ['mantello_nero'],
             cardImage: null,
         };
+        const pts = Math.max(0, ghost.level - 1);
+        ghost.talents = { forza: Math.ceil(pts / 2), tempra: Math.floor(pts / 2), maestria: 0 };
         this.enterDuel({ id: 'practice', a: this.myFighterInfo(), b: ghost, phase: 'fight' }, 'local', 'a');
     }
     restartPractice() { this.exitDuel(true); this.startPractice(this.practiceLevel); }
+    async practiceDone(won) {
+        if (!this.net.connected || !this.helloDone) return;
+        const tier = this.practiceLevel < 0.8 ? 1 : this.practiceLevel < 1.3 ? 2 : 3;
+        const r = await this.net.request('practice:done', { tier, won });
+        if (r.ok && r.xp) toast(`+${r.xp} esperienza dall'allenamento`, { kind: 'ok', icon: 'star', duration: 3000 });
+        else if (r.msg) toast(r.msg, { duration: 3500 });
+    }
     renderTicker() {
         const box = $('#duel-ticker');
         if (!box) return;
@@ -557,7 +576,7 @@ class Game {
             if (!$('#bigmap').classList.contains('hidden')) { if (['Escape', 'KeyN'].includes(e.code) || e.key === 'Escape') this.toggleBigMap(false); return; }
             this.keys[e.code] = true;
             if (e.repeat) return;
-            const P = { KeyI: 'inventario', KeyC: 'card', KeyO: 'amici', Tab: 'classifica', KeyK: 'collezione', KeyP: 'impostazioni' };
+            const P = { KeyI: 'inventario', KeyC: 'card', KeyO: 'amici', Tab: 'classifica', KeyK: 'collezione', KeyP: 'impostazioni', KeyL: 'maestria' };
             if (P[e.code]) { e.preventDefault(); this.openPanel(P[e.code]); return; }
             switch (e.code) {
                 case 'Enter': e.preventDefault(); document.exitPointerLock?.(); chat.focus(); break;
@@ -613,6 +632,7 @@ class Game {
         if (it.id === 'specchio') this.editAppearance();
         else if (it.id === 'quadro') { document.exitPointerLock?.(); window.open('https://www.youtube.com/watch?v=' + this.world.gallery.current(it.painting).video, '_blank', 'noopener'); }
         else if (it.id === 'canale') { document.exitPointerLock?.(); window.open('https://www.youtube.com/@SputnikHomies', '_blank', 'noopener'); }
+        else if (it.id === 'altare') this.openPanel('maestria', 'altare');
         else if (it.id === 'siedi') this.player.sit === it.seat ? this.standUp() : this.sitDown(it.seat);
         else this.openPanel(it.id);
     }
@@ -751,6 +771,11 @@ class Game {
         $('#pc-name').textContent = me.name;
         $('#pc-meta').textContent = me.offline ? 'Lontano dal portale' : `Gloria ${me.rating} · ${me.wins} V · ${me.losses} S`;
         $('#pc-level').textContent = me.level || 1;
+        const lp = levelProgress(me.xp || 0);
+        $('#pc-xp-fill').style.width = `${Math.round(lp.pct * 100)}%`;
+        $('#pc-xp').title = lp.need ? `${titleFor(lp.level)} · ${fmt(lp.into)} / ${fmt(lp.need)} esperienza per il livello ${lp.level + 1}` : `${titleFor(lp.level)} · livello massimo`;
+        const pts = this.unspentPoints();
+        $('#pts-badge').textContent = pts; $('#pts-badge').classList.toggle('hidden', !pts || !!me.offline);
         $('#pc-coins').textContent = me.offline ? '—' : fmt(me.coins);
         const sig = JSON.stringify([me.appearance, this.look()]);
         if (sig !== this.portraitSig) {
@@ -759,7 +784,7 @@ class Game {
             const g = $('#pc-portrait').getContext('2d');
             g.clearRect(0, 0, 128, 128); g.drawImage(p, 0, 0);
         }
-        if (this.myChar) this.myChar.setNameTag(me.name, `Livello ${me.level || 1}`, '#ffd23a');
+        if (this.myChar) this.myChar.setNameTag(me.name, `${titleFor(me.level || 1)} · Lv ${me.level || 1}`, '#ffd23a');
         if (this.myChar?.tag) this.myChar.tag.visible = false;
     }
     coinPop(delta) {

@@ -13,6 +13,8 @@ import { createStore } from './server/store.js';
 import {
     ECONOMY, ITEMS, ELEMENTS, STARTER_WEAPON, sanitizeAppearance, sanitizeCard, sanitizeWeaponSpec,
     weaponCost, cleanText, levelFromWins, isCardImage,
+    XP, levelFromXp, xpForLevel, titleFor, sanitizeTalents, talentPoints, TALENTS, TALENT_IDS, TALENT_CAP,
+    itemLevel, weaponLevel, computeStats, RESPEC_COST, ALTAR,
 } from './public/js/shared/catalog.js';
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
 
@@ -66,7 +68,28 @@ const sessions = new Map();   // stanza privata → { id, owner, ownerName, invi
 const challenges = new Map(); // id sfida → { from, to, stake }
 const duels = new Map();
 
-for (const p of store.all()) pidIndex.set(p.id, p.token);
+// --- PROGRESSIONE ---
+const levelOf = p => levelFromXp(p.xp || 0);
+const today = () => new Date().toISOString().slice(0, 10);
+const spentPoints = t => TALENT_IDS.reduce((s, k) => s + (t?.[k] || 0), 0);
+// I profili di prima dell'esperienza: 120 a vittoria, 40 a sconfitta, mai sotto il livello che avevano.
+// I capi già comprati restano indossabili anche sotto il livello richiesto.
+function migrate(p) {
+    let changed = false;
+    if (p.xp == null) {
+        p.xp = Math.max((p.wins || 0) * XP.WIN + (p.losses || 0) * XP.LOSS + (p.draws || 0) * XP.DRAW, xpForLevel(levelFromWins(p.wins)));
+        for (const it of p.inventory || []) it.legacy = true;
+        changed = true;
+    }
+    if (!p.talents) { p.talents = { forza: 0, tempra: 0, maestria: 0 }; changed = true; }
+    p.talents = sanitizeTalents(p.talents, levelOf(p));
+    if (p.respecs == null) { p.respecs = 0; changed = true; }
+    if (!p.rest) { p.rest = { n: 0 }; changed = true; }
+    if (!p.practice) { p.practice = { day: '', n: 0 }; changed = true; }
+    return changed;
+}
+
+for (const p of store.all()) { pidIndex.set(p.id, p.token); if (migrate(p)) store.put(p); }
 
 const uid = () => crypto.randomBytes(6).toString('hex');
 function shortId() {
@@ -87,6 +110,7 @@ function newProfile(d) {
         card: sanitizeCard(d?.card),
         cardImage: isCardImage(d?.cardImage) ? d.cardImage : null,
         coins: ECONOMY.START_COINS, rating: 1000, wins: 0, losses: 0, draws: 0,
+        xp: 0, talents: { forza: 0, tempra: 0, maestria: 0 }, respecs: 0, rest: { n: 0 }, practice: { day: '', n: 0 },
         inventory: [weapon], equipment: { weapon: weapon.uid },
         friends: [], requests: [], collection: [],
         lastDaily: Date.now(), createdAt: Date.now(), lastSeen: Date.now(),
@@ -104,18 +128,22 @@ function look(p) {
     }
     return o;
 }
+const gearOf = p => { const l = look(p); return ['head', 'face', 'cape', 'torso'].map(s => l[s]).filter(Boolean); };
 function publicPlayer(S) {
     const p = S.p;
     return {
         id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element,
-        rating: p.rating, wins: p.wins, losses: p.losses, level: levelFromWins(p.wins),
+        rating: p.rating, wins: p.wins, losses: p.losses, level: levelOf(p),
         pos: S.pos, duel: !!S.duelId,
     };
 }
 function privateView(p) {
+    const d = today();
     return {
         id: p.id, name: p.name, appearance: p.appearance, card: p.card, coins: p.coins,
-        rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws, level: levelFromWins(p.wins),
+        rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws, level: levelOf(p),
+        xp: p.xp || 0, talents: p.talents, respecs: p.respecs || 0, rest: p.rest?.n || 0,
+        firstWin: p.firstWinDay === d, practiceLeft: Math.max(0, XP.PRACTICE_DAILY - (p.practice?.day === d ? p.practice.n : 0)),
         inventory: p.inventory, equipment: p.equipment,
         friends: p.friends.map(id => ({ id, name: byPid(id)?.name || '???', online: sidByPid.has(id) })),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
@@ -156,7 +184,7 @@ let lbCache = null, lbAt = 0;
 function leaderboard() {
     if (lbCache && Date.now() - lbAt < 5000) return lbCache;
     const all = store.all();
-    const row = p => ({ id: p.id, name: p.name, rating: p.rating, wins: p.wins, losses: p.losses, coins: p.coins, level: levelFromWins(p.wins), element: p.card?.element, online: sidByPid.has(p.id) });
+    const row = p => ({ id: p.id, name: p.name, rating: p.rating, wins: p.wins, losses: p.losses, coins: p.coins, level: levelOf(p), element: p.card?.element, online: sidByPid.has(p.id) });
     lbCache = {
         rating: [...all].sort((a, b) => b.rating - a.rating || b.wins - a.wins).slice(0, 50).map(row),
         coins: [...all].sort((a, b) => b.coins - a.coins).slice(0, 50).map(row),
@@ -186,11 +214,42 @@ function duelPublic(d, withImages) {
 }
 function fighterInfo(S) {
     const p = S.p;
-    return { id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, rating: p.rating, level: levelFromWins(p.wins), cardImage: p.cardImage };
+    return { id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, rating: p.rating, level: levelOf(p), cardImage: p.cardImage };
 }
 function fighterSetup(p) {
     const w = p.inventory.find(i => i.uid === p.equipment?.weapon);
-    return { id: p.id, name: p.name, element: p.card.element, weapon: w?.spec || null };
+    return { id: p.id, name: p.name, element: p.card.element, weapon: w?.spec || null, level: levelOf(p), talents: p.talents, gear: gearOf(p) };
+}
+
+// Esperienza: aggiorna livello e punti Maestria, avvisa il giocatore se sale di livello
+function grantXp(p, amount) {
+    amount = Math.max(0, Math.round(amount));
+    const before = levelOf(p);
+    p.xp = (p.xp || 0) + amount;
+    const after = levelOf(p);
+    if (after > before) {
+        const S = sessionOf(p.id);
+        if (S) {
+            S.socket.emit('levelup', { level: after, title: titleFor(after), points: talentPoints(after) - spentPoints(p.talents) });
+            io.to(S.room).emit('player:stats', { id: p.id, rating: p.rating, level: after, wins: p.wins, losses: p.losses });
+        }
+        lbCache = null;
+    }
+    return amount;
+}
+// Contro lo stesso avversario, nello stesso giorno, l'esperienza cala dopo il terzo duello (niente allevamenti tra amici)
+function vsFactor(p, foeId) {
+    const d = today();
+    if (!p.vs || p.vs.day !== d) p.vs = { day: d, n: {} };
+    const n = p.vs.n[foeId] = (p.vs.n[foeId] || 0) + 1;
+    return n <= 3 ? 1 : n <= 6 ? 0.5 : 0.1;
+}
+// Moltiplicatori: riposo (un duello doppio dopo ogni 8 ore lontano) e prima vittoria del giorno, al massimo ×3
+function duelXp(p, base, won) {
+    let mult = 1;
+    if (p.rest?.n > 0) { mult *= 2; p.rest.n--; }
+    if (won && p.firstWinDay !== today()) { mult *= XP.FIRST_WIN; p.firstWinDay = today(); }
+    return grantXp(p, base * Math.min(3, mult));
 }
 
 function startDuel(A, B, stake) {
@@ -264,7 +323,17 @@ function cancelDuel(d, reason) {
 function endDuel(d, winner, reason) {
     if (d.phase === 'done') return;
     const P = { a: byPid(d.pids.a), b: byPid(d.pids.b) };
-    const result = { id: d.id, winner, reason, names: { a: P.a.name, b: P.b.name }, stake: d.stake, rating: { a: 0, b: 0 }, coins: { a: 0, b: 0 } };
+    const result = { id: d.id, winner, reason, names: { a: P.a.name, b: P.b.name }, stake: d.stake, rating: { a: 0, b: 0 }, coins: { a: 0, b: 0 }, xp: { a: 0, b: 0 } };
+    // niente esperienza per i duelli lampo (meno di 20 secondi di combattimento)
+    const fought = d.startedAt && Date.now() - d.startedAt > 20000;
+    if (fought) {
+        if (winner) {
+            const loser = winner === 'a' ? 'b' : 'a';
+            const diff = Math.max(0, Math.min(XP.WIN_LEVEL_MAX, (levelOf(P[loser]) - levelOf(P[winner])) * XP.WIN_PER_LEVEL));
+            result.xp[winner] = duelXp(P[winner], (XP.WIN + diff) * vsFactor(P[winner], P[loser].id), true);
+            result.xp[loser] = duelXp(P[loser], XP.LOSS * vsFactor(P[loser], P[winner].id), false);
+        } else for (const s of ['a', 'b']) result.xp[s] = duelXp(P[s], XP.DRAW * vsFactor(P[s], P[s === 'a' ? 'b' : 'a'].id), false);
+    }
     if (winner) {
         const loser = winner === 'a' ? 'b' : 'a';
         const W = P[winner], L = P[loser];
@@ -282,9 +351,11 @@ function endDuel(d, winner, reason) {
             const p = byPid(b.pid); if (!p) continue;
             const S = sessionOf(b.pid);
             if (b.side === winner) {
-                const payout = Math.floor(b.amount / winPool * tot);
-                p.coins += payout; save(p);
-                if (S) { sendMe(S); S.socket.emit('bet:result', { won: true, amount: b.amount, payout, name: W.name }); }
+                // Carisma (merch di Sputnik Homies): qualche moneta in più dal banco
+                const charisma = computeStats({ element: p.card?.element, gear: gearOf(p) }).charisma;
+                const payout = Math.floor(b.amount / winPool * tot * (1 + charisma));
+                p.coins += payout; grantXp(p, XP.BET_WIN); save(p);
+                if (S) { sendMe(S); S.socket.emit('bet:result', { won: true, amount: b.amount, payout, name: W.name, xp: XP.BET_WIN }); }
             } else if (S) S.socket.emit('bet:result', { won: false, amount: b.amount, payout: 0, name: W.name });
         }
         sysChat(d.room, `🏆 ${W.name} ha sconfitto ${L.name} nell'Arena${reason === 'forfeit' ? ' (abbandono)' : ''}! (+${delta} rating)`);
@@ -295,7 +366,8 @@ function endDuel(d, winner, reason) {
     }
     save(P.a); save(P.b);
     sendMe(sessionOf(P.a.id)); sendMe(sessionOf(P.b.id));
-    for (const p of [P.a, P.b]) io.to(d.room).emit('player:stats', { id: p.id, rating: p.rating, level: levelFromWins(p.wins), wins: p.wins, losses: p.losses });
+    for (const p of [P.a, P.b]) io.to(d.room).emit('player:stats', { id: p.id, rating: p.rating, level: levelOf(p), wins: p.wins, losses: p.losses });
+    result.level = { a: levelOf(P.a), b: levelOf(P.b) };
     lbCache = null;
     io.to('duel:' + d.id).emit('duel:end', result);
     finishDuel(d);
@@ -349,9 +421,16 @@ io.on('connection', (socket) => {
             if (d.card) p.card = sanitizeCard(d.card);
             if (isCardImage(d.cardImage)) p.cardImage = d.cardImage;
         }
+        migrate(p);
         let daily = 0;
         if (!created && Date.now() - (p.lastDaily || 0) > 20 * 3600 * 1000) {
             p.coins += ECONOMY.DAILY_BONUS; p.lastDaily = Date.now(); daily = ECONOMY.DAILY_BONUS;
+            grantXp(p, XP.DAILY);
+        }
+        // Riposo: ogni 8 ore lontano dall'isola, il prossimo duello vale doppio
+        if (!created) {
+            const away = Math.floor((Date.now() - (p.lastSeen || Date.now())) / (XP.REST_HOURS * 3600 * 1000));
+            if (away > 0) p.rest.n = Math.min(XP.REST_MAX, (p.rest.n || 0) + away);
         }
         const prev = sessionOf(p.id);
         if (prev) { prev.socket.emit('kicked'); prev.socket.disconnect(true); }
@@ -360,7 +439,7 @@ io.on('connection', (socket) => {
         me = { sid: socket.id, socket, p, room: null, pos: [0, 2, 34, Math.PI, 0], duelId: null, watching: null, lastChat: 0, lastCard: 0 };
         online.set(socket.id, me);
         sidByPid.set(p.id, socket.id);
-        reply({ ok: true, token: p.token, profile: privateView(p), daily, created });
+        reply({ ok: true, token: p.token, profile: privateView(p), daily, dailyXp: daily ? XP.DAILY : 0, created });
         joinRoom(me, 'pub');
         for (const fid of p.friends) { const F = sessionOf(fid); if (F) F.socket.emit('friend:status', { id: p.id, name: p.name, online: true }); }
         console.log(`+ ${p.name} (${p.id}) — online: ${online.size}`);
@@ -413,6 +492,8 @@ io.on('connection', (socket) => {
     on('shop:buy', (d, reply) => {
         const it = ITEMS[d.itemId];
         if (!it) return fail(reply, 'Oggetto sconosciuto');
+        const need = itemLevel(d.itemId);
+        if (need > levelOf(me.p)) return fail(reply, `Torna quando sarai al livello ${need}`);
         if (me.p.inventory.length >= 80) return fail(reply, 'Inventario pieno');
         if (me.p.coins < it.price) return fail(reply, 'Sputnik Coin insufficienti');
         me.p.coins -= it.price;
@@ -424,6 +505,8 @@ io.on('connection', (socket) => {
     on('forge:craft', (d, reply) => {
         const spec = sanitizeWeaponSpec(d.spec);
         if (!spec) return fail(reply, 'Progetto non valido');
+        const need = weaponLevel(spec);
+        if (need > levelOf(me.p)) return fail(reply, `Mastro Brace lavora quei materiali solo dal livello ${need}`);
         if (me.p.inventory.length >= 80) return fail(reply, 'Inventario pieno');
         const cost = weaponCost(spec);
         if (me.p.coins < cost) return fail(reply, 'Sputnik Coin insufficienti');
@@ -443,6 +526,8 @@ io.on('connection', (socket) => {
             if (!it) return fail(reply, 'Oggetto non trovato');
             const itSlot = it.kind === 'weapon' ? 'weapon' : ITEMS[it.itemId]?.slot;
             if (itSlot !== slot) return fail(reply, 'Slot sbagliato');
+            const need = it.kind === 'weapon' ? weaponLevel(it.spec) : itemLevel(it.itemId);
+            if (!it.legacy && need > levelOf(me.p)) return fail(reply, `Serve il livello ${need} per usarlo`);
             me.p.equipment[slot] = it.uid;
         }
         save(me.p); sendMe(me);
@@ -460,6 +545,45 @@ io.on('connection', (socket) => {
         me.p.coins += gain;
         save(me.p); sendMe(me);
         reply({ ok: true, gain });
+    });
+
+    // --- MAESTRIA (un punto a ogni livello dal 2, massimo 15 per ramo) ---
+    on('talent:add', (d, reply) => {
+        const k = String(d.path);
+        if (!TALENT_IDS.includes(k)) return fail(reply, 'Ramo sconosciuto');
+        if (me.duelId) return fail(reply, 'Non durante un duello');
+        const t = me.p.talents;
+        if (spentPoints(t) >= talentPoints(levelOf(me.p))) return fail(reply, 'Nessun punto da spendere: sali di livello');
+        if (t[k] >= TALENT_CAP) return fail(reply, `${TALENTS[k].name} è già al massimo`);
+        t[k]++;
+        save(me.p); sendMe(me);
+        reply({ ok: true });
+    });
+    // Rito dell'Oblio: all'Altare della Cappella in Rovina si ridistribuiscono i punti (la prima volta è gratis)
+    on('talent:reset', (d, reply) => {
+        if (me.duelId) return fail(reply, 'Non durante un duello');
+        if (Math.hypot(me.pos[0] - ALTAR.x, me.pos[2] - ALTAR.z) > ALTAR.r) return fail(reply, "Il Rito dell'Oblio si celebra all'Altare della Cappella in Rovina");
+        if (!spentPoints(me.p.talents)) return fail(reply, 'Non hai ancora speso punti');
+        const cost = me.p.respecs > 0 ? RESPEC_COST : 0;
+        if (me.p.coins < cost) return fail(reply, `Il rito costa ${cost} Sputnik Coin`);
+        me.p.coins -= cost; me.p.respecs++;
+        me.p.talents = { forza: 0, tempra: 0, maestria: 0 };
+        save(me.p); sendMe(me);
+        reply({ ok: true, cost });
+    });
+    // Allenamento col Fantasma: si gioca sul dispositivo, quindi poca esperienza e un limite al giorno
+    on('practice:done', (d, reply) => {
+        const now = Date.now();
+        if (now - (me.lastPractice || 0) < 20000) return reply({ ok: true, xp: 0 });
+        me.lastPractice = now;
+        const P = me.p.practice, day = today();
+        if (P.day !== day) { P.day = day; P.n = 0; }
+        if (P.n >= XP.PRACTICE_DAILY) return reply({ ok: true, xp: 0, msg: 'Il Fantasma ti ha già insegnato abbastanza per oggi' });
+        P.n++;
+        const tier = [1, 2, 3].includes(+d.tier) ? +d.tier : 1;
+        const xp = grantXp(me.p, d.won ? XP.PRACTICE[tier] : XP.PRACTICE_LOSS);
+        save(me.p); sendMe(me);
+        reply({ ok: true, xp });
     });
 
     // --- BAZAR (compravendita tra giocatori) ---
@@ -487,7 +611,8 @@ io.on('connection', (socket) => {
         if (me.p.inventory.length >= 80) return fail(reply, 'Inventario pieno');
         listings.splice(i, 1);
         me.p.coins -= l.price;
-        me.p.inventory.push({ ...l.entry, uid: uid() });
+        const { legacy, ...entry } = l.entry;   // chi compra al Bazar rispetta il livello richiesto
+        me.p.inventory.push({ ...entry, uid: uid() });
         const seller = byPid(l.seller);
         if (seller) {
             seller.coins += l.price; save(seller);
@@ -517,7 +642,7 @@ io.on('connection', (socket) => {
         reply({
             ok: true,
             players: [...online.values()].filter(S => S !== me).map(S => ({
-                id: S.p.id, name: S.p.name, rating: S.p.rating, level: levelFromWins(S.p.wins), element: S.p.card.element,
+                id: S.p.id, name: S.p.name, rating: S.p.rating, level: levelOf(S.p), element: S.p.card.element,
                 sameRoom: S.room === me.room, private: S.room !== 'pub', duel: !!S.duelId,
                 friend: me.p.friends.includes(S.p.id),
             })),
@@ -529,7 +654,7 @@ io.on('connection', (socket) => {
         reply({
             ok: true, profile: {
                 id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, card: { title: p.card.title, type: p.card.type },
-                rating: p.rating, wins: p.wins, losses: p.losses, level: levelFromWins(p.wins), cardImage: p.cardImage,
+                rating: p.rating, wins: p.wins, losses: p.losses, level: levelOf(p), talents: p.talents, cardImage: p.cardImage,
                 online: sidByPid.has(p.id), friend: me.p.friends.includes(p.id), requested: p.requests.includes(me.p.id),
             },
         });
@@ -642,7 +767,7 @@ io.on('connection', (socket) => {
         setTimeout(() => {
             if (challenges.delete(cid)) { notify(online.get(me?.sid), `${T.p.name} non ha risposto alla sfida.`); }
         }, 20000);
-        T.socket.emit('duel:invite', { cid, from: { id: me.p.id, name: me.p.name, rating: me.p.rating, element: me.p.card.element }, stake });
+        T.socket.emit('duel:invite', { cid, from: { id: me.p.id, name: me.p.name, rating: me.p.rating, level: levelOf(me.p), element: me.p.card.element }, stake });
         reply({ ok: true, msg: `Sfida inviata a ${T.p.name}` });
     });
     on('duel:respond', (d, reply) => {

@@ -8,7 +8,18 @@ import { Character } from './character.js';
 import { makeSky, makeWaterMaterial, glowTexture } from './world.js';
 import { FireSet, makeSconce, Gallery } from './decor.js';
 import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration } from './shared/fight.js';
-import { ELEMENTS, ECONOMY, weaponStats } from './shared/catalog.js';
+import { ELEMENTS, ECONOMY, weaponStats, seedRelation } from './shared/catalog.js';
+
+// Come si guardano i due semi sulla Ruota (riga sotto le barre e nella schermata delle scommesse)
+const VERB = { fuoco: 'scioglie', ghiaccio: 'gela', palude: 'spacca', pietra: 'spegne', tempesta: 'disperde', spettro: 'soffoca' };
+export function matchText(A, B) {
+    const r = seedRelation(A.element, B.element), n = e => ELEMENTS[e]?.name || e;
+    if (r === 'up') return `${n(A.element)} ${VERB[A.element]} ${n(B.element)}: vantaggio a ${A.name}`;
+    if (r === 'down') return `${n(B.element)} ${VERB[B.element]} ${n(A.element)}: vantaggio a ${B.name}`;
+    if (r === 'opp') return `${n(A.element)} e ${n(B.element)} sono opposti: Dissonanza, le mosse possono fallire`;
+    if (r === 'same') return 'Stesso seme: Risonanza, la SUPER si carica più in fretta';
+    return A.element === 'fango' || B.element === 'fango' ? 'Il Fango non ha vantaggi né debolezze' : 'Nessun vantaggio fra questi due semi';
+}
 import { h, $, coin, fmt, toast, IS_MOBILE } from './util.js';
 import { elIcon, iconSVG } from './icons.js';
 
@@ -66,9 +77,8 @@ export class DuelView {
         this.buildHud();
         this.bindInput();
         if (this.role === 'local') {
-            this.sim = createDuel(
-                { id: info.a.id, name: info.a.name, element: info.a.element, weapon: info.a.look?.weapon },
-                { id: info.b.id, name: info.b.name, element: info.b.element, weapon: info.b.look?.weapon });
+            const setup = (x) => ({ id: x.id, name: x.name, element: x.element, weapon: x.look?.weapon, level: x.level || 1, talents: x.talents, gear: x.gear });
+            this.sim = createDuel(setup(info.a), setup(info.b));
             this.bot = createBot(opts.botLevel || 1);
             this.acc = 0;
             this.pushSnap(snapshotDuel(this.sim, [{ t: 'round', n: 1 }]));
@@ -162,7 +172,7 @@ export class DuelView {
     makeStatus() {
         const g = new THREE.Group();
         const mk = (color) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); s.visible = false; g.add(s); return s; };
-        g.userData = { burn: mk('#ff6a1a'), poison: mk('#5aff5a'), slow: mk('#a0703c'), armor: mk('#ffb35a') };
+        g.userData = { burn: mk('#ff6a1a'), poison: mk('#5aff5a'), slow: mk('#a0703c'), armor: mk('#ffb35a'), dirty: mk('#6a3a12') };
         const flame = this.fires.make(1.5);
         flame.visible = false; g.add(flame); g.userData.flame = flame;
         return g;
@@ -190,8 +200,9 @@ export class DuelView {
         }
         const help = $('#dh-help');
         const k = (t) => `<i class="kbd">${t}</i>`;
-        if (this.role === 'spectator') help.innerHTML = 'Stai assistendo al duello dagli spalti';
-        else help.innerHTML = `<span>${k('A')}${k('D')} muovi</span><span>${k('W')} salta</span><span>${k('J')} colpo</span><span>${k('K')} fendente</span><span>${k('L')} Super</span><span>${k('E')} para</span><span>${k('Shift')} scatto</span><span>${k('Esc')} resa</span>`;
+        const match = `<span class="dh-match">${matchText(this.info.a, this.info.b).replace(/[<>&]/g, '')}</span>`;
+        if (this.role === 'spectator') help.innerHTML = match + '<span>Stai assistendo al duello dagli spalti</span>';
+        else help.innerHTML = match + `<span>${k('A')}${k('D')} muovi</span><span>${k('W')} salta</span><span>${k('J')} colpo</span><span>${k('K')} fendente</span><span>${k('L')} Super</span><span>${k('E')} para</span><span>${k('Shift')} scatto</span><span>${k('Esc')} resa</span>`;
         const exit = $('#dh-exit');
         exit.classList.toggle('hidden', this.role !== 'spectator');
         exit.textContent = 'Esci';
@@ -253,7 +264,7 @@ export class DuelView {
                 bet.append(h('span', { class: 'muted' }, this.info.stake ? `In palio ${this.info.stake} Sputnik Coin a testa: chi vince prende tutto` : 'Il pubblico sta piazzando le sue scommesse...'),
                     h('button', { class: 'btn btn-sm btn-danger', onclick: () => this.forfeit() }, 'Ritirati'));
             }
-            vs.replaceChildren(h('div', { class: 'vs-row' }, card(A, 'a'), h('div', { class: 'vs-x' }, 'VS'), card(B, 'b')), this.vsCount, this.vsPool, bet);
+            vs.replaceChildren(h('div', { class: 'vs-row' }, card(A, 'a'), h('div', { class: 'vs-x' }, 'VS'), card(B, 'b')), h('div', { class: 'vs-match' }, matchText(A, B)), this.vsCount, this.vsPool, bet);
         }
         this.vsPool.replaceChildren(
             h('span', {}, coin(pool.a), ` (${odds('a')})`),
@@ -421,6 +432,7 @@ export class DuelView {
             U.poison.visible = !!(f.flags & 8); U.poison.position.y = 1; U.poison.scale.setScalar(2.4);
             U.slow.visible = !!(f.flags & 4); U.slow.position.y = 0.3; U.slow.scale.setScalar(1.8);
             U.armor.visible = !!(f.flags & 32); U.armor.position.y = 1; U.armor.scale.setScalar(3);
+            U.dirty.visible = !!(f.flags & 64); U.dirty.position.y = 1.6; U.dirty.scale.setScalar(1.6);
             // HUD
             const pct = Math.max(0, f.hp / f.maxHp) * 100;
             const fill = $(`#dh-fill-${side}`), trail = $(`#dh-trail-${side}`);
@@ -581,13 +593,17 @@ export class DuelView {
                 break;
             }
             case 'block': this.burst(e.x, e.y, '#7ac8ff', 8, 4, 0.25); A.play('block'); break;
+            // Ruota dei Semi e tratti della Maestria
+            case 'fizz': this.burst(e.x, e.y - 0.6, '#b880ff', e.sp ? 22 : 10, e.sp ? 6 : 3, 0.4); this.floatText(e.sp ? 'SUPER DISSOLTA' : 'Dissonanza!', e.x, e.y, '#c9a0ff'); A.play('block'); break;
+            case 'dirty': this.burst(e.x, e.y - 0.6, '#8a5a2a', 14, 3, 0.4); this.floatText('Infangato! Niente SUPER', e.x, e.y, '#d8a060'); break;
+            case 'last': this.announce('ULTIMO RESPIRO!', ''); this.floatText('1 PV', e.x, e.y, '#ffd23a'); A.play('special'); this.flash('#ffd23a'); break;
             case 'sp': {
                 const el = ELEMENTS[this.info[e.s].element];
                 this.announce(el.special.name.toUpperCase(), '');
                 $('#dh-announce').style.fontSize = 'clamp(30px, 6vw, 64px)';
                 setTimeout(() => { $('#dh-announce').style.fontSize = ''; }, 1300);
                 A.play('special'); setTimeout(() => A.play(SPECIAL_SFX[e.k] || 'special'), 200);
-                this.flash(el.color);
+                this.flash(e.pure ? '#ffd23a' : el.color);
                 break;
             }
             case 'tp': this.burst(e.x, e.y + 1, '#b06cff', 20, 5, 0.6); break;
@@ -621,9 +637,12 @@ export class DuelView {
         const lines = [];
         if (this.role === 'local') lines.push(h('p', { class: 'muted' }, won ? 'Lo spirito si dissolve nella nebbia. Ora sfida un vero avversario!' : 'Il Fantasma ride di te... la rivincita ti aspetta.'));
         if (this.role === 'fighter' && r.rating) {
-            const d = r.rating[me], c = r.coins[me];
-            lines.push(h('div', { class: 'res-line' }, `Gloria ${d >= 0 ? '+' : ''}${d}`, h('span', { class: 'muted' }, '·'), coin(Math.abs(c)), c >= 0 ? ' guadagnate' : ' perse'));
+            const d = r.rating[me], c = r.coins[me], x = r.xp?.[me] || 0;
+            lines.push(h('div', { class: 'res-line' }, `Gloria ${d >= 0 ? '+' : ''}${d}`, h('span', { class: 'muted' }, '·'), coin(Math.abs(c)), c >= 0 ? ' guadagnate' : ' perse',
+                x ? h('span', { class: 'muted' }, '·') : null, x ? h('span', { class: 'res-xp' }, `+${x} esperienza`) : null));
+            if (r.xp && !x && r.reason !== 'forfeit') lines.push(h('p', { class: 'muted small' }, 'Duello troppo breve: niente esperienza.'));
         }
+        if (this.role === 'local') this.app.practiceDone(won);
         if (r.reason === 'forfeit') lines.push(h('p', { class: 'muted' }, this.role === 'fighter' && !won ? 'Ti sei ritirato dal duello.' : 'Vittoria per abbandono.'));
         const again = this.role === 'local' ? h('button', { class: 'btn', onclick: () => this.app.restartPractice() }, 'Rivincita') : null;
         box.replaceChildren(

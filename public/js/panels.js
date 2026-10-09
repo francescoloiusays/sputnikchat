@@ -5,10 +5,12 @@ import { h, $, coin, fmt, toast, SOCKET_URL, loadImage } from './util.js';
 import {
     ITEMS, SLOTS, SLOT_NAMES, WEAPON_TYPES, MATERIALS, HANDLES, GEMS, ELEMENTS, ECONOMY,
     weaponStats, weaponCost, sanitizeWeaponSpec,
+    GEAR, SETS, gearAffinity, gearLines, itemLevel, weaponLevel, MATERIAL_LEVEL, HANDLE_LEVEL, GEM_LEVEL,
+    computeStats, dissonance, levelProgress, titleFor, TALENTS, TALENT_IDS, TALENT_CAP, XP, RESPEC_COST, RING, OPPOSITE,
 } from './shared/catalog.js';
 import { cardEditor } from './creator.js';
 import { composeCard, printCard, downloadCard, CARD_W } from './cards.js';
-import { icon, iconSVG, elIcon, itemIconName, rarityOf } from './icons.js';
+import { icon, iconSVG, elIcon, itemIconName, rarityOf, tierOf } from './icons.js';
 
 export function itemInfo(e) {
     if (e.kind === 'weapon') {
@@ -19,6 +21,30 @@ export function itemInfo(e) {
     return { name: it.name, sub: SLOT_NAMES[it.slot], slot: it.slot, value: it.price, desc: it.desc };
 }
 const SLOT_ICON = { head: 'head', face: 'face', cape: 'cape', torso: 'torso', weapon: 'weapon' };
+const pctTxt = (v) => `${Math.round(v * 1000) / 10}%`.replace('.', ',');
+// Sigillo verde o rosso: come va d'accordo il capo con il seme della tua carta
+function affBadge(id, el) {
+    const G = GEAR[id];
+    if (!G || (!G.syn && !G.rep)) return null;
+    const a = gearAffinity(id, el), name = ELEMENTS[el]?.name || el;
+    if (a === 'syn') return h('span', { class: 'aff syn', html: iconSVG(el) }, `In sintonia con ${name}: rende una volta e mezza`);
+    if (a === 'rep') return h('span', { class: 'aff rep', html: iconSVG(el) }, `In ripulsa con ${name}: rende la metà e porta Dissonanza`);
+    return h('span', { class: 'aff neu' }, 'Neutro per il tuo seme');
+}
+function gearDetail(id, el) {
+    const G = GEAR[id];
+    if (!G) return null;
+    const lines = gearLines(id, el);
+    const set = SETS.find(x => x.items.includes(id));
+    const other = [G.syn ? `sintonia con ${ELEMENTS[G.syn].name}` : null, G.rep ? `ripulsa con ${ELEMENTS[G.rep].name}` : null].filter(Boolean).join(' · ');
+    return [
+        lines.length ? h('ul', { class: 'gear-lines' }, lines.map(l => h('li', {}, l))) : null,
+        h('div', { class: 'btn-row', style: { margin: '4px 0' } }, affBadge(id, el)),
+        other ? h('div', { class: 'set-line' }, 'Per gli altri semi: ', other) : null,
+        set ? h('div', { class: 'set-line' }, h('b', {}, set.name), `: ${set.desc}`) : null,
+    ];
+}
+const lockLabel = (need, level) => need > level ? `livello ${need}` : null;
 // icona della maglietta del suo colore (quelle scure restano leggibili sul fondo scuro)
 const shirtTint = (hex) => { const n = parseInt(hex.slice(1), 16), l = ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) / 255; return l < 0.25 ? '#8a8494' : hex; };
 const ORDER = { weapon: 0, head: 1, face: 2, cape: 3, torso: 4 };
@@ -88,8 +114,9 @@ export class Panels {
         requestAnimationFrame(() => { if (box.isConnected) { S.mount(box, 'full'); this.studioOn = true; } });
         return box;
     }
-    slot({ ic, rar = 'com', sel, eq, price, count, title, onclick, empty, tint, label, color }) {
-        const el = h('button', { class: `slot r-${rar}${sel ? ' sel' : ''}${empty ? ' empty' : ''}`, title, onclick: empty ? null : onclick, style: color ? { color } : null });
+    slot({ ic, rar = 'com', sel, eq, price, count, title, onclick, empty, tint, label, color, lock }) {
+        const el = h('button', { class: `slot r-${rar}${sel ? ' sel' : ''}${empty ? ' empty' : ''}${lock ? ' locked' : ''}`, title: lock ? `${title || ''} · serve il ${lock}` : title, onclick: empty ? null : onclick, style: color ? { color } : null });
+        if (lock) el.append(h('span', { class: 's-lock' }, lock.replace('livello ', 'Lv ')));
         if (tint) el.append(h('span', { class: 'swatch-in', style: { background: tint } }));
         else el.insertAdjacentHTML('beforeend', iconSVG(ic));
         if (eq) el.append(h('span', { class: 's-eq' }, 'E'));
@@ -118,7 +145,9 @@ export class Panels {
         let sel = inv.find(e => e.uid === this.selInv) || inv.find(e => equipped.has(e.uid)) || inv[0];
         this.selInv = sel?.uid;
         const pick = (e) => () => { this.selInv = e.uid; this.app.audio.play('ui'); this.render(); };
-        const slotOf = (e) => { const inf = itemInfo(e); return this.slot({ ic: itemIconName(e), rar: rarityOf(inf.value).id, sel: e.uid === sel?.uid, eq: equipped.has(e.uid), title: inf.name, onclick: pick(e) }); };
+        const L = me.level || 1, el = me.card?.element;
+        const need = (e) => e.kind === 'weapon' ? weaponLevel(e.spec) : itemLevel(e.itemId);
+        const slotOf = (e) => { const inf = itemInfo(e); return this.slot({ ic: itemIconName(e), rar: tierOf(e).id, sel: e.uid === sel?.uid, eq: equipped.has(e.uid), title: inf.name, onclick: pick(e), lock: e.legacy ? null : lockLabel(need(e), L) }); };
         const doll = h('div', { class: 'doll' },
             this.studioBox(S => S.setCharacter(me.appearance, this.app.look())),
             SLOTS.map(s => {
@@ -128,17 +157,19 @@ export class Panels {
         let detail;
         if (!sel) detail = h('div', { class: 'detail' }, h('div', { class: 'd-empty' }, 'La bisaccia è vuota. La Sartoria e la Forgia ti aspettano in piazza.'));
         else {
-            const inf = itemInfo(sel), r = rarityOf(inf.value), on = equipped.has(sel.uid), scrap = Math.floor(inf.value * ECONOMY.SCRAP_RATE);
-            const stats = sel.kind === 'weapon' ? weaponLines(sel.spec) : null;
+            const inf = itemInfo(sel), r = tierOf(sel), on = equipped.has(sel.uid), scrap = Math.floor(inf.value * ECONOMY.SCRAP_RATE);
+            const stats = sel.kind === 'weapon' ? weaponLines(sel.spec) : gearDetail(sel.itemId, el);
+            const req = need(sel), locked = !sel.legacy && req > L;
             detail = h('div', { class: 'detail' },
                 h('div', { class: 'd-name r-' + r.id }, inf.name),
-                h('div', { class: 'd-type' }, `${SLOT_NAMES[inf.slot]} · ${r.name}`),
+                h('div', { class: 'd-type' }, `${SLOT_NAMES[inf.slot]} · ${r.name} · livello ${req}`),
                 stats, inf.desc ? h('div', { class: 'd-flavor' }, inf.desc) : null,
+                locked ? h('p', { class: 'req' }, `Lo potrai usare dal livello ${req}.`) : sel.legacy && req > L ? h('p', { class: 'muted small' }, 'Comprato prima dei livelli: puoi usarlo lo stesso.') : null,
                 h('div', { class: 'btn-row', style: { justifyContent: 'space-between', marginTop: '10px' } },
                     h('span', { class: 'muted small' }, 'Valore ', coin(inf.value)),
                     h('div', { class: 'btn-row' },
                         on ? btn('Togli', () => this.act('equip', { slot: inf.slot, uid: null }))
-                            : btn('Indossa', () => this.act('equip', { slot: inf.slot, uid: sel.uid }), { cls: 'btn-primary', ic: inf.slot === 'weapon' ? 'swords' : 'shield' }),
+                            : btn('Indossa', () => this.act('equip', { slot: inf.slot, uid: sel.uid }), { cls: 'btn-primary', ic: inf.slot === 'weapon' ? 'swords' : 'shield', disabled: locked }),
                         on ? null : btn(`Rottama · ${scrap}`, () => { if (confirm(`Rottamare "${inf.name}" per ${scrap} Sputnik Coin?`)) this.act('item:scrap', { uid: sel.uid }); }, { cls: 'btn-danger btn-sm', ic: 'anvil' }))));
         }
         this.set('bag', 'Bisaccia', this.needOnline(),
@@ -169,27 +200,98 @@ export class Panels {
         const owned = (id) => (me.inventory || []).filter(e => e.itemId === id).length;
         const selId = wares.find(([id]) => id === this.selShop)?.[0] || wares[0][0];
         this.selShop = selId;
-        const it = ITEMS[selId], r = rarityOf(it.price);
+        const it = ITEMS[selId], r = tierOf(selId), L = me.level || 1, el = me.card?.element;
+        const req = itemLevel(selId), tooLow = req > L;
         this.set(ic, title, this.needOnline(),
             h('div', { class: 'split' },
                 h('div', {}, this.studioBox(S => S.setCharacter(me.appearance, { ...this.app.look(), [it.slot]: selId })),
                     h('p', { class: 'lore center', style: { marginTop: '10px' } }, motto)),
                 h('div', {}, bar,
                     h('div', { class: 'slot-grid' }, wares.map(([id, w]) => this.slot({
-                        ic: itemIconName(id), rar: rarityOf(w.price).id, sel: id === selId, price: w.price, count: owned(id), title: w.name, color: w.shirt ? shirtTint(w.color) : null,
+                        ic: itemIconName(id), rar: tierOf(id).id, sel: id === selId, price: w.price, count: owned(id), title: w.name, color: w.shirt ? shirtTint(w.color) : null, lock: lockLabel(itemLevel(id), L),
                         onclick: () => { this.selShop = id; this.app.audio.play('ui'); this.render(); },
                     }))),
                     h('div', { class: 'detail' },
                         h('div', { class: 'd-name r-' + r.id }, it.name),
-                        h('div', { class: 'd-type' }, `${SLOT_NAMES[it.slot]} · ${r.name}${owned(selId) ? ` · ne possiedi ${owned(selId)}` : ''}`),
+                        h('div', { class: 'd-type' }, `${SLOT_NAMES[it.slot]} · ${r.name} · livello ${req}${owned(selId) ? ` · ne possiedi ${owned(selId)}` : ''}`),
+                        gearDetail(selId, el),
                         h('div', { class: 'd-flavor' }, it.desc),
                         h('div', { class: 'btn-row', style: { justifyContent: 'space-between' } }, coin(it.price),
                             h('div', { class: 'btn-row' }, this.purse(),
                                 btn('Compra', async () => {
                                     const res = await this.act('shop:buy', { itemId: selId }, `Hai comprato: ${it.name}`);
                                     if (res.ok) this.act('equip', { slot: it.slot, uid: res.uid }, `Indossi: ${it.name}`);
-                                }, { cls: 'btn-primary', ic: 'coins', disabled: me.coins < it.price }))),
-                        me.coins < it.price ? h('p', { class: 'muted small', style: { margin: '8px 0 0' } }, 'Ti mancano ', coin(it.price - me.coins), '. Vinci qualche duello nell\'Arena!') : null))));
+                                }, { cls: 'btn-primary', ic: 'coins', disabled: me.coins < it.price || tooLow }))),
+                        tooLow ? h('p', { class: 'req', style: { margin: '8px 0 0' } }, `Torna quando sarai al livello ${req}. Puoi già provarlo addosso.`)
+                            : me.coins < it.price ? h('p', { class: 'muted small', style: { margin: '8px 0 0' } }, 'Ti mancano ', coin(it.price - me.coins), '. Vinci qualche duello nell\'Arena!') : null))));
+    }
+
+    // --- LIBRO DELLA MAESTRIA (livello, esperienza, i tre rami, statistiche, Rito dell'Oblio) ---
+    p_maestria(arg) {
+        const app = this.app, me = app.me, off = !!me.offline || !app.net.connected;
+        const lp = levelProgress(me.xp || 0), L = me.level || lp.level;
+        const t = { forza: 0, tempra: 0, maestria: 0, ...(me.talents || {}) };
+        const pts = app.unspentPoints();
+        const el = me.card?.element || 'palude', E = ELEMENTS[el];
+        const st = computeStats({ element: el, weapon: app.look().weapon, level: L, talents: t, gear: app.gear() });
+        const head = h('div', { class: 'lvl-head' },
+            h('div', { class: 'lvl-badge' }, L),
+            h('div', {},
+                h('div', { class: 'lvl-title' }, titleFor(L)),
+                h('div', { class: 'lvl-bar' }, h('i', { style: { width: `${Math.round(lp.pct * 100)}%` } })),
+                h('div', { class: 'lvl-sub' }, lp.need ? `${fmt(lp.into)} / ${fmt(lp.need)} esperienza per il livello ${L + 1}` : 'Hai raggiunto il livello massimo.')),
+            h('div', { class: 'pts-big' }, h('b', {}, pts), pts === 1 ? 'punto da spendere' : 'punti da spendere'));
+        const path = (k) => {
+            const T = TALENTS[k], v = t[k];
+            return h('div', { class: 'path' },
+                h('div', { class: 'path-head', html: iconSVG(T.icon) }, T.name, h('span', { class: 'n' }, `${v}/${TALENT_CAP}`)),
+                h('div', { class: 'path-per' }, `Ogni punto: ${T.per}.`),
+                h('div', { class: 'pips' }, Array.from({ length: TALENT_CAP }, (_, i) => h('i', { class: (i < v ? 'on' : '') + ((i + 1) % 5 === 0 ? ' mark' : '') }))),
+                Object.entries(T.traits).map(([n, tr]) => h('div', { class: 'trait' + (v >= +n ? ' on' : '') }, h('span', { class: 'n' }, n), h('div', {}, h('strong', {}, tr.name), tr.desc))),
+                btn('Un punto qui', () => this.act('talent:add', { path: k }, `${T.name}: ${v + 1}`), { cls: 'btn-primary btn-sm', ic: 'star', disabled: off || pts <= 0 || v >= TALENT_CAP }));
+        };
+        const opp = OPPOSITE[el], ring = RING.indexOf(el);
+        const beats = ring >= 0 ? RING[(ring + 1) % 6] : null, fears = ring >= 0 ? RING[(ring + 5) % 6] : null;
+        const dOpp = opp ? dissonance(st, opp) : { hit: 0, sp: 0 }, dAny = dissonance(st, beats || 'fango');
+        const row = (label, value, cls) => h('div', {}, h('span', {}, label), h('b', { class: cls || '' }, value));
+        const stats = h('div', { class: 'statgrid' },
+            row('Danni', `×${st.atk.toFixed(2)}`, st.atkBonus ? 'up' : ''),
+            row('Difesa', pctTxt(st.def), st.def > 0 ? 'up' : st.def < 0 ? 'down' : ''),
+            row('Punti vita', st.hpMax),
+            row('Velocità', pctTxt(st.spd), st.spd > 1 ? 'up' : st.spd < 1 ? 'down' : ''),
+            row('Carica SUPER', `×${st.meterGain.toFixed(2)}`),
+            row('Durata effetti', `+${pctTxt(st.effMul - 1)}`),
+            row('Peso', `${st.load} / ${Math.round(st.cap * 10) / 10}`, st.over ? 'down' : ''),
+            st.immune ? row('Dissonanza', 'immune', 'up')
+                : row(opp ? `Dissonanza contro ${ELEMENTS[opp].name}` : 'Dissonanza', opp ? `${pctTxt(dOpp.hit)} colpi · ${pctTxt(dOpp.sp)} SUPER` : '—', dOpp.hit > 0.12 ? 'down' : ''),
+            dAny.hit > 0 && !st.immune ? row('Dissonanza in ogni duello', `${pctTxt(dAny.hit)} colpi`, 'down') : null);
+        const wheel = h('div', { style: { display: 'grid', gap: '6px' } },
+            h('div', { class: 'btn-row' }, elIcon(el), h('b', {}, `Il tuo seme: ${E.name}`)),
+            ring >= 0 ? h('div', { class: 'set-line' }, 'Batti ', h('b', {}, ELEMENTS[beats].name), ' (+15% di danni e SUPER più rapida), temi ', h('b', {}, ELEMENTS[fears].name), ' (−10%), il tuo opposto è ', h('b', {}, ELEMENTS[opp].name), ': fra voi c\'è Dissonanza.')
+                : h('div', { class: 'set-line' }, 'Il Fango sta fuori dalla Ruota: nessun vantaggio, nessuna debolezza e mai Dissonanza. Le tue palle di fango tolgono la SUPER al nemico per qualche secondo.'));
+        const sets = h('div', {}, SETS.map(x => {
+            const n = x.items.filter(i => st.gear.includes(i)).length, on = st.sets.includes(x.id);
+            return h('div', { class: 'set-line' + (on ? ' on' : '') }, h('b', {}, x.name), ` (${n}/${x.items.length}${x.weapon ? ' + arma' : ''})`, `: ${x.desc}`);
+        }));
+        const xpInfo = h('ul', { class: 'gear-lines' },
+            h('li', {}, `Duello vinto ${XP.WIN} (fino a +${XP.WIN_LEVEL_MAX} contro chi ha più livelli), perso ${XP.LOSS}, almeno 20 secondi di combattimento.`),
+            h('li', {}, me.firstWin ? 'Prima vittoria del giorno: già presa, torna domani.' : 'Prima vittoria del giorno: vale doppio.'),
+            me.rest ? h('li', {}, `Riposo: i prossimi ${me.rest} duelli valgono doppio.`) : h('li', {}, 'Riposo: ogni 8 ore lontano dall\'isola, un duello vale doppio.'),
+            h('li', {}, `Allenamento col Fantasma: ${XP.PRACTICE[1]}, ${XP.PRACTICE[2]} o ${XP.PRACTICE[3]} a vittoria (oggi ancora ${me.practiceLeft ?? XP.PRACTICE_DAILY}).`),
+            h('li', {}, `Scommessa vinta ${XP.BET_WIN}, tributo del giorno ${XP.DAILY}.`));
+        const spent = TALENT_IDS.reduce((a, k) => a + t[k], 0);
+        const rite = arg === 'altare'
+            ? h('div', { class: 'detail' }, h('div', { class: 'd-name' }, "Il Rito dell'Oblio"),
+                lore('«Dimentica ciò che hai imparato, e imparalo di nuovo.» La Custode senza Volto ti restituisce tutti i punti spesi.'),
+                h('div', { class: 'btn-row', style: { justifyContent: 'space-between' } },
+                    h('span', { class: 'muted small' }, me.respecs ? h('span', {}, 'Costo ', coin(RESPEC_COST)) : 'La prima volta è gratis'),
+                    btn('Celebra il rito', async () => { const r = await this.act('talent:reset', {}, "Il rito è compiuto: i tuoi punti sono liberi"); if (r.ok) this.app.audio.play('special'); }, { cls: 'btn-danger', ic: 'rune', disabled: off || !spent || (me.respecs > 0 && me.coins < RESPEC_COST) })))
+            : h('p', { class: 'muted small' }, "Per ridistribuire i punti si celebra il Rito dell'Oblio all'Altare della Cappella in Rovina.");
+        this.set('star', 'Libro della Maestria', off ? this.needOnline() : null, head,
+            h('div', { class: 'paths' }, TALENT_IDS.map(path)),
+            h('div', { class: 'split', style: { marginTop: '16px' } },
+                h('div', {}, sect('star', 'Le tue statistiche'), stats, sect('crystal', 'La Ruota dei Semi'), wheel),
+                h('div', {}, sect('shield', 'Corredi'), sets, sect('scroll', "Da dove arriva l'esperienza"), xpInfo, rite)));
     }
 
     // --- FORGIA ---
@@ -202,15 +304,16 @@ export class Panels {
         const statRow = (label, val, max, txt) => h('div', { class: 'stat-row' }, h('span', {}, label), h('div', { class: 'stat-bar' }, h('div', { style: { width: `${Math.min(100, val / max * 100)}%` } })), h('b', {}, txt ?? '×' + val.toFixed(2)));
         const gemEl = GEMS[spec.gem].element;
         const weapons = (me.inventory || []).filter(e => e.kind === 'weapon');
+        const L = me.level || 1, req = weaponLevel(spec), tooLow = req > L;
         const parts = [
             sect('swords', "Tipo d'arma"),
             h('div', { class: 'part-row' }, Object.entries(WEAPON_TYPES).filter(([k]) => k !== 'pugni').map(([k, v]) => this.slot({ ic: k, sel: spec.type === k, label: v.name, price: v.cost, title: v.name, onclick: choose('type', k) }))),
             sect('anvil', 'Materiale'),
-            h('div', { class: 'part-row' }, Object.entries(MATERIALS).map(([k, v]) => this.slot({ tint: v.color, sel: spec.material === k, label: v.name, price: v.cost || null, title: v.name, onclick: choose('material', k) }))),
+            h('div', { class: 'part-row' }, Object.entries(MATERIALS).map(([k, v]) => this.slot({ tint: v.color, sel: spec.material === k, label: v.name, price: v.cost || null, title: v.name, lock: lockLabel(MATERIAL_LEVEL[k] || 1, L), onclick: choose('material', k) }))),
             sect('fist', 'Impugnatura'),
-            h('div', { class: 'part-row' }, Object.entries(HANDLES).map(([k, v]) => this.slot({ tint: v.color, sel: spec.handle === k, label: v.name.split(' ')[0], price: v.cost || null, title: v.name, onclick: choose('handle', k) }))),
+            h('div', { class: 'part-row' }, Object.entries(HANDLES).map(([k, v]) => this.slot({ tint: v.color, sel: spec.handle === k, label: v.name.split(' ')[0], price: v.cost || null, title: v.name, lock: lockLabel(HANDLE_LEVEL[k] || 1, L), onclick: choose('handle', k) }))),
             sect('gem', 'Gemma incastonata'),
-            h('div', { class: 'part-row' }, Object.entries(GEMS).map(([k, v]) => this.slot({ ic: v.element ? 'gem' : 'close', color: v.color || '#6a5a40', sel: spec.gem === k, label: v.name, price: v.cost || null, title: v.element ? `${v.name}: legata a ${ELEMENTS[v.element].name}` : 'Nessuna gemma', onclick: choose('gem', k) }))),
+            h('div', { class: 'part-row' }, Object.entries(GEMS).map(([k, v]) => this.slot({ ic: v.element ? 'gem' : 'close', color: v.color || '#6a5a40', sel: spec.gem === k, label: v.name, price: v.cost || null, title: v.element ? `${v.name}: legata a ${ELEMENTS[v.element].name}` : 'Nessuna gemma', lock: v.element ? lockLabel(GEM_LEVEL, L) : null, onclick: choose('gem', k) }))),
             h('label', { class: 'field' }, "Nome dell'arma"),
             h('input', { type: 'text', maxlength: 28, value: spec.name, placeholder: `${WEAPON_TYPES[spec.type].name} di ${MATERIALS[spec.material].name}`, style: { width: '100%' }, oninput: (e) => { spec.name = e.target.value; } }),
             h('div', { class: 'btn-row', style: { marginTop: '16px', justifyContent: 'space-between' } },
@@ -218,7 +321,8 @@ export class Panels {
                 btn('Forgia', async () => {
                     const r = await this.act('forge:craft', { spec: sanitizeWeaponSpec(spec) }, `Il fabbro ti consegna: ${spec.name || WEAPON_TYPES[spec.type].name}`);
                     if (r.ok) { this.app.audio.play('heavy'); this.act('equip', { slot: 'weapon', uid: r.uid }, 'Ora la impugni'); }
-                }, { cls: 'btn-primary', ic: 'hammer', disabled: me.coins < cost })),
+                }, { cls: 'btn-primary', ic: 'hammer', disabled: me.coins < cost || tooLow })),
+            tooLow ? h('p', { class: 'req', style: { margin: '8px 0 0', textAlign: 'right' } }, `Mastro Brace lavora questi pezzi solo dal livello ${req}.`) : null,
         ];
         this.set('anvil', 'Forgia di Vulcano', this.needOnline(),
             h('div', { class: 'split' },
@@ -233,7 +337,7 @@ export class Panels {
                 h('div', {}, parts,
                     sect('swords', 'La tua armeria'),
                     weapons.length ? h('div', { class: 'list' }, weapons.map(e => {
-                        const r = rarityOf(weaponCost(e.spec));
+                        const r = tierOf(e);
                         return h('div', { class: 'row' }, h('div', { style: { width: '46px' } }, this.slot({ ic: e.spec.type, rar: r.id, eq: me.equipment?.weapon === e.uid })),
                             h('div', { class: 'grow' }, h('div', { class: 'nm d-name r-' + r.id, style: { fontSize: '18px' } }, e.spec.name), h('div', { class: 'sub' }, itemInfo(e).sub)),
                             me.equipment?.weapon === e.uid ? h('span', { class: 'sub' }, 'In pugno') : btn('Impugna', () => this.act('equip', { slot: 'weapon', uid: e.uid }), { cls: 'btn-sm' }));
@@ -248,7 +352,7 @@ export class Panels {
         const T = 'Bazar del Ratto';
         if (off) return this.set('scales', T, off);
         const row = (e, right, sub) => {
-            const inf = itemInfo(e), r = rarityOf(inf.value);
+            const inf = itemInfo(e), r = tierOf(e);
             return h('div', { class: 'ledger-row' }, this.slot({ ic: itemIconName(e), rar: r.id }),
                 h('div', { class: 'grow' }, h('div', { class: 'nm ink-' + r.id }, inf.name), h('div', { class: 'sub' }, sub || `${SLOT_NAMES[inf.slot]} · ${r.name}`)), right);
         };
@@ -318,7 +422,7 @@ export class Panels {
             const list = r.players || [];
             return this.set('friends', T, bar, list.length ? h('div', { class: 'list' }, list.map(p => h('div', { class: 'row' },
                 h('span', { class: 'gem-dot on' }),
-                h('div', { class: 'grow' }, h('div', { class: 'nm' }, elIcon(p.element), p.name), h('div', { class: 'sub' }, `Livello ${p.level} · gloria ${p.rating}${p.sameRoom ? '' : ' · altrove'}${p.duel ? ' · in duello' : ''}`)),
+                h('div', { class: 'grow' }, h('div', { class: 'nm' }, elIcon(p.element), p.name), h('div', { class: 'sub' }, `${titleFor(p.level || 1)} · livello ${p.level} · gloria ${p.rating}${p.sameRoom ? '' : ' · altrove'}${p.duel ? ' · in duello' : ''}`)),
                 ib('portrait', 'Profilo', () => this.open('profilo', p.id)),
                 friendIds.has(p.id) ? null : ib('handshake', 'Amicizia', () => this.act('friend:request', { id: p.id })),
                 p.sameRoom && !p.duel ? ib('swords', 'Sfida', () => this.open('arena', { focus: p.id }), 'btn-primary') : null)))
@@ -371,7 +475,7 @@ export class Panels {
                 h('div', {},
                     h('div', { class: 'nm', style: { fontSize: '28px' } }, p.name, h('span', { class: 'gem-dot' + (p.online ? ' on' : ''), title: p.online ? 'Sull\'isola' : 'Lontano' })),
                     h('div', { class: 'sub', style: { display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '10px' } }, elIcon(p.element), `Elemento: ${el?.name}`),
-                    h('div', { class: 'detail' }, stat('Livello', p.level), stat('Gloria', p.rating), stat('Vittorie', p.wins), stat('Sconfitte', p.losses),
+                    h('div', { class: 'detail' }, stat('Livello', `${p.level} · ${titleFor(p.level || 1)}`), stat('Gloria', p.rating), stat('Vittorie', p.wins), stat('Sconfitte', p.losses),
                         h('div', { class: 'd-flavor' }, `${el?.passive.name}: ${el?.passive.desc}`)),
                     h('div', { class: 'btn-row', style: { marginTop: '14px' } },
                         p.id === me.id ? null : p.friend ? h('span', { class: 'sub' }, 'Siete amici') : p.requested ? h('span', { class: 'sub' }, 'Richiesta inviata') : btn('Stringi amicizia', () => this.act('friend:request', { id: p.id }).then(() => this.render()), { ic: 'handshake' }),
@@ -384,8 +488,8 @@ export class Panels {
         const app = this.app, me = app.me;
         const card = this.cardDraft ||= structuredClone(me.card || app.local.card);
         const previewHost = h('div', { class: 'card-preview-wrap' }), fields = h('div');
-        cardEditor(fields, { card, appearance: me.appearance, look: app.look(), level: me.level || 1, id: me.id, name: me.name, studio: app.studio, previewHost });
-        const hiRes = () => composeCard({ card, appearance: me.appearance, look: app.look(), level: me.level || 1, id: me.id, name: me.name }, app.studio, CARD_W * 2);
+        cardEditor(fields, { card, appearance: me.appearance, look: app.look(), level: me.level || 1, talents: me.talents, id: me.id, name: me.name, studio: app.studio, previewHost });
+        const hiRes = () => composeCard({ card, appearance: me.appearance, look: app.look(), level: me.level || 1, talents: me.talents, id: me.id, name: me.name }, app.studio, CARD_W * 2);
         const sendSel = h('select', { style: { flex: 1 } }, h('option', { value: '' }, 'Scegli a chi mandarla...'));
         app.net.request('players:get').then(r => {
             const seen = new Set();

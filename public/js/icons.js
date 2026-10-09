@@ -2,7 +2,7 @@
 //  ICONE DEL GIOCO (game-icons.net, CC BY 3.0) e piccoli aiuti grafici
 // =====================================================================
 import { ICON_PATHS } from './icon-paths.js';
-import { ITEMS, WEAPON_TYPES, ELEMENTS } from './shared/catalog.js';
+import { ITEMS, WEAPON_TYPES, ELEMENTS, TIERS, itemTier, weaponLevel } from './shared/catalog.js';
 
 export function iconSVG(name, cls = '', style = '') {
     const d = ICON_PATHS[name] || ICON_PATHS.rune;
@@ -49,6 +49,15 @@ export function rarityOf(value) {
     if (value > 120) return { id: 'epi', name: 'Epico' };
     if (value > 50) return { id: 'rar', name: 'Raro' };
     return { id: 'com', name: 'Comune' };
+}
+// Rarità di un oggetto dalla sua fascia di livello (vestiti) o dai materiali (armi)
+export function tierOf(e) {
+    let id;
+    if (e?.kind === 'weapon' || e?.spec) {
+        const L = weaponLevel(e.spec || e);
+        id = L >= 18 ? 'leg' : L >= 14 ? 'epi' : L >= 8 ? 'rar' : L >= 3 ? 'unc' : 'com';
+    } else id = itemTier(e?.itemId || e);
+    return { id, name: TIERS[id].name };
 }
 
 // Sostituisce gli elementi con data-icon="nome" con l'icona SVG

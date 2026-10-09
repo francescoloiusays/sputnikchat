@@ -4,7 +4,7 @@
 //  Il server lo esegue in modo autoritativo per i duelli online;
 //  il client lo usa in locale per l'allenamento contro il Fantasma.
 // =====================================================================
-import { ELEMENTS, weaponStats } from './catalog.js';
+import { computeStats, matchup, dissonance, WHEEL } from './catalog.js';
 
 export const FIGHT = {
     DT: 1 / 60,
@@ -52,26 +52,21 @@ export function moveDuration(f, mv) {
     const m = MOVES[mv]; return (m.start + m.active + m.rec) / f.aspd;
 }
 
+// setup: { id, name, element, weapon, level, talents, gear } (gear = id dei capi indossati)
 function makeFighter(setup, side) {
-    const el = ELEMENTS[setup.element] ? setup.element : 'fango';
-    const E = ELEMENTS[el];
-    const w = weaponStats(setup.weapon || null);
-    const gemMatch = w.gem && w.gem === el;
-    const maxHp = Math.round(100 * (1 + E.mods.hp));
+    const st = computeStats(setup);
     return {
-        id: setup.id, name: setup.name, side, element: el, special: E.special.id,
-        atk: (1 + E.mods.atk) * w.dmg * (gemMatch ? 1.1 : 1),
-        def: E.mods.def,
-        spd: 1 + E.mods.spd,
-        weight: Math.max(0.6, 1 + E.mods.weight),
-        reach: w.reach, aspd: w.speed, kbm: w.kb, meterGain: 1 + w.meter,
-        maxJumps: el === 'spettro' ? 3 : 2,
-        dashMul: el === 'tempesta' ? 1.5 : 1,
-        regen: el === 'palude' ? 0.8 : 0,
-        maxHp, hp: maxHp, meter: 0, rw: 0,
+        id: setup.id, name: setup.name, side, element: st.element, special: st.special,
+        atk: st.atk, def: st.def, spd: st.spd, weight: st.weight,
+        reach: st.reach, aspd: st.aspd, kbm: st.kbm, meterGain: st.meterGain, effMul: st.effMul,
+        maxJumps: st.maxJumps, dashMul: st.dashMul, regen: st.regen,
+        tr: st.traits, leech: st.leech, airAtk: st.airAtk, cleanse: st.cleanse, glide: st.glide,
+        heavyHeal: st.heavyHeal, startMeter: st.startMeter, stats: st,
+        vs: { dmg: 1, meter: 1, rel: 'n' }, diss: { hit: 0, sp: 0 }, lastUsed: false,
+        maxHp: st.hpMax, hp: st.hpMax, meter: st.startMeter, rw: 0,
         x: 0, y: 0, vx: 0, vy: 0, facing: side === 'a' ? 1 : -1,
         st: 'idle', t: 0, mv: null, mt: 0, hit: false, spFired: false,
-        grounded: true, jumps: 2, inv: 0, burn: 0, slow: 0, poison: 0,
+        grounded: true, jumps: 2, inv: 0, burn: 0, slow: 0, poison: 0, dirty: 0,
         dashCd: 0, drop: 0, combo: 0, comboT: 0, armor: false,
     };
 }
@@ -79,19 +74,41 @@ function makeFighter(setup, side) {
 function resetFighter(f, x) {
     Object.assign(f, {
         x, y: 0, vx: 0, vy: 0, facing: x < 0 ? 1 : -1, hp: f.maxHp, st: 'idle', t: 0, mv: null, mt: 0,
-        hit: false, spFired: false, grounded: true, jumps: f.maxJumps, inv: 0, burn: 0, slow: 0, poison: 0,
+        hit: false, spFired: false, grounded: true, jumps: f.maxJumps, inv: 0, burn: 0, slow: 0, poison: 0, dirty: 0,
         dashCd: 0, drop: 0, combo: 0, comboT: 0, armor: false,
     });
 }
 
-export function createDuel(setupA, setupB) {
+// Dado della Dissonanza: generatore con seme salvato nello stato, così il duello è riproducibile
+function rand(S) {
+    S.rs = (S.rs + 0x6D2B79F5) | 0;
+    let t = Math.imul(S.rs ^ (S.rs >>> 15), 1 | S.rs);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+export function createDuel(setupA, setupB, seed = (Math.random() * 2 ** 31) | 0) {
     const S = {
-        phase: 'intro', pt: 0, round: 1, timer: FIGHT.ROUND_TIME, time: 0,
+        phase: 'intro', pt: 0, round: 1, timer: FIGHT.ROUND_TIME, time: 0, rs: seed | 0,
         f: { a: makeFighter(setupA, 'a'), b: makeFighter(setupB, 'b') },
         proj: [], zones: [], bolts: [], winner: null, roundWinner: null,
     };
+    // Ruota dei Semi: vantaggi e Dissonanza dipendono da chi si ha davanti
+    for (const [me, foe] of [[S.f.a, S.f.b], [S.f.b, S.f.a]]) {
+        me.vs = matchup(me.element, foe.element);
+        me.diss = dissonance(me.stats, foe.element);
+    }
     resetFighter(S.f.a, -4); resetFighter(S.f.b, 4);
     return S;
+}
+
+// Danno a un duellante (Ultimo Respiro: una volta per duello resta a 1 punto vita)
+function hurt(S, f, dmg, ev) {
+    f.hp -= dmg;
+    if (f.hp <= 0 && f.tr.ultimo && !f.lastUsed && S.phase === 'fight') {
+        f.hp = 1; f.lastUsed = true; f.inv = Math.max(f.inv, 0.6);
+        ev.push({ t: 'last', s: f.side, x: f.x, y: f.y + 1.6 });
+    }
 }
 
 const other = s => (s === 'a' ? 'b' : 'a');
@@ -117,7 +134,7 @@ export function stepDuel(S, inputs, dt = FIGHT.DT) {
         physics(S, A, dt, ev); physics(S, B, dt, ev);
         updateAttack(S, A, B, dt, ev); updateAttack(S, B, A, dt, ev);
         updateProjectiles(S, dt, ev);
-        status(S, A, dt); status(S, B, dt);
+        status(S, A, dt, ev); status(S, B, dt, ev);
         checkRoundEnd(S, ev);
         return ev;
     }
@@ -134,7 +151,7 @@ export function stepDuel(S, inputs, dt = FIGHT.DT) {
                 S.proj.length = 0; S.zones.length = 0; S.bolts.length = 0; S.roundWinner = null;
                 const ma = A.meter, mb = B.meter;
                 resetFighter(A, -4); resetFighter(B, 4);
-                A.meter = ma; B.meter = mb;
+                A.meter = Math.max(ma, A.startMeter); B.meter = Math.max(mb, B.startMeter);
                 ev.push({ t: 'round', n: S.round });
             }
         }
@@ -199,9 +216,16 @@ function control(S, f, o, inp, dt, ev) {
     }
     if (f.st === 'block') f.st = 'idle';
 
-    if ((pr & IN.SPECIAL) && f.meter >= 50) {
+    // la SUPER non parte se si è sporchi di fango
+    if ((pr & IN.SPECIAL) && f.meter >= 50 && f.dirty <= 0) {
+        // Dissonanza: la SUPER può dissolversi (restituisce metà della barra)
+        if (f.diss.sp > 0 && rand(S) < f.diss.sp) {
+            f.meter -= 25; f.st = 'stun'; f.t = 0.35; f.mv = null;
+            ev.push({ t: 'fizz', s: f.side, x: f.x, y: f.y + 1.9, sp: 1 });
+            return;
+        }
         f.meter -= 50; startAttack(f, 'sp');
-        ev.push({ t: 'sp', s: f.side, k: f.special });
+        ev.push({ t: 'sp', s: f.side, k: f.special, pure: f.tr.puro ? 1 : 0 });
         return;
     }
     if (pr & IN.HEAVY) { startAttack(f, f.grounded ? 'heavy' : 'air'); return; }
@@ -225,6 +249,8 @@ function control(S, f, o, inp, dt, ev) {
         // giù su piattaforma sottile = scendi
         f.drop = 0.3; f.grounded = false; f.y -= 0.05;
     }
+    // Ali di Pipistrello: tenendo premuto su mentre si cade si plana
+    if (f.glide && !f.grounded && (held & IN.UP) && f.vy < -4) f.vy = -4;
     const slow = f.slow > 0 ? 0.6 : 1;
     const maxV = 7.2 * f.spd * slow;
     f.vx = approach(f.vx, dir * maxV, (f.grounded ? 60 : 32) * dt);
@@ -258,8 +284,8 @@ function physics(S, f, dt, ev) {
     // Caduta fuori dall'arena (stile Smash)
     if (f.y < FIGHT.BLAST_Y || Math.abs(f.x) > FIGHT.BLAST_X) {
         if (S.phase !== 'fight') { f.x = 0; f.y = 8; f.vx = f.vy = 0; return; }
-        const dmg = Math.round(f.maxHp * 0.12);
-        f.hp -= dmg;
+        const dmg = Math.round(f.maxHp * 0.12 * (f.tr.pelledura ? 0.8 : 1));
+        hurt(S, f, dmg, ev);
         ev.push({ t: 'fall', s: f.side, d: dmg });
         f.x = 0; f.y = 8.5; f.vx = 0; f.vy = 0; f.inv = 1.2; f.burn = 0; f.slow = 0;
         if (f.st !== 'ko') { f.st = 'air'; f.mv = null; }
@@ -366,7 +392,7 @@ function updateProjectiles(S, dt, ev) {
         z.life -= dt;
         const tgt = S.f[other(z.o)];
         const box = { x1: z.x - z.w / 2, x2: z.x + z.w / 2, y1: z.y - 0.3, y2: z.y + z.h };
-        if (tgt.st !== 'ko' && overlap(box, hurtbox(tgt))) tgt.poison = 0.25;
+        if (tgt.st !== 'ko' && !tgt.cleanse && overlap(box, hurtbox(tgt))) tgt.poison = 0.25;
         if (z.life <= 0) S.zones.splice(i, 1);
     }
     for (let i = S.bolts.length - 1; i >= 0; i--) {
@@ -383,43 +409,58 @@ function updateProjectiles(S, dt, ev) {
     }
 }
 
+const BASIC = { light: 1, heavy: 1, air: 1, up: 1 };
 function applyHit(S, att, def, o, ev) {
     if (def.inv > 0 || def.st === 'ko') return;
     const blocking = def.st === 'block' && def.facing === -Math.sign(o.dir) && !o.unblockable;
-    let dmg = o.dmg * att.atk * (1 - def.def);
+    // Ruota dei Semi: vantaggio o svantaggio contro il seme dell'avversario
+    let dmg = o.dmg * att.atk * att.vs.dmg * (1 - def.def);
+    const combo = att.comboT > 0 ? att.combo + 1 : 1;
+    if (att.tr.slancio && o.src === 'light' && combo >= 3) dmg *= 1.2;
+    if (att.tr.furia && att.hp < att.maxHp * 0.3) dmg *= 1.15;
+    if (att.airAtk && (o.src === 'air' || !att.grounded)) dmg *= 1 + att.airAtk;
+    // Dissonanza: un colpo normale a volte sfrigola (metà danno, niente carica)
+    const fizz = !!BASIC[o.src] && att.diss.hit > 0 && rand(S) < att.diss.hit;
+    if (fizz) { dmg *= 0.5; ev.push({ t: 'fizz', s: att.side, x: def.x, y: def.y + 1.9 }); }
     if (blocking) {
-        dmg *= 0.2;
-        def.hp -= dmg; def.vx = Math.sign(o.dir) * 3;
-        def.meter = Math.min(100, def.meter + 4); att.meter = Math.min(100, att.meter + 2);
+        dmg *= att.tr.spaccascudi && o.heavy ? 0.5 : 0.2;
+        hurt(S, def, dmg, ev); def.vx = Math.sign(o.dir) * 3;
+        def.meter = Math.min(100, def.meter + 4); if (!fizz) att.meter = Math.min(100, att.meter + 2);
         ev.push({ t: 'block', s: def.side, x: def.x, y: def.y + 1.1 });
         return;
     }
-    def.hp -= dmg;
-    att.meter = Math.min(100, att.meter + (o.meter || 0) * att.meterGain);
+    hurt(S, def, dmg, ev);
+    if (!fizz) att.meter = Math.min(100, att.meter + (o.meter || 0) * att.meterGain * att.vs.meter);
     def.meter = Math.min(100, def.meter + dmg * 0.6);
-    att.combo = att.comboT > 0 ? att.combo + 1 : 1; att.comboT = 1.1;
-    ev.push({ t: 'hit', s: def.side, x: def.x, y: def.y + 1.1, d: Math.round(dmg), h: o.heavy ? 1 : 0, c: att.combo, k: o.src });
-    if (o.eff === 'burn') def.burn = 3;
-    if (o.eff === 'slow') def.slow = 2.2;
+    att.combo = combo; att.comboT = 1.1;
+    if (att.leech) att.hp = Math.min(att.maxHp, att.hp + dmg * att.leech);
+    if (att.heavyHeal && o.heavy) { att.hp = Math.min(att.maxHp, att.hp + att.heavyHeal); ev.push({ t: 'heal', s: att.side, d: att.heavyHeal }); }
+    ev.push({ t: 'hit', s: def.side, x: def.x, y: def.y + 1.1, d: Math.round(dmg), h: o.heavy ? 1 : 0, c: att.combo, k: o.src, a: att.vs.dmg > 1 ? 1 : 0 });
+    const em = att.effMul;
+    if (o.eff === 'burn') def.burn = 3 * em;
+    if (o.eff === 'slow' && !def.cleanse) def.slow = 2.2 * em;
+    // Il fango sporca il seme: per qualche secondo niente SUPER e niente rigenerazione
+    if (o.src === 'mud') { if (def.dirty <= 0) ev.push({ t: 'dirty', s: def.side, x: def.x, y: def.y + 1.9 }); def.dirty = WHEEL.MUD_TIME * em; }
     if (def.armor) return; // super armatura (Frana)
     const ratio = 1 - Math.max(0, def.hp) / def.maxHp;
-    const kb = (o.kb + o.grow * ratio) * att.kbm / def.weight;
+    const kb = (o.kb + o.grow * ratio) * att.kbm / def.weight * (def.tr.radici ? 0.75 : 1);
     def.vx = o.dir * kb; // dir = ±1, oppure ±0.3 per l'attacco verso l'alto
     def.vy = kb * (o.lift ?? 0.45) + 2;
     def.grounded = false; def.mv = null; def.armor = false;
-    if (o.eff === 'freeze') { def.st = 'frozen'; def.t = 1.3; def.vx = 0; def.vy = Math.min(def.vy, 0); }
+    if (o.eff === 'freeze') { def.st = 'frozen'; def.t = 1.3 * em; def.vx = 0; def.vy = Math.min(def.vy, 0); }
     else { def.st = 'stun'; def.t = o.stun * (0.8 + ratio * 0.6); }
 }
 
-function status(S, f, dt) {
+function status(S, f, dt, ev) {
     f.inv = Math.max(0, f.inv - dt);
     f.slow = Math.max(0, f.slow - dt);
+    f.dirty = Math.max(0, f.dirty - dt);
     f.comboT = Math.max(0, f.comboT - dt);
     if (f.comboT <= 0) f.combo = 0;
     if (f.st === 'ko') return;
-    if (f.burn > 0) { f.burn -= dt; f.hp -= 3 * dt; }
-    if (f.poison > 0) { f.poison -= dt; f.hp -= 5 * dt; }
-    if (f.regen && f.hp > 0) f.hp = Math.min(f.maxHp, f.hp + f.regen * dt);
+    if (f.burn > 0) { f.burn -= dt; hurt(S, f, 3 * dt, ev); }
+    if (f.poison > 0) { f.poison -= dt; hurt(S, f, 5 * dt, ev); }
+    if (f.regen && f.hp > 0 && f.dirty <= 0) f.hp = Math.min(f.maxHp, f.hp + f.regen * dt);
 }
 
 // --- SNAPSHOT DI RETE ---
@@ -427,7 +468,7 @@ const r2 = v => Math.round(v * 100) / 100;
 export function snapshotDuel(S, ev) {
     const fs = ['a', 'b'].map(s => {
         const f = S.f[s];
-        const flags = (f.burn > 0 ? 1 : 0) | (f.st === 'frozen' ? 2 : 0) | (f.slow > 0 ? 4 : 0) | (f.poison > 0 ? 8 : 0) | (f.inv > 0 ? 16 : 0) | (f.armor ? 32 : 0);
+        const flags = (f.burn > 0 ? 1 : 0) | (f.st === 'frozen' ? 2 : 0) | (f.slow > 0 ? 4 : 0) | (f.poison > 0 ? 8 : 0) | (f.inv > 0 ? 16 : 0) | (f.armor ? 32 : 0) | (f.dirty > 0 ? 64 : 0);
         return [r2(f.x), r2(f.y), f.facing, Math.round(Math.max(0, f.hp) * 10) / 10, f.maxHp, Math.round(f.meter), f.st, f.mv || '', r2(f.mt), f.rw, flags, f.combo, f.grounded ? 1 : 0];
     });
     return {

@@ -703,6 +703,7 @@ export class World {
         geos.push(place(wallBox(2.2, 0.9, 1), cx, altarY + 0.45, cz + 4.5));
         this.addBox(cx, cz + 4.5, 2.2, 1, altarY - 0.5, altarY + 0.9);
         this.addTorch(cx, altarY + 1.3, cz + 4.5, true, 0.9, { cup: true });
+        this.interactables.push({ id: 'altare', x: cx, z: cz + 2.8, r: 2.8, label: "Altare dei Sette Semi: Libro della Maestria e Rito dell'Oblio" });
         // muretti sparsi
         for (let i = 0; i < 26; i++) {
             const a = r() * Math.PI * 2, d = 22 + r() * 38;
@@ -1179,6 +1180,7 @@ export class World {
             { x: WORLD.CEMETERY.x, z: WORLD.CEMETERY.z, ic: 'skull', label: 'Cimitero' },
             { x: WORLD.MIRROR.x, z: WORLD.MIRROR.z, ic: 'mirror', label: 'Specchio' },
             { x: WORLD.KEEP.x, z: WORLD.KEEP.z, ic: 'armchair', label: 'Stanza Bianca' },
+            { x: 30, z: 52, ic: 'rune', label: 'Altare dei Sette Semi' },
         ];
     }
 

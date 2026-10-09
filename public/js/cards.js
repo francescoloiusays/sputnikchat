@@ -339,7 +339,7 @@ export function defaultType(appearance, element) {
 
 // Compone la card completa su un canvas. studio serve per il ritratto 3D.
 export async function composeCard(opts, studio, W = CARD_W) {
-    const { card, appearance, look, level = 1, id, name } = opts;
+    const { card, appearance, look, level = 1, talents, id, name } = opts;
     const tex = await textureImage(card).catch(() => generateTexture('mura'));
     let art = null, artIsPortrait = false;
     try {
@@ -347,7 +347,8 @@ export async function composeCard(opts, studio, W = CARD_W) {
         else if (card.art && card.art.startsWith('propic:')) art = await cachedImage(CARD_ARTS.find(a => a.id === card.art).file);
         else { art = studio.portrait(appearance, look, 512, 'bust'); artIsPortrait = true; }
     } catch { art = null; }
-    const pw = cardPower(card.element, look?.weapon, level);
+    const gear = ['head', 'face', 'cape', 'torso'].map(s => look?.[s]).filter(Boolean);
+    const pw = cardPower(card.element, look?.weapon, level, { talents, gear });
     const w = look?.weapon;
     const ws = weaponStats(w);
     const c = document.createElement('canvas');
