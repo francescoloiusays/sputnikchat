@@ -7,19 +7,28 @@ import {
     weaponStats, weaponCost, sanitizeWeaponSpec,
     GEAR, SETS, gearAffinity, gearLines, itemLevel, weaponLevel, MATERIAL_LEVEL, HANDLE_LEVEL, GEM_LEVEL,
     computeStats, dissonance, levelProgress, titleFor, TALENTS, TALENT_IDS, TALENT_CAP, XP, RESPEC_COST, RING, OPPOSITE,
+    MATS, MAT_IDS, SEALS, CARD_GRADES, gradeOf, resolveMats, ENCHANT, ENCHANT_STEP, enchantCap, enchantCapNext, enchantMats, ALTAR_LEVEL,
+    INFUSE, INFUSE_LEVEL, INFUSE_COST, FUSE, BLESSING, FISH, FISH_IDS, FISH_RARITY, FISH_DAILY, DIARY, GATHER, plusOf, ELEMENT_IDS, RUNE_NAMES,
 } from './shared/catalog.js';
 import { cardEditor } from './creator.js';
-import { composeCard, printCard, downloadCard, CARD_W } from './cards.js';
+import { composeCard, printCard, downloadCard, CARD_W, holoTrack } from './cards.js';
 import { icon, iconSVG, elIcon, itemIconName, rarityOf, tierOf } from './icons.js';
 
 export function itemInfo(e) {
     if (e.kind === 'weapon') {
-        const s = e.spec, t = WEAPON_TYPES[s.type];
-        return { name: s.name, sub: `${t?.name || 'Arma'} di ${MATERIALS[s.material]?.name || '?'}`, slot: 'weapon', value: weaponCost(s) };
+        const s = e.spec, t = WEAPON_TYPES[s.type], plus = plusOf(s);
+        return { name: s.name + (plus ? ` +${plus}` : ''), sub: `${t?.name || 'Arma'} di ${MATERIALS[s.material]?.name || '?'}`, slot: 'weapon', value: weaponCost(s), plus, inf: s.inf };
     }
-    const it = ITEMS[e.itemId] || { name: '???', slot: 'head', price: 0 };
-    return { name: it.name, sub: SLOT_NAMES[it.slot], slot: it.slot, value: it.price, desc: it.desc };
+    const it = ITEMS[e.itemId] || { name: '???', slot: 'head', price: 0 }, plus = plusOf(e);
+    return { name: it.name + (plus ? ` +${plus}` : ''), sub: SLOT_NAMES[it.slot], slot: it.slot, value: it.price, desc: it.desc, plus };
 }
+// Carta con il riflesso olografico del suo grado (album, profili, Altare)
+export function holoImg(src, grade, cls = 'big-card') {
+    const img = h('img', { src, class: cls, alt: '' });
+    if (!(grade > 0)) return img;
+    return holoTrack(h('div', { class: `holo-wrap holo g-${gradeOf(grade).id}` }, img));
+}
+const matChip = (k, n) => h('span', { class: 'mat-chip', title: MATS[k]?.where, style: { color: MATS[k]?.color }, html: iconSVG(MATS[k]?.icon || 'rune') }, h('b', {}, n), MATS[k]?.name);
 const SLOT_ICON = { head: 'head', face: 'face', cape: 'cape', torso: 'torso', weapon: 'weapon' };
 const pctTxt = (v) => `${Math.round(v * 1000) / 10}%`.replace('.', ',');
 // Sigillo verde o rosso: come va d'accordo il capo con il seme della tua carta
@@ -31,10 +40,10 @@ function affBadge(id, el) {
     if (a === 'rep') return h('span', { class: 'aff rep', html: iconSVG(el) }, `In ripulsa con ${name}: rende la metà e porta Dissonanza`);
     return h('span', { class: 'aff neu' }, 'Neutro per il tuo seme');
 }
-function gearDetail(id, el) {
+function gearDetail(id, el, plus = 0) {
     const G = GEAR[id];
     if (!G) return null;
-    const lines = gearLines(id, el);
+    const lines = gearLines(id, el, plus);
     const set = SETS.find(x => x.items.includes(id));
     const other = [G.syn ? `sintonia con ${ELEMENTS[G.syn].name}` : null, G.rep ? `ripulsa con ${ELEMENTS[G.rep].name}` : null].filter(Boolean).join(' · ');
     return [
@@ -114,9 +123,10 @@ export class Panels {
         requestAnimationFrame(() => { if (box.isConnected) { S.mount(box, 'full'); this.studioOn = true; } });
         return box;
     }
-    slot({ ic, rar = 'com', sel, eq, price, count, title, onclick, empty, tint, label, color, lock }) {
-        const el = h('button', { class: `slot r-${rar}${sel ? ' sel' : ''}${empty ? ' empty' : ''}${lock ? ' locked' : ''}`, title: lock ? `${title || ''} · serve il ${lock}` : title, onclick: empty ? null : onclick, style: color ? { color } : null });
+    slot({ ic, rar = 'com', sel, eq, price, count, title, onclick, empty, tint, label, color, lock, plus }) {
+        const el = h('button', { class: `slot r-${rar}${sel ? ' sel' : ''}${empty ? ' empty' : ''}${lock ? ' locked' : ''}${plus >= 5 ? ' glow' : ''}`, title: lock ? `${title || ''} · serve il ${lock}` : title, onclick: empty ? null : onclick, style: color ? { color } : null });
         if (lock) el.append(h('span', { class: 's-lock' }, lock.replace('livello ', 'Lv ')));
+        if (plus) el.append(h('span', { class: 's-plus' }, '+' + plus));
         if (tint) el.append(h('span', { class: 'swatch-in', style: { background: tint } }));
         else el.insertAdjacentHTML('beforeend', iconSVG(ic));
         if (eq) el.append(h('span', { class: 's-eq' }, 'E'));
@@ -147,7 +157,8 @@ export class Panels {
         const pick = (e) => () => { this.selInv = e.uid; this.app.audio.play('ui'); this.render(); };
         const L = me.level || 1, el = me.card?.element;
         const need = (e) => e.kind === 'weapon' ? weaponLevel(e.spec) : itemLevel(e.itemId);
-        const slotOf = (e) => { const inf = itemInfo(e); return this.slot({ ic: itemIconName(e), rar: tierOf(e).id, sel: e.uid === sel?.uid, eq: equipped.has(e.uid), title: inf.name, onclick: pick(e), lock: e.legacy ? null : lockLabel(need(e), L) }); };
+        const slotOf = (e) => { const inf = itemInfo(e); return this.slot({ ic: itemIconName(e), rar: tierOf(e).id, sel: e.uid === sel?.uid, eq: equipped.has(e.uid), title: inf.name, onclick: pick(e), lock: e.legacy ? null : lockLabel(need(e), L), plus: inf.plus }); };
+        const [tab, bar] = this.tabBar('bag', [['oggetti', 'Oggetti', 'bag'], ['materiali', 'Materiali', 'shard'], ['diario', 'Diario', 'openbook']]);
         const doll = h('div', { class: 'doll' },
             this.studioBox(S => S.setCharacter(me.appearance, this.app.look())),
             SLOTS.map(s => {
@@ -158,7 +169,7 @@ export class Panels {
         if (!sel) detail = h('div', { class: 'detail' }, h('div', { class: 'd-empty' }, 'La bisaccia è vuota. La Sartoria e la Forgia ti aspettano in piazza.'));
         else {
             const inf = itemInfo(sel), r = tierOf(sel), on = equipped.has(sel.uid), scrap = Math.floor(inf.value * ECONOMY.SCRAP_RATE);
-            const stats = sel.kind === 'weapon' ? weaponLines(sel.spec) : gearDetail(sel.itemId, el);
+            const stats = sel.kind === 'weapon' ? weaponLines(sel.spec, el) : gearDetail(sel.itemId, el, plusOf(sel));
             const req = need(sel), locked = !sel.legacy && req > L;
             detail = h('div', { class: 'detail' },
                 h('div', { class: 'd-name r-' + r.id }, inf.name),
@@ -172,13 +183,54 @@ export class Panels {
                             : btn('Indossa', () => this.act('equip', { slot: inf.slot, uid: sel.uid }), { cls: 'btn-primary', ic: inf.slot === 'weapon' ? 'swords' : 'shield', disabled: locked }),
                         on ? null : btn(`Rottama · ${scrap}`, () => { if (confirm(`Rottamare "${inf.name}" per ${scrap} Sputnik Coin?`)) this.act('item:scrap', { uid: sel.uid }); }, { cls: 'btn-danger btn-sm', ic: 'anvil' }))));
         }
+        const right = tab === 'materiali' ? this.matsView() : tab === 'diario' ? this.diaryView() : [
+            h('div', { class: 'bag-head' }, h('h3', { class: 'sect', style: { margin: 0, flex: 1 }, html: iconSVG('bag') }, `Oggetti (${inv.length})`), this.purse()),
+            inv.length ? h('div', { class: 'slot-grid' }, inv.map(slotOf)) : null,
+            detail];
         this.set('bag', 'Bisaccia', this.needOnline(),
-            h('div', { class: 'split' },
-                doll,
-                h('div', {},
-                    h('div', { class: 'bag-head' }, h('h3', { class: 'sect', style: { margin: 0, flex: 1 }, html: iconSVG('bag') }, `Oggetti (${inv.length})`), this.purse()),
-                    inv.length ? h('div', { class: 'slot-grid' }, inv.map(slotOf)) : null,
-                    detail)));
+            h('div', { class: 'split' }, doll, h('div', {}, bar, right)));
+    }
+    // Materiali per l'Altare: quanti ne hai e dove si trovano
+    matsView() {
+        const me = this.app.me, mats = me.mats || {};
+        const owned = MAT_IDS.filter(k => mats[k] > 0);
+        const base = ['frammento', 'perla', 'ecto', 'pergamena'];
+        const gl = me.gatherLeft || {};
+        return [
+            h('div', { class: 'bag-head' }, h('h3', { class: 'sect', style: { margin: 0, flex: 1 }, html: iconSVG('shard') }, 'Materiali'), this.purse()),
+            owned.length ? h('div', { class: 'mat-grid' }, owned.map(k => matChip(k, mats[k]))) : h('p', { class: 'muted' }, 'Ancora niente. Comincia dal Cerchio di Pietre o dal Molo.'),
+            sect('map', 'Dove si trovano'),
+            h('div', { class: 'list' }, base.map(k => h('div', { class: 'row' }, h('span', { class: 'mat-ic', style: { color: MATS[k].color }, html: iconSVG(MATS[k].icon) }),
+                h('div', { class: 'grow' }, h('div', { class: 'nm' }, MATS[k].name, h('span', { class: 'muted small' }, ` · ne hai ${mats[k] || 0}`)), h('div', { class: 'sub' }, MATS[k].where), h('div', { class: 'mat-desc' }, MATS[k].desc))))),
+            h('div', { class: 'list' },
+                h('div', { class: 'row' }, h('span', { class: 'mat-ic', style: { color: '#ffd76a' }, html: iconSVG('vial') }), h('div', { class: 'grow' }, h('div', { class: 'nm' }, 'Essenze dei sette semi'), h('div', { class: 'mat-desc' }, `Vinci un duello contro un seme e ottieni la sua Essenza (al massimo 3 al giorno per seme). Anche il Fantasma, dal Guerriero in su, ne lascia due al giorno.`))),
+                h('div', { class: 'row' }, h('span', { class: 'mat-ic', style: { color: '#ffd76a' }, html: iconSVG('runestone') }), h('div', { class: 'grow' }, h('div', { class: 'nm' }, 'Rune'), h('div', { class: 'mat-desc' }, "All'Altare: 8 Frammenti e un'Essenza fanno la Runa di quel seme.")))),
+            h('p', { class: 'muted small' }, `Oggi ancora a premi pieni: ${gl.frammento ?? GATHER.daily.frammento} frammenti, ${gl.ecto ?? GATHER.daily.ecto} fuochi fatui, ${me.fishLeft ?? FISH_DAILY} pescate.`),
+        ];
+    }
+    // Diario del Naufrago e diario di pesca
+    diaryView() {
+        const me = this.app.me, found = new Set(me.diary || []), log = me.fishLog || {};
+        const species = FISH_IDS.filter(id => FISH[id].rar !== 'special');
+        const caught = species.filter(id => log[id]?.n).length;
+        return [
+            sect('bottle', `Diario del Naufrago (${found.size}/${DIARY.length})`),
+            lore('Pagine ritrovate nelle bottiglie che salgono al Molo. Chi le ritrova tutte riceve il Sigillo del Naufrago.'),
+            found.size ? h('div', { class: 'diary' }, DIARY.map((p, i) => found.has(i)
+                ? h('details', { class: 'page' }, h('summary', {}, h('span', { class: 'n' }, i + 1), p.t), h('p', {}, p.x)) : null)) : null,
+            found.size < DIARY.length ? h('div', { class: 'diary-missing' }, h('span', {}, found.size ? 'Mancano ancora:' : 'Nessuna pagina, per ora. Mancano:'),
+                DIARY.map((_, i) => found.has(i) ? null : h('span', { class: 'n' }, i + 1))) : null,
+            sect('fish', `Diario di pesca (${caught}/${species.length})`),
+            h('div', { class: 'fish-grid' }, species.map(id => {
+                const f = FISH[id], R = FISH_RARITY[f.rar], L = log[id];
+                const ic = f.rar === 'junk' ? 'boot' : id === 'anguilla' ? 'eel' : f.rar === 'epi' ? 'angler' : 'fish';
+                return h('div', { class: 'fish-card' + (L?.n ? '' : ' unknown'), title: L?.n ? f.desc : 'Non l\'hai ancora pescato' },
+                    h('span', { class: 'fc-ic', style: { color: L?.n ? R.color : '#4a4050' }, html: iconSVG(ic) }),
+                    h('b', {}, L?.n ? f.name : '???'),
+                    h('small', {}, L?.n ? `${L.n} pescati · record ${L.best} cm` : f.when === 'night' ? 'Abbocca di notte' : f.when === 'day' ? 'Abbocca di giorno' : R.name),
+                    f.when !== 'any' ? h('span', { class: 'fc-when', html: iconSVG(f.when === 'night' ? 'moon' : 'sun') }) : null);
+            })),
+        ];
     }
 
     // --- SARTORIA (provi il capo selezionato sul manichino) ---
@@ -233,7 +285,7 @@ export class Panels {
         const t = { forza: 0, tempra: 0, maestria: 0, ...(me.talents || {}) };
         const pts = app.unspentPoints();
         const el = me.card?.element || 'palude', E = ELEMENTS[el];
-        const st = computeStats({ element: el, weapon: app.look().weapon, level: L, talents: t, gear: app.gear() });
+        const st = computeStats({ element: el, weapon: app.look().weapon, level: L, talents: t, gear: app.gear(), gearPlus: app.gearPlus(), seals: me.sealsOn });
         const head = h('div', { class: 'lvl-head' },
             h('div', { class: 'lvl-badge' }, L),
             h('div', {},
@@ -278,7 +330,10 @@ export class Panels {
             h('li', {}, me.firstWin ? 'Prima vittoria del giorno: già presa, torna domani.' : 'Prima vittoria del giorno: vale doppio.'),
             me.rest ? h('li', {}, `Riposo: i prossimi ${me.rest} duelli valgono doppio.`) : h('li', {}, 'Riposo: ogni 8 ore lontano dall\'isola, un duello vale doppio.'),
             h('li', {}, `Allenamento col Fantasma: ${XP.PRACTICE[1]}, ${XP.PRACTICE[2]} o ${XP.PRACTICE[3]} a vittoria (oggi ancora ${me.practiceLeft ?? XP.PRACTICE_DAILY}).`),
-            h('li', {}, `Scommessa vinta ${XP.BET_WIN}, tributo del giorno ${XP.DAILY}.`));
+            h('li', {}, `Scommessa vinta ${XP.BET_WIN}, tributo del giorno ${XP.DAILY}.`),
+            h('li', {}, `Pesca nella Nebbia: da 6 a 55 a pesce (${FISH_DAILY} pescate piene al giorno). Frammenti e fuochi fatui: ${GATHER.xp} ciascuno.`),
+            (me.blessUntil || 0) > Date.now() ? h('li', { class: 'up' }, `Benedizione della Custode: +${Math.round(BLESSING.xp * 100)}% fino alle ${new Date(me.blessUntil).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}.`) : null,
+            (me.sealsOn || []).includes('corvo') ? h('li', { class: 'up' }, 'Sigillo del Corvo: +5% su tutto.') : null);
         const spent = TALENT_IDS.reduce((a, k) => a + t[k], 0);
         const rite = arg === 'altare'
             ? h('div', { class: 'detail' }, h('div', { class: 'd-name' }, "Il Rito dell'Oblio"),
@@ -292,6 +347,182 @@ export class Panels {
             h('div', { class: 'split', style: { marginTop: '16px' } },
                 h('div', {}, sect('star', 'Le tue statistiche'), stats, sect('crystal', 'La Ruota dei Semi'), wheel),
                 h('div', {}, sect('shield', 'Corredi'), sets, sect('scroll', "Da dove arriva l'esperienza"), xpInfo, rite)));
+    }
+
+    // --- ALTARE DEI SETTE SEMI (Cappella in Rovina): risveglio, incantamento, infusione, fusione, sigilli, offerta ---
+    p_altare() {
+        const app = this.app, me = app.me, L = me.level || 1, el = me.card?.element || 'palude';
+        const off = !!me.offline || !app.net.connected, mats = me.mats || {};
+        const T = 'Altare dei Sette Semi';
+        const intro = lore("«Porta qui ciò che hai raccolto sull'isola. Io non ho volto, ma vedo tutto quello che sei.» La Custode senza Volto veglia sull'altare.");
+        const maestria = btn("Libro della Maestria e Rito dell'Oblio", () => this.open('maestria', 'altare'), { cls: 'btn-sm', ic: 'star' });
+        if (L < ALTAR_LEVEL) return this.set('altar', T, intro, h('div', { class: 'empty' }, `La Custode ti riceverà dal livello ${ALTAR_LEVEL}. Vinci un duello o allenati col Fantasma.`), h('div', { class: 'btn-row mid' }, maestria));
+        const [tab, bar] = this.tabBar('altare', [['carta', 'Risveglio', 'card'], ['incanto', 'Incantamento', 'sparkles'], ['infusione', 'Infusione', 'cauldron'], ['fusione', 'Fusione', 'runestone'], ['sigilli', 'Sigilli', 'waxseal'], ['offerta', 'Offerta', 'candle']]);
+        // materiali richiesti: verdi se li hai, rossi se mancano
+        const needs = (need, coins) => {
+            let ok = (me.coins || 0) >= (coins || 0);
+            const chips = Object.entries(need).map(([k, n]) => {
+                const M = MATS[k], have = mats[k] || 0;
+                if (have < n) ok = false;
+                return h('span', { class: 'need ' + (have >= n ? 'ok' : 'no'), title: M.where, html: iconSVG(M.icon) }, `${M.name} ${have}/${n}`);
+            });
+            if (coins) chips.push(h('span', { class: 'need ' + ((me.coins || 0) >= coins ? 'ok' : 'no') }, coin(coins)));
+            return { ok, el: h('div', { class: 'needs' }, chips) };
+        };
+        const check = (ok, text) => h('li', { class: ok ? 'ok' : 'no', html: iconSVG(ok ? 'star' : 'lock') }, text);
+        const request = async (ev, data) => {
+            const r = await app.net.request(ev, data);
+            if (!r.ok) { toast(r.msg || 'La Custode scuote la testa', { kind: 'bad' }); app.audio.play('error'); }
+            return r;
+        };
+        let body;
+        if (tab === 'carta') {
+            const G = me.grade || 0, cur = gradeOf(G), next = CARD_GRADES[G + 1];
+            let nextBox;
+            if (!next) nextBox = h('p', { class: 'muted' }, 'La tua carta è al grado più alto.');
+            else if (next.locked) nextBox = h('div', { class: 'detail' }, h('div', { class: 'd-name', style: { color: next.color } }, `Prossimo grado: ${next.name}`), h('div', { class: 'd-flavor' }, next.gives), h('p', { class: 'req' }, next.locked));
+            else {
+                const n = needs(resolveMats(next.mats, el), next.coins);
+                const tr = next.trial, trialOk = tr.kind === 'wins' ? (me.cardWins || 0) >= tr.n : !!me.fishLog?.[tr.fish]?.n;
+                const lvOk = L >= next.lv;
+                nextBox = h('div', { class: 'detail' },
+                    h('div', { class: 'd-name', style: { color: next.color } }, `Prossimo grado: ${next.name}`),
+                    h('div', { class: 'd-flavor' }, next.gives),
+                    h('ul', { class: 'checks' }, check(lvOk, `Livello ${next.lv}${lvOk ? '' : ` (sei al ${L})`}`),
+                        check(trialOk, `Prova: ${tr.text}${tr.kind === 'wins' ? ` · ${Math.min(me.cardWins || 0, tr.n)}/${tr.n}` : ''}`)),
+                    n.el,
+                    h('div', { class: 'btn-row end' }, btn('Risveglia la carta', async () => {
+                        const r = await request('altar:awaken', {});
+                        if (!r.ok) return;
+                        app.audio.play('special');
+                        toast(h('div', {}, h('b', {}, `La tua carta è ${r.name}!`), h('div', {}, next.gives + '.')), { kind: 'coin', icon: 'sparkles', duration: 8000 });
+                    }, { cls: 'btn-primary', ic: 'sparkles', disabled: off || !lvOk || !trialOk || !n.ok })));
+            }
+            body = h('div', { class: 'split' },
+                h('div', { class: 'center' }, app.local.cardImage ? holoImg(app.local.cardImage, G, 'altar-card') : null,
+                    h('p', { class: 'muted small' }, `Grado: ${cur.name}${cur.seals ? ` · ${cur.seals === 1 ? 'un posto' : `${cur.seals} posti`} per i sigilli` : ''}`)),
+                h('div', {}, intro, nextBox,
+                    sect('star', 'I gradi della carta'),
+                    h('div', { class: 'grades' }, CARD_GRADES.slice(1).map((g, i) => h('div', { class: 'grade' + (G >= i + 1 ? ' on' : '') },
+                        h('b', { style: { color: g.color } }, g.name), h('span', {}, `livello ${g.lv}`), h('small', {}, g.gives)))),
+                    h('p', { class: 'muted small' }, 'Chi cambia seme scende di un grado: la nebbia ricorda.')));
+        } else if (tab === 'incanto') {
+            const eq = new Set(Object.values(me.equipment || {}));
+            const inv = [...(me.inventory || [])].sort((a, b) => (eq.has(b.uid) - eq.has(a.uid)) || ORDER[itemInfo(a).slot] - ORDER[itemInfo(b).slot]);
+            const sel = inv.find(e => e.uid === this.selAlt) || inv[0];
+            this.selAlt = sel?.uid;
+            const cap = enchantCap(L), capNext = enchantCapNext(L);
+            let detail = h('p', { class: 'muted' }, 'Non hai niente da incantare.');
+            if (sel) {
+                const inf = itemInfo(sel), isW = sel.kind === 'weapon', cur = inf.plus || 0, step = ENCHANT[cur + 1];
+                const eff = (p) => isW ? `+${Math.round(p * ENCHANT_STEP.weapon * 100)}% di danni` : `+${Math.round(p * ENCHANT_STEP.gear * 100)}% di difesa`;
+                let action;
+                if (cur >= 10) action = h('p', { class: 'up' }, 'Il pezzo è a +10: la Custode non può fare di più.');
+                else if (cur >= cap) action = h('p', { class: 'req' }, `Al tuo livello la Custode incanta fino a +${cap}.${capNext ? ` Dal livello ${capNext[0]} fino a +${capNext[1]}.` : ''}`);
+                else {
+                    const n = needs(enchantMats(step, mats, el), step.coins);
+                    const scroll = this.useScroll && step.drop && (mats.pergamena || 0) > 0;
+                    action = [
+                        h('div', { class: 'ench-line' }, h('b', {}, `Verso +${cur + 1}`), ` ${eff(cur + 1)} · riesce ${Math.round(step.ok * 100)} volte su 100`),
+                        step.drop ? h('p', { class: 'warn' }, 'Se fallisce, il pezzo scende di un livello. Non si rompe mai.') : step.ok < 1 ? h('p', { class: 'muted small' }, 'Se fallisce perdi solo i materiali.') : null,
+                        n.el,
+                        step.drop ? h('label', { class: 'check-line' }, h('input', { type: 'checkbox', checked: !!this.useScroll, disabled: !(mats.pergamena > 0), onchange: (e) => { this.useScroll = e.target.checked; this.render(); } }),
+                            ` Usa una Pergamena Benedetta (ne hai ${mats.pergamena || 0}): se fallisce non scende`) : null,
+                        h('div', { class: 'btn-row end' }, btn('Incanta', async () => {
+                            const r = await request('altar:enchant', { uid: sel.uid, scroll });
+                            if (!r.ok) return;
+                            const base = inf.name.replace(/ \+\d+$/, '');
+                            if (r.success) { app.audio.play(r.plus >= 5 ? 'special' : 'coin'); toast(h('div', {}, h('b', {}, `Riuscito: ${base} +${r.plus}`), r.plus === 5 && isW ? h('div', {}, "Ora l'arma lascia una scia del colore del tuo seme.") : r.plus === 10 && !isW ? h('div', {}, "Il capo ora ha un'aura.") : null), { kind: 'ok', icon: 'sparkles' }); }
+                            else if (r.saved) { app.audio.play('block'); toast('Non è riuscito, ma la Pergamena Benedetta ha protetto il pezzo', { icon: 'scroll' }); }
+                            else { app.audio.play('error'); toast(r.plus < r.from ? `Non è riuscito: il pezzo scende a +${r.plus}` : "Non è riuscito, ma il pezzo resta com'era", { kind: 'bad', icon: 'sparkles' }); }
+                        }, { cls: 'btn-primary', ic: 'sparkles', disabled: off || !n.ok })),
+                    ];
+                }
+                detail = h('div', { class: 'detail' },
+                    h('div', { class: 'd-name r-' + tierOf(sel).id }, inf.name),
+                    h('div', { class: 'd-type' }, `${SLOT_NAMES[inf.slot]} · ${cur ? `ora ${eff(cur)}` : 'mai incantato'}${eq.has(sel.uid) ? ' · indossato' : ''}`),
+                    action);
+            }
+            body = [intro,
+                h('div', { class: 'split' },
+                    h('div', {}, h('div', { class: 'slot-grid' }, inv.map(e => this.slot({ ic: itemIconName(e), rar: tierOf(e).id, sel: e.uid === sel?.uid, eq: eq.has(e.uid), title: itemInfo(e).name, plus: itemInfo(e).plus, onclick: () => { this.selAlt = e.uid; app.audio.play('ui'); this.render(); } })))),
+                    h('div', {}, detail,
+                        sect('scroll', 'La scala degli incantamenti'),
+                        h('table', { class: 'ench-table' }, h('tr', {}, h('th', {}, 'Livello'), h('th', {}, 'Riesce'), h('th', {}, 'Costo'), h('th', {}, 'Se fallisce')),
+                            [[1, 3], [4, 5], [6, 8], [9, 10]].map(([a, b]) => {
+                                const s = ENCHANT[a], last = ENCHANT[b];
+                                const m = Object.entries(s.mats).map(([k, n]) => `${n} ${({ ess: ['Essenza', 'Essenze'], runa: ['Runa', 'Rune'], frammento: ['Frammento', 'Frammenti'], perla: ['Perla', 'Perle'] })[k]?.[n > 1 ? 1 : 0] || MATS[k].name}`).join(', ');
+                                return h('tr', { class: b <= cap ? '' : 'locked' }, h('td', {}, `+${a}…+${b}`), h('td', {}, s.ok === last.ok ? `${Math.round(s.ok * 100)}%` : `${Math.round(s.ok * 100)}–${Math.round(last.ok * 100)}%`), h('td', {}, `${s.coins}–${last.coins} monete, ${m}`), h('td', {}, s.drop ? 'scende di uno' : 'niente'));
+                            })),
+                        h('p', { class: 'muted small' }, `Arma: +${ENCHANT_STEP.weapon * 100}% di danni a livello, da +5 lascia una scia. Vestiti: +${ENCHANT_STEP.gear * 100}% di difesa a livello, a +10 hanno un'aura. Fino a +3 dal livello 2, +5 dal 10, +8 dal 12, +10 dal 20.`)))];
+        } else if (tab === 'infusione') {
+            const weapons = (me.inventory || []).filter(e => e.kind === 'weapon');
+            const sel = weapons.find(e => e.uid === this.selInf) || weapons.find(e => e.uid === me.equipment?.weapon) || weapons[0];
+            this.selInf = sel?.uid;
+            const pickEl = ELEMENTS[this.infEl] ? this.infEl : el;
+            const lvOk = L >= INFUSE_LEVEL;
+            const opp = OPPOSITE[el] === pickEl, has = (mats['ess_' + pickEl] || 0) > 0;
+            body = [intro,
+                lvOk ? null : h('p', { class: 'req' }, `Le infusioni si imparano dal livello ${INFUSE_LEVEL}. Intanto puoi raccogliere le Essenze vincendo i duelli.`),
+                h('div', { class: 'split' },
+                    h('div', {}, sect('swords', 'Arma da infondere'),
+                        weapons.length ? h('div', { class: 'slot-grid' }, weapons.map(e => this.slot({ ic: e.spec.type, rar: tierOf(e).id, sel: e.uid === sel?.uid, eq: me.equipment?.weapon === e.uid, title: itemInfo(e).name, plus: plusOf(e.spec), onclick: () => { this.selInf = e.uid; this.render(); } }))) : h('p', { class: 'muted' }, 'Non hai armi.'),
+                        sel ? h('div', { class: 'detail' }, h('div', { class: 'd-name r-' + tierOf(sel).id }, itemInfo(sel).name), weaponLines(sel.spec, el)) : null),
+                    h('div', {}, sect('vial', 'Essenza'),
+                        h('div', { class: 'el-pick' }, ELEMENT_IDS.map(k => h('button', { class: 'chip' + (k === pickEl ? ' sel' : ''), onclick: () => { this.infEl = k; this.render(); } }, elIcon(k), ELEMENTS[k].name, h('small', {}, `${mats['ess_' + k] || 0}`)))),
+                        h('div', { class: 'detail' },
+                            h('div', { class: 'd-name' }, `Infusione di ${ELEMENTS[pickEl].name}`),
+                            h('div', {}, INFUSE[pickEl]),
+                            opp ? h('p', { class: 'warn' }, `${ELEMENTS[pickEl].name} è l'opposto del tuo seme: l'effetto è doppio, ma porti addosso la Dissonanza (+5% di colpi che sfrigolano, +10% di SUPER che si dissolvono).`) : null,
+                            sel?.spec.inf ? h('p', { class: 'muted small' }, `L'arma è già infusa di ${ELEMENTS[sel.spec.inf].name}: la nuova infusione prende il suo posto.`) : null,
+                            needs({ ['ess_' + pickEl]: 1 }, INFUSE_COST).el,
+                            h('div', { class: 'btn-row end' }, btn('Infondi', async () => {
+                                const r = await request('altar:infuse', { uid: sel.uid, el: pickEl });
+                                if (r.ok) { app.audio.play('special'); toast(`${itemInfo(sel).name} ora porta il seme di ${ELEMENTS[pickEl].name}`, { kind: 'ok', icon: 'cauldron' }); }
+                            }, { cls: 'btn-primary', ic: 'cauldron', disabled: off || !lvOk || !sel || !has || sel?.spec.inf === pickEl || (me.coins || 0) < INFUSE_COST })))))];
+        } else if (tab === 'fusione') {
+            const pickEl = ELEMENTS[this.fuseEl] ? this.fuseEl : (ELEMENT_IDS.find(k => k !== el && (mats['ess_' + k] || 0) > 0) || ELEMENT_IDS.find(k => k !== el));
+            const runeN = needs({ frammento: FUSE.runa.frammento, ['ess_' + pickEl]: FUSE.runa.ess }, FUSE.runa.coins);
+            const trasN = needs({ ['ess_' + pickEl]: FUSE.trasmuta.ess }, FUSE.trasmuta.coins);
+            const go = (recipe) => async () => { const r = await request('altar:fuse', { recipe, el: pickEl }); if (r.ok) { app.audio.play('special'); toast(`La Custode ti consegna: ${MATS[r.out].name}`, { kind: 'ok', icon: MATS[r.out].icon }); } };
+            body = [intro,
+                sect('vial', 'Scegli il seme'),
+                h('div', { class: 'el-pick' }, ELEMENT_IDS.map(k => h('button', { class: 'chip' + (k === pickEl ? ' sel' : ''), onclick: () => { this.fuseEl = k; this.render(); } }, elIcon(k), ELEMENTS[k].name,
+                    h('small', {}, `${mats['ess_' + k] || 0} ess. · ${mats['runa_' + k] || 0} rune`)))),
+                h('div', { class: 'split', style: { marginTop: '12px' } },
+                    h('div', { class: 'detail' }, h('div', { class: 'd-name' }, `Runa ${RUNE_NAMES[pickEl]}`),
+                        h('div', { class: 'd-flavor' }, `Otto Frammenti di Runa fusi con un'Essenza di ${ELEMENTS[pickEl].name}. Le rune servono per i +9 e +10 e per la carta Incisa.`),
+                        runeN.el, h('div', { class: 'btn-row end' }, btn('Fondi la runa', go('runa'), { cls: 'btn-primary', ic: 'runestone', disabled: off || !runeN.ok }))),
+                    h('div', { class: 'detail' }, h('div', { class: 'd-name' }, `Trasmutazione in ${ELEMENTS[el].name}`),
+                        pickEl === el ? h('p', { class: 'muted' }, 'Scegli un seme diverso dal tuo: tre sue Essenze diventano una del tuo seme.')
+                            : [h('div', { class: 'd-flavor' }, `Tre Essenze di ${ELEMENTS[pickEl].name} diventano un'Essenza di ${ELEMENTS[el].name}, il tuo seme. Servono per risvegliare la carta.`),
+                                trasN.el, h('div', { class: 'btn-row end' }, btn('Trasmuta', go('trasmuta'), { cls: 'btn-primary', ic: 'vial', disabled: off || !trasN.ok }))]))];
+        } else if (tab === 'sigilli') {
+            const G = me.grade || 0, slots = gradeOf(G).seals, on = me.sealsOn || [], owned = new Set(me.seals || []);
+            body = [intro,
+                h('p', {}, slots ? `La tua carta ${gradeOf(G).name} ha ${slots === 1 ? 'un posto' : `${slots} posti`} per i sigilli: ne usi ${on.length}.` : 'Una carta Comune non ha posti per i sigilli: risvegliala in Filigrana per avere il primo.'),
+                h('div', { class: 'list' }, Object.entries(SEALS).map(([id, S]) => h('div', { class: 'row seal-row' + (owned.has(id) ? '' : ' unknown') },
+                    h('span', { class: 'seal-ic', html: iconSVG(S.icon) }),
+                    h('div', { class: 'grow' }, h('div', { class: 'nm' }, owned.has(id) ? S.name : '???'), h('div', { class: 'sub' }, owned.has(id) ? S.desc : S.where)),
+                    owned.has(id) ? (on.includes(id)
+                        ? btn('Togli', async () => { const r = await request('altar:seal', { id, on: false }); if (r.ok) app.audio.play('ui'); }, { cls: 'btn-sm' })
+                        : btn('Incastona', async () => { const r = await request('altar:seal', { id, on: true }); if (r.ok) { app.audio.play('coin'); toast(`${S.name} incastonato sulla carta`, { kind: 'ok', icon: S.icon }); } }, { cls: 'btn-sm btn-primary', disabled: off || on.length >= slots })) : null)))];
+        } else {
+            const active = (me.blessUntil || 0) > Date.now();
+            const until = active ? new Date(me.blessUntil).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
+            body = [intro,
+                h('div', { class: 'detail' }, h('div', { class: 'd-name' }, 'Offerta alla Custode'),
+                    h('div', { class: 'd-flavor' }, `Lascia ${BLESSING.coins} Sputnik Coin sull'altare: per un'ora ogni cosa ti dà il ${Math.round(BLESSING.xp * 100)}% di esperienza in più. La Custode accetta un'offerta al giorno.`),
+                    active ? h('p', { class: 'up' }, `Sei benedetto fino alle ${until}.`) : me.blessedToday ? h('p', { class: 'muted' }, 'Per oggi la Custode ha già accettato la tua offerta.') : null,
+                    h('div', { class: 'btn-row end' }, btn("Lascia l'offerta", async () => {
+                        const r = await request('altar:offer', {});
+                        if (r.ok) { app.audio.play('special'); toast("La fiamma dell'altare si alza: sei benedetto per un'ora", { kind: 'coin', icon: 'candle' }); }
+                    }, { cls: 'btn-primary', ic: 'candle', disabled: off || active || me.blessedToday || (me.coins || 0) < BLESSING.coins }))),
+                sect('star', "Il Rito dell'Oblio"),
+                h('p', { class: 'muted' }, "Nel Libro della Maestria, qui all'altare, puoi ridistribuire i tuoi punti."),
+                h('div', { class: 'btn-row' }, maestria)];
+        }
+        this.set('altar', T, off ? this.needOnline() : null, h('div', { class: 'bag-head' }, h('div', { style: { flex: 1 } }, bar), this.purse()), body);
     }
 
     // --- FORGIA ---
@@ -471,7 +702,7 @@ export class Panels {
         const stat = (label, val) => h('div', { class: 'stat-row', style: { gridTemplateColumns: '130px 1fr' } }, h('span', {}, label), h('b', { style: { textAlign: 'left' } }, val));
         this.set('portrait', p.name,
             h('div', { class: 'split' },
-                p.cardImage ? h('img', { src: p.cardImage, class: 'big-card', alt: p.name }) : h('div', { class: 'empty' }, 'Nessuna card'),
+                p.cardImage ? holoImg(p.cardImage, p.grade) : h('div', { class: 'empty' }, 'Nessuna card'),
                 h('div', {},
                     h('div', { class: 'nm', style: { fontSize: '28px' } }, p.name, h('span', { class: 'gem-dot' + (p.online ? ' on' : ''), title: p.online ? 'Sull\'isola' : 'Lontano' })),
                     h('div', { class: 'sub', style: { display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '10px' } }, elIcon(p.element), `Elemento: ${el?.name}`),
@@ -488,8 +719,8 @@ export class Panels {
         const app = this.app, me = app.me;
         const card = this.cardDraft ||= structuredClone(me.card || app.local.card);
         const previewHost = h('div', { class: 'card-preview-wrap' }), fields = h('div');
-        cardEditor(fields, { card, appearance: me.appearance, look: app.look(), level: me.level || 1, talents: me.talents, id: me.id, name: me.name, studio: app.studio, previewHost });
-        const hiRes = () => composeCard({ card, appearance: me.appearance, look: app.look(), level: me.level || 1, talents: me.talents, id: me.id, name: me.name }, app.studio, CARD_W * 2);
+        cardEditor(fields, { ...app.cardOpts(card), studio: app.studio, previewHost });
+        const hiRes = () => composeCard(app.cardOpts(card), app.studio, CARD_W * 2);
         const sendSel = h('select', { style: { flex: 1 } }, h('option', { value: '' }, 'Scegli a chi mandarla...'));
         app.net.request('players:get').then(r => {
             const seen = new Set();
@@ -500,13 +731,13 @@ export class Panels {
             h('div', { class: 'card-layout' },
                 h('div', {}, previewHost,
                     h('div', { class: 'btn-row mid', style: { marginTop: '14px' } },
-                        btn('Salva', async () => { await app.saveCard(card); this.cardDraft = null; toast('La tua card è stata rilegata', { kind: 'ok', icon: 'card' }); }, { cls: 'btn-primary', ic: 'save' }),
+                        btn('Salva', async () => { if (await app.saveCard(card) === false) return; this.cardDraft = null; toast('La tua card è stata rilegata', { kind: 'ok', icon: 'card' }); }, { cls: 'btn-primary', ic: 'save' }),
                         btn('Stampa', async () => { if (!printCard(await hiRes(), card.title)) toast('Il browser ha bloccato la finestra di stampa', { kind: 'bad' }); }, { ic: 'print' }),
                         btn('Scarica', async () => downloadCard(await hiRes(), card.title), { ic: 'download' })),
                     h('div', { class: 'btn-row', style: { marginTop: '10px', flexWrap: 'nowrap' } }, sendSel,
                         btn('Invia', async () => {
                             if (!sendSel.value) return toast('Scegli prima il destinatario', { kind: 'bad' });
-                            await app.saveCard(card);
+                            if (await app.saveCard(card) === false) return;
                             this.act('card:send', { to: sendSel.value });
                         }, { ic: 'letter' }))),
                 h('div', {}, lore('La texture decide l\'elemento della card, quindi le tue doti in combattimento e il Super. Se carichi un\'immagine tua, l\'elemento lo sceglie il suo colore dominante.'), fields)));
@@ -518,7 +749,7 @@ export class Panels {
         if (zoom) {
             const img = await loadImage(zoom.image);
             return this.set('album', zoom.title || 'Card',
-                h('img', { src: zoom.image, class: 'big-card', alt: '' }),
+                holoImg(zoom.image, zoom.grade),
                 h('div', { class: 'btn-row mid', style: { marginTop: '16px' } },
                     btn('Stampa', () => { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; c.getContext('2d').drawImage(img, 0, 0); printCard(c, zoom.title); }, { ic: 'print' }),
                     btn('Scarica', () => { const a = document.createElement('a'); a.href = zoom.image; a.download = `card-${zoom.name || 'sputnik'}.jpg`; a.click(); }, { ic: 'download' }),
@@ -533,8 +764,8 @@ export class Panels {
         this.set('album', 'Album delle Card',
             lore('Le card che gli altri viandanti ti hanno donato. Per ricambiare, apri la tua Card del Potere e premi Invia.'),
             h('div', { class: 'cards-grid' },
-                mine ? h('figure', {}, h('img', { src: mine, onclick: () => this.open('collezione', { image: mine, title: 'La tua card', name: app.me.name }) }), h('figcaption', {}, 'La tua card')) : null,
-                list.map(c => h('figure', {}, h('img', { src: c.image, onclick: () => this.open('collezione', { image: c.image, title: c.title, name: c.name, from: c.from }) }), h('figcaption', {}, `${c.name} · ${new Date(c.at).toLocaleDateString('it-IT')}`)))),
+                mine ? h('figure', { onclick: () => this.open('collezione', { image: mine, title: 'La tua card', name: app.me.name, grade: app.me.grade }) }, holoImg(mine, app.me.grade, ''), h('figcaption', {}, 'La tua card')) : null,
+                list.map(c => h('figure', { onclick: () => this.open('collezione', { image: c.image, title: c.title, name: c.name, from: c.from, grade: c.grade }) }, holoImg(c.image, c.grade, ''), h('figcaption', {}, `${c.name} · ${new Date(c.at).toLocaleDateString('it-IT')}${c.grade ? ` · ${gradeOf(c.grade).name}` : ''}`)))),
             list.length ? null : h('div', { class: 'empty' }, 'Nessuna card ricevuta, per ora.'));
     }
 
@@ -608,10 +839,13 @@ export class Panels {
     }
 }
 
-function weaponLines(spec) {
+function weaponLines(spec, el) {
     const s = weaponStats(spec), g = GEMS[spec.gem];
+    const row = { display: 'flex', gap: '6px', alignItems: 'center' };
     return h('div', { class: 'd-stats' },
         h('div', {}, `Danno ×${s.dmg.toFixed(2)} · Velocità ×${s.speed.toFixed(2)}`),
         h('div', {}, `Portata +${s.reach.toFixed(1)} m · Contraccolpo ×${s.kb.toFixed(2)}`),
-        g?.element ? h('div', { class: 'up', style: { display: 'flex', gap: '6px', alignItems: 'center' } }, elIcon(g.element), `${g.name}: +20% carica del Super`) : null);
+        g?.element ? h('div', { class: 'up', style: row }, elIcon(g.element), `${g.name}: +20% carica del Super`) : null,
+        s.plus ? h('div', { class: 'up', style: row, html: iconSVG('sparkles') }, `Incantata +${s.plus}: +${Math.round(s.plus * ENCHANT_STEP.weapon * 100)}% di danni${s.plus >= 5 ? ', lascia una scia' : ''}`) : null,
+        s.inf ? h('div', { class: OPPOSITE[el] === s.inf ? 'down' : 'up', style: row }, elIcon(s.inf), `Infusa di ${ELEMENTS[s.inf].name}: ${INFUSE[s.inf]}${OPPOSITE[el] === s.inf ? ' Doppio, perché è l\'opposto del tuo seme, ma ti porta Dissonanza.' : ''}`) : null);
 }

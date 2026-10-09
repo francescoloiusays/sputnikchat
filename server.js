@@ -15,6 +15,9 @@ import {
     weaponCost, cleanText, levelFromWins, isCardImage,
     XP, levelFromXp, xpForLevel, titleFor, sanitizeTalents, talentPoints, TALENTS, TALENT_IDS, TALENT_CAP,
     itemLevel, weaponLevel, computeStats, RESPEC_COST, ALTAR,
+    MATS, ESS_DAILY, PRACTICE_ESS_DAILY, SEALS, SEAL_CHANCE, CARD_GRADES, sealSlots, resolveMats,
+    ENCHANT, enchantCap, enchantMats, ALTAR_LEVEL, INFUSE_LEVEL, INFUSE_COST, FUSE, BLESSING,
+    GATHER, FISH, FISH_SPOT, FISH_DAILY, FISH_RARITY, DIARY, isNight, rollFish, plusOf,
 } from './public/js/shared/catalog.js';
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
 
@@ -86,7 +89,32 @@ function migrate(p) {
     if (p.respecs == null) { p.respecs = 0; changed = true; }
     if (!p.rest) { p.rest = { n: 0 }; changed = true; }
     if (!p.practice) { p.practice = { day: '', n: 0 }; changed = true; }
+    // fase 2: materiali, grado della carta, sigilli, diario di pesca, raccolta
+    if (!p.mats) { Object.assign(p, { mats: {}, grade: 0, cardWins: 0, seals: [], sealsOn: [], fishLog: {}, diary: [], gather: {} }); changed = true; }
+    p.sealsOn = (p.sealsOn || []).filter(s => p.seals.includes(s)).slice(0, sealSlots(p.grade));
     return changed;
+}
+// Contatori del giorno (pescate e raccolte con premi pieni, Essenze dai duelli)
+function dayc(p) {
+    const d = today();
+    if (!p.dayc || p.dayc.day !== d) p.dayc = { day: d, fish: 0, frammento: 0, ecto: 0, pess: 0, ess: {} };
+    return p.dayc;
+}
+const addMat = (p, k, n = 1) => { n = Math.max(0, Math.floor(n)); if (!MATS[k] || !n) return 0; p.mats[k] = Math.min(9999, (p.mats[k] || 0) + n); return n; };
+const hasMats = (p, need) => Object.entries(need).every(([k, n]) => (p.mats[k] || 0) >= n);
+const takeMats = (p, need) => { for (const [k, n] of Object.entries(need)) p.mats[k] = (p.mats[k] || 0) - n; };
+const giveSeal = (p, id) => { if (!SEALS[id] || p.seals.includes(id)) return null; p.seals.push(id); return id; };
+const blessed = p => (p.blessing?.until || 0) > Date.now();
+// Cambiare seme fa scendere la carta di un grado: la nebbia ricorda
+function setCard(p, card) {
+    const c = sanitizeCard(card);
+    let dropped = false;
+    if (p.card && c.element !== p.card.element) {
+        if (p.grade > 0) { p.grade--; dropped = true; p.sealsOn = (p.sealsOn || []).slice(0, sealSlots(p.grade)); }
+        p.cardWins = 0;
+    }
+    p.card = c;
+    return dropped;
 }
 
 for (const p of store.all()) { pidIndex.set(p.id, p.token); if (migrate(p)) store.put(p); }
@@ -111,6 +139,7 @@ function newProfile(d) {
         cardImage: isCardImage(d?.cardImage) ? d.cardImage : null,
         coins: ECONOMY.START_COINS, rating: 1000, wins: 0, losses: 0, draws: 0,
         xp: 0, talents: { forza: 0, tempra: 0, maestria: 0 }, respecs: 0, rest: { n: 0 }, practice: { day: '', n: 0 },
+        mats: {}, grade: 0, cardWins: 0, seals: [], sealsOn: [], fishLog: {}, diary: [], gather: {},
         inventory: [weapon], equipment: { weapon: weapon.uid },
         friends: [], requests: [], collection: [],
         lastDaily: Date.now(), createdAt: Date.now(), lastSeen: Date.now(),
@@ -119,16 +148,20 @@ function newProfile(d) {
     return p;
 }
 
+// Aspetto: capi indossati, arma (con incantamento e infusione), seme per i colori della scia, aura dei vestiti a +10
 function look(p) {
     const o = {};
     for (const [slot, u] of Object.entries(p.equipment || {})) {
         const it = p.inventory.find(i => i.uid === u);
         if (!it) continue;
         o[slot] = it.kind === 'weapon' ? it.spec : it.itemId;
+        if (it.kind !== 'weapon' && plusOf(it) >= 10) o.aura = 1;
     }
+    o.el = p.card?.element;
     return o;
 }
 const gearOf = p => { const l = look(p); return ['head', 'face', 'cape', 'torso'].map(s => l[s]).filter(Boolean); };
+const gearPlusOf = p => ['head', 'face', 'cape', 'torso'].reduce((s, k) => s + plusOf(p.inventory.find(i => i.uid === p.equipment?.[k])), 0);
 function publicPlayer(S) {
     const p = S.p;
     return {
@@ -145,6 +178,10 @@ function privateView(p) {
         xp: p.xp || 0, talents: p.talents, respecs: p.respecs || 0, rest: p.rest?.n || 0,
         firstWin: p.firstWinDay === d, practiceLeft: Math.max(0, XP.PRACTICE_DAILY - (p.practice?.day === d ? p.practice.n : 0)),
         inventory: p.inventory, equipment: p.equipment,
+        mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
+        fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
+        fishLeft: Math.max(0, FISH_DAILY - dayc(p).fish),
+        gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         friends: p.friends.map(id => ({ id, name: byPid(id)?.name || '???', online: sidByPid.has(id) })),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
         collectionCount: p.collection.length,
@@ -214,16 +251,17 @@ function duelPublic(d, withImages) {
 }
 function fighterInfo(S) {
     const p = S.p;
-    return { id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, rating: p.rating, level: levelOf(p), cardImage: p.cardImage };
+    return { id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, rating: p.rating, level: levelOf(p), grade: p.grade || 0, cardImage: p.cardImage };
 }
 function fighterSetup(p) {
     const w = p.inventory.find(i => i.uid === p.equipment?.weapon);
-    return { id: p.id, name: p.name, element: p.card.element, weapon: w?.spec || null, level: levelOf(p), talents: p.talents, gear: gearOf(p) };
+    return { id: p.id, name: p.name, element: p.card.element, weapon: w?.spec || null, level: levelOf(p), talents: p.talents, gear: gearOf(p), gearPlus: gearPlusOf(p), seals: p.sealsOn };
 }
 
-// Esperienza: aggiorna livello e punti Maestria, avvisa il giocatore se sale di livello
+// Esperienza: aggiorna livello e punti Maestria, avvisa il giocatore se sale di livello.
+// La benedizione della Custode e il Sigillo del Corvo ne aggiungono un po'.
 function grantXp(p, amount) {
-    amount = Math.max(0, Math.round(amount));
+    amount = Math.max(0, Math.round(amount * (1 + (blessed(p) ? BLESSING.xp : 0) + (p.sealsOn?.includes('corvo') ? 0.05 : 0))));
     const before = levelOf(p);
     p.xp = (p.xp || 0) + amount;
     const after = levelOf(p);
@@ -333,6 +371,14 @@ function endDuel(d, winner, reason) {
             result.xp[winner] = duelXp(P[winner], (XP.WIN + diff) * vsFactor(P[winner], P[loser].id), true);
             result.xp[loser] = duelXp(P[loser], XP.LOSS * vsFactor(P[loser], P[winner].id), false);
         } else for (const s of ['a', 'b']) result.xp[s] = duelXp(P[s], XP.DRAW * vsFactor(P[s], P[s === 'a' ? 'b' : 'a'].id), false);
+        // Bottino per l'Altare: un Frammento a testa, e a chi vince l'Essenza del seme sconfitto (massimo 3 al giorno per seme)
+        result.loot = { a: {}, b: {} };
+        for (const s of ['a', 'b']) if (addMat(P[s], 'frammento', 1)) result.loot[s].frammento = 1;
+        if (winner) {
+            const W = P[winner], el = P[winner === 'a' ? 'b' : 'a'].card.element, c = dayc(W);
+            if ((c.ess[el] || 0) < ESS_DAILY) { c.ess[el] = (c.ess[el] || 0) + 1; addMat(W, 'ess_' + el, 1); result.loot[winner]['ess_' + el] = 1; }
+            W.cardWins = (W.cardWins || 0) + 1;
+        }
     }
     if (winner) {
         const loser = winner === 'a' ? 'b' : 'a';
@@ -341,8 +387,10 @@ function endDuel(d, winner, reason) {
         const delta = Math.max(4, Math.round(32 * (1 - exp)));
         W.rating += delta; L.rating = Math.max(100, L.rating - delta);
         result.rating[winner] = delta; result.rating[loser] = -delta;
-        W.coins += d.stake * 2 + ECONOMY.WIN_BONUS; L.coins += ECONOMY.LOSS_BONUS;
-        result.coins[winner] = d.stake + ECONOMY.WIN_BONUS; result.coins[loser] = -d.stake + ECONOMY.LOSS_BONUS;
+        // Sigillo del Naufrago: +10% sulle monete vinte
+        const extra = W.sealsOn?.includes('naufrago') ? Math.round((d.stake + ECONOMY.WIN_BONUS) * 0.1) : 0;
+        W.coins += d.stake * 2 + ECONOMY.WIN_BONUS + extra; L.coins += ECONOMY.LOSS_BONUS;
+        result.coins[winner] = d.stake + ECONOMY.WIN_BONUS + extra; result.coins[loser] = -d.stake + ECONOMY.LOSS_BONUS;
         W.wins++; L.losses++;
         // Scommesse: montepremi diviso tra chi ha indovinato (parimutuel)
         const pl = pool(d), tot = pl.a + pl.b, winPool = pl[winner];
@@ -414,12 +462,17 @@ io.on('connection', (socket) => {
         if (me) return reply({ ok: false, msg: 'Già connesso' });
         let p = d.token ? store.get(String(d.token)) : null;
         const created = !p;
+        let dropped = false;
         if (!p) p = newProfile(d);
         else {
+            migrate(p);
             if (cleanText(d.name, 16).length >= 2) p.name = cleanText(d.name, 16);
             if (d.appearance) p.appearance = sanitizeAppearance(d.appearance);
-            if (d.card) p.card = sanitizeCard(d.card);
-            if (isCardImage(d.cardImage)) p.cardImage = d.cardImage;
+            // la carta salvata nel browser vale solo se non cambia seme a una carta risvegliata:
+            // il grado scende solo quando lo decidi tu, salvando la carta (profile:update)
+            const keep = d.card && sanitizeCard(d.card).element !== p.card?.element && p.grade > 0;
+            if (d.card && !keep) dropped = setCard(p, d.card);
+            if (isCardImage(d.cardImage) && !keep) p.cardImage = d.cardImage;
         }
         migrate(p);
         let daily = 0;
@@ -439,7 +492,7 @@ io.on('connection', (socket) => {
         me = { sid: socket.id, socket, p, room: null, pos: [0, 2, 34, Math.PI, 0], duelId: null, watching: null, lastChat: 0, lastCard: 0 };
         online.set(socket.id, me);
         sidByPid.set(p.id, socket.id);
-        reply({ ok: true, token: p.token, profile: privateView(p), daily, dailyXp: daily ? XP.DAILY : 0, created });
+        reply({ ok: true, token: p.token, profile: privateView(p), daily, dailyXp: daily ? XP.DAILY : 0, created, dropped });
         joinRoom(me, 'pub');
         for (const fid of p.friends) { const F = sessionOf(fid); if (F) F.socket.emit('friend:status', { id: p.id, name: p.name, online: true }); }
         console.log(`+ ${p.name} (${p.id}) — online: ${online.size}`);
@@ -447,13 +500,14 @@ io.on('connection', (socket) => {
 
     on('profile:update', (d, reply) => {
         const p = me.p;
+        let dropped = false;
         if (cleanText(d.name, 16).length >= 2) p.name = cleanText(d.name, 16);
         if (d.appearance) p.appearance = sanitizeAppearance(d.appearance);
-        if (d.card) p.card = sanitizeCard(d.card);
+        if (d.card) dropped = setCard(p, d.card);
         if (isCardImage(d.cardImage)) p.cardImage = d.cardImage;
         save(p); lbCache = null;
         socket.to(me.room).emit('player:look', { id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element });
-        reply({ ok: true, profile: privateView(p) });
+        reply({ ok: true, profile: privateView(p), dropped, grade: p.grade });
     });
 
     // --- MONDO ---
@@ -582,8 +636,194 @@ io.on('connection', (socket) => {
         P.n++;
         const tier = [1, 2, 3].includes(+d.tier) ? +d.tier : 1;
         const xp = grantXp(me.p, d.won ? XP.PRACTICE[tier] : XP.PRACTICE_LOSS);
+        // dal Guerriero in su il Fantasma conta come vittoria della carta e lascia l'Essenza del suo seme (due al giorno)
+        let ess = null;
+        if (d.won && tier >= 2) {
+            me.p.cardWins = (me.p.cardWins || 0) + 1;
+            const c = dayc(me.p), el = String(d.el);
+            if (ELEMENTS[el] && c.pess < PRACTICE_ESS_DAILY) { c.pess++; addMat(me.p, 'ess_' + el, 1); ess = 'ess_' + el; }
+        }
         save(me.p); sendMe(me);
-        reply({ ok: true, xp });
+        reply({ ok: true, xp, ess });
+    });
+
+    // =================================================================
+    //  L'ALTARE DEI SETTE SEMI (Cappella in Rovina)
+    // =================================================================
+    const altarOk = (reply) => {
+        if (me.duelId) { fail(reply, 'Non durante un duello'); return false; }
+        if (Math.hypot(me.pos[0] - ALTAR.x, me.pos[2] - ALTAR.z) > ALTAR.r) { fail(reply, "Serve l'Altare della Cappella in Rovina"); return false; }
+        if (levelOf(me.p) < ALTAR_LEVEL) { fail(reply, `La Custode ti riceve dal livello ${ALTAR_LEVEL}`); return false; }
+        return true;
+    };
+    const lookChanged = (uid) => {
+        if (Object.values(me.p.equipment || {}).includes(uid)) io.to(me.room).emit('player:look', { id: me.p.id, name: me.p.name, appearance: me.p.appearance, look: look(me.p), element: me.p.card.element });
+    };
+    const trialDone = (p, g) => !g.trial || (g.trial.kind === 'wins' ? (p.cardWins || 0) >= g.trial.n : g.trial.kind === 'fish' ? !!p.fishLog?.[g.trial.fish]?.n : false);
+    // Risveglio della carta: Filigrana, Aurora, Incisa
+    on('altar:awaken', (d, reply) => {
+        if (!altarOk(reply)) return;
+        const p = me.p, next = CARD_GRADES[(p.grade || 0) + 1];
+        if (!next) return fail(reply, 'La tua carta è già al grado più alto');
+        if (next.locked) return fail(reply, next.locked);
+        if (levelOf(p) < next.lv) return fail(reply, `Il grado ${next.name} si raggiunge dal livello ${next.lv}`);
+        if (!trialDone(p, next)) return fail(reply, `Prova non ancora superata: ${next.trial.text}`);
+        const need = resolveMats(next.mats, p.card.element);
+        if (!hasMats(p, need)) return fail(reply, 'Ti mancano dei materiali');
+        if (p.coins < next.coins) return fail(reply, `Servono ${next.coins} Sputnik Coin`);
+        p.coins -= next.coins; takeMats(p, need);
+        p.grade = (p.grade || 0) + 1; p.cardWins = 0;
+        save(p); sendMe(me);
+        sysChat(me.room, `✦ La carta di ${p.name} si è risvegliata: ora è ${next.name}!`);
+        reply({ ok: true, grade: p.grade, name: next.name });
+    });
+    // Incantamento: fino a +5 riesce quasi sempre, poi si rischia di scendere di uno (la Pergamena Benedetta protegge)
+    on('altar:enchant', (d, reply) => {
+        if (!altarOk(reply)) return;
+        const p = me.p, it = p.inventory.find(i => i.uid === d.uid);
+        if (!it) return fail(reply, 'Oggetto non trovato');
+        if (it.kind !== 'weapon' && !ITEMS[it.itemId]) return fail(reply, 'Questo non si può incantare');
+        const obj = it.kind === 'weapon' ? it.spec : it, cur = plusOf(obj), cap = enchantCap(levelOf(p));
+        if (cur >= 10) return fail(reply, 'Il pezzo è già a +10');
+        if (cur >= cap) return fail(reply, `Al tuo livello la Custode incanta fino a +${cap}`);
+        const step = ENCHANT[cur + 1], need = enchantMats(step, p.mats, p.card.element);
+        if (!hasMats(p, need)) return fail(reply, 'Ti mancano dei materiali');
+        if (p.coins < step.coins) return fail(reply, `Servono ${step.coins} Sputnik Coin`);
+        const scroll = !!d.scroll && step.drop;
+        if (scroll && !(p.mats.pergamena > 0)) return fail(reply, 'Non hai Pergamene Benedette');
+        p.coins -= step.coins; takeMats(p, need);
+        if (scroll) p.mats.pergamena--;
+        const success = Math.random() < step.ok;
+        const plus = success ? cur + 1 : step.drop && !scroll ? cur - 1 : cur;
+        if (plus > 0) obj.plus = plus; else delete obj.plus;
+        save(p); sendMe(me); lookChanged(it.uid);
+        if (success && plus >= 8) sysChat(me.room, `✦ ${p.name} ha incantato un pezzo a +${plus}!`);
+        reply({ ok: true, success, plus, from: cur, saved: !success && scroll });
+    });
+    // Infusione: l'arma prende l'effetto di un seme sul colpo pesante
+    on('altar:infuse', (d, reply) => {
+        if (!altarOk(reply)) return;
+        const p = me.p, it = p.inventory.find(i => i.uid === d.uid), el = String(d.el);
+        if (!it || it.kind !== 'weapon') return fail(reply, "Si infondono solo le armi");
+        if (levelOf(p) < INFUSE_LEVEL) return fail(reply, `Le infusioni si imparano dal livello ${INFUSE_LEVEL}`);
+        if (!ELEMENTS[el]) return fail(reply, 'Seme sconosciuto');
+        if (it.spec.inf === el) return fail(reply, "L'arma porta già questa infusione");
+        if (!(p.mats['ess_' + el] > 0)) return fail(reply, `Serve un'Essenza di ${ELEMENTS[el].name}`);
+        if (p.coins < INFUSE_COST) return fail(reply, `Servono ${INFUSE_COST} Sputnik Coin`);
+        p.coins -= INFUSE_COST; p.mats['ess_' + el]--;
+        it.spec.inf = el;
+        save(p); sendMe(me); lookChanged(it.uid);
+        reply({ ok: true, el });
+    });
+    // Fusione: 8 Frammenti e un'Essenza fanno una Runa; tre Essenze di altri semi ne fanno una del tuo
+    on('altar:fuse', (d, reply) => {
+        if (!altarOk(reply)) return;
+        const p = me.p, el = String(d.el), mine = p.card.element;
+        if (!ELEMENTS[el]) return fail(reply, 'Seme sconosciuto');
+        let need, out;
+        if (d.recipe === 'runa') { need = { frammento: FUSE.runa.frammento, ['ess_' + el]: FUSE.runa.ess }; out = 'runa_' + el; }
+        else if (d.recipe === 'trasmuta') {
+            if (el === mine) return fail(reply, 'Scegli un seme diverso dal tuo');
+            need = { ['ess_' + el]: FUSE.trasmuta.ess }; out = 'ess_' + mine;
+        } else return fail(reply, 'Ricetta sconosciuta');
+        const coins = FUSE[d.recipe].coins;
+        if (!hasMats(p, need)) return fail(reply, 'Ti mancano dei materiali');
+        if (p.coins < coins) return fail(reply, `Servono ${coins} Sputnik Coin`);
+        p.coins -= coins; takeMats(p, need); addMat(p, out, 1);
+        save(p); sendMe(me);
+        reply({ ok: true, out });
+    });
+    // Sigilli sulla carta (gli slot dipendono dal grado)
+    on('altar:seal', (d, reply) => {
+        if (!altarOk(reply)) return;
+        const p = me.p, id = String(d.id);
+        if (!p.seals.includes(id)) return fail(reply, 'Non possiedi questo sigillo');
+        if (d.on) {
+            if (p.sealsOn.includes(id)) return reply({ ok: true });
+            if (p.sealsOn.length >= sealSlots(p.grade)) return fail(reply, p.grade ? 'Non ci sono altri posti sulla carta: togli prima un sigillo' : 'Risveglia la carta per avere il primo posto per un sigillo');
+            p.sealsOn.push(id);
+        } else p.sealsOn = p.sealsOn.filter(s => s !== id);
+        save(p); sendMe(me);
+        reply({ ok: true });
+    });
+    // Offerta alla Custode: un'ora di esperienza in più, una volta al giorno
+    on('altar:offer', (d, reply) => {
+        if (!altarOk(reply)) return;
+        const p = me.p;
+        if (p.blessing?.day === today()) return fail(reply, "La Custode ha già accettato un'offerta oggi");
+        if (p.coins < BLESSING.coins) return fail(reply, `L'offerta è di ${BLESSING.coins} Sputnik Coin`);
+        p.coins -= BLESSING.coins;
+        p.blessing = { day: today(), until: Date.now() + BLESSING.ms };
+        save(p); sendMe(me);
+        reply({ ok: true, until: p.blessing.until });
+    });
+
+    // --- RACCOLTA: frammenti nel Cerchio di Pietre, fuochi fatui nel cimitero ---
+    on('gather:pick', (d, reply) => {
+        const n = GATHER.nodes.find(x => x.id === d.id);
+        if (!n) return fail(reply, 'Non c\'è niente qui');
+        if (me.duelId) return fail(reply, 'Non durante un duello');
+        if (Math.hypot(me.pos[0] - n.x, me.pos[2] - n.z) > (n.kind === 'ecto' ? 6 : 3.2)) return fail(reply, 'Troppo lontano');
+        const p = me.p, now = Date.now();
+        for (const [k, t] of Object.entries(p.gather)) if (t <= now) delete p.gather[k];
+        if (p.gather[n.id] > now) return fail(reply, n.kind === 'ecto' ? 'Il fuoco fatuo è già svanito' : 'Il frammento non è ancora ricresciuto');
+        p.gather[n.id] = now + GATHER.cooldown[n.kind];
+        const c = dayc(p), full = c[n.kind] < GATHER.daily[n.kind];
+        c[n.kind]++;
+        const got = addMat(p, n.kind, full ? (n.kind === 'frammento' && Math.random() < 0.15 ? 2 : 1) : Math.random() < 0.25 ? 1 : 0);
+        const xp = full ? grantXp(p, GATHER.xp) : 0;
+        const seal = Math.random() < SEAL_CHANCE ? giveSeal(p, GATHER.seal[n.kind]) : null;
+        save(p); sendMe(me);
+        reply({ ok: true, kind: n.kind, got, xp, seal, full });
+    });
+
+    // --- LA PESCA NELLA NEBBIA (il Molo) ---
+    on('fish:cast', (d, reply) => {
+        if (me.duelId) return fail(reply, 'Non durante un duello');
+        if (Math.hypot(me.pos[0] - FISH_SPOT.x, me.pos[2] - FISH_SPOT.z) > FISH_SPOT.r + 1.5) return fail(reply, 'Si pesca in fondo al molo');
+        const now = Date.now();
+        if (me.fishing && now - me.fishing.at < 1200) return fail(reply, 'Piano, la lenza è ancora in acqua');
+        const night = isNight(), fish = rollFish(night);
+        me.fishing = { id: uid(), fish, at: now, bite: Math.round(1800 + Math.random() * 4200) };
+        reply({ ok: true, id: me.fishing.id, bite: me.fishing.bite, diff: FISH[fish].diff, move: FISH[fish].move, night, left: Math.max(0, FISH_DAILY - dayc(me.p).fish) });
+    });
+    on('fish:reel', (d, reply) => {
+        const F = me.fishing;
+        if (!F || F.id !== d.id) return fail(reply, 'La lenza si è spezzata');
+        me.fishing = null;
+        if (!d.ok) return reply({ ok: true, caught: false });
+        const f = FISH[F.fish], R = FISH_RARITY[f.rar];
+        if (Date.now() - F.at < F.bite + 1200 + f.diff * 1500) return reply({ ok: true, caught: false, msg: 'Troppa fretta: il pesce si è liberato' });
+        const p = me.p, c = dayc(p), full = c.fish < FISH_DAILY;
+        c.fish++;
+        const size = Math.round(f.size[0] + Math.pow(Math.random(), 1.6) * (f.size[1] - f.size[0]));
+        const log = p.fishLog[F.fish] ||= { n: 0, best: 0 };
+        const first = !log.n, record = !first && size > log.best;
+        log.n++; log.best = Math.max(log.best, size);
+        const out = { ok: true, caught: true, fish: F.fish, size, first, record, xp: 0, coins: 0, loot: {}, page: null, seal: null, full };
+        if (f.rar === 'special') {
+            // le bottiglie portano le pagine del Diario del Naufrago, in ordine; quando è finito, Pergamene Benedette
+            const next = DIARY.findIndex((_, i) => !p.diary.includes(i));
+            if (next >= 0) {
+                p.diary.push(next); out.page = next;
+                if (p.diary.length === DIARY.length) out.seal = giveSeal(p, 'naufrago');
+                if (Math.random() < 0.2) out.loot.pergamena = addMat(p, 'pergamena', 1);
+            } else out.loot.pergamena = addMat(p, 'pergamena', 1);
+            if (!out.seal && Math.random() < SEAL_CHANCE) out.seal = giveSeal(p, 'marea');
+            out.xp = full ? grantXp(p, 10) : 0;
+        } else if (f.rar === 'junk') out.xp = full ? grantXp(p, 2) : 0;
+        else {
+            const k = full ? 1 : 0.25;
+            out.xp = grantXp(p, R.xp * k);
+            out.coins = Math.round(R.coins * k); p.coins += out.coins;
+            let perle = R.perla >= 1 ? R.perla : Math.random() < R.perla ? 1 : 0;
+            if (!full) perle = Math.random() < 0.25 ? Math.min(1, perle) : 0;
+            if (perle) out.loot.perla = addMat(p, 'perla', perle);
+            if ((f.rar === 'rar' || f.rar === 'epi') && Math.random() < SEAL_CHANCE * 3) out.seal = giveSeal(p, 'marea');
+        }
+        save(p); sendMe(me);
+        if (f.rar === 'epi') sysChat(me.room, `🎣 ${p.name} ha pescato un ${f.name} di ${size} cm!`);
+        reply(out);
     });
 
     // --- BAZAR (compravendita tra giocatori) ---
@@ -654,7 +894,7 @@ io.on('connection', (socket) => {
         reply({
             ok: true, profile: {
                 id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, card: { title: p.card.title, type: p.card.type },
-                rating: p.rating, wins: p.wins, losses: p.losses, level: levelOf(p), talents: p.talents, cardImage: p.cardImage,
+                rating: p.rating, wins: p.wins, losses: p.losses, level: levelOf(p), talents: p.talents, cardImage: p.cardImage, grade: p.grade || 0,
                 online: sidByPid.has(p.id), friend: me.p.friends.includes(p.id), requested: p.requests.includes(me.p.id),
             },
         });
@@ -706,7 +946,7 @@ io.on('connection', (socket) => {
         if (!me.p.cardImage) return fail(reply, 'Crea prima la tua card');
         if (Date.now() - me.lastCard < 4000) return fail(reply, 'Aspetta qualche secondo');
         me.lastCard = Date.now();
-        const entry = { from: me.p.id, name: me.p.name, title: me.p.card.title, element: me.p.card.element, image: me.p.cardImage, at: Date.now() };
+        const entry = { from: me.p.id, name: me.p.name, title: me.p.card.title, element: me.p.card.element, image: me.p.cardImage, grade: me.p.grade || 0, at: Date.now() };
         t.collection = t.collection.filter(c => c.from !== me.p.id); // tiene solo l'ultima card di ogni mittente
         t.collection.unshift(entry);
         if (t.collection.length > 40) t.collection.length = 40;

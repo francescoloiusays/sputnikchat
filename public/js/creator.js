@@ -94,7 +94,7 @@ export function cardEditor(container, ctx) {
         busy = true;
         try {
             if (typeAuto) { card.type = defaultType(ctx.appearance, card.element); if (typeInput) { typeInput.value = ""; typeInput.placeholder = card.type; } }
-            const c = await composeCard({ card, appearance: ctx.appearance, look: ctx.look, level: ctx.level, talents: ctx.talents, id: ctx.id, name: ctx.name }, ctx.studio, CARD_W);
+            const c = await composeCard({ ...ctx, card }, ctx.studio, CARD_W);
             preview.getContext('2d').clearRect(0, 0, preview.width, preview.height);
             preview.getContext('2d').drawImage(c, 0, 0);
         } catch (e) { console.warn(e); }

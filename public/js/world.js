@@ -5,7 +5,7 @@
 // =====================================================================
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ELEMENTS } from './shared/catalog.js';
+import { ELEMENTS, GATHER, FISH_SPOT, STONES } from './shared/catalog.js';
 import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.js';
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
 
@@ -270,6 +270,7 @@ export class World {
         this.buildCastle();
         this.buildDock();
         this.buildWisps();
+        this.buildGather();
         this.buildMapImage();
     }
 
@@ -703,7 +704,7 @@ export class World {
         geos.push(place(wallBox(2.2, 0.9, 1), cx, altarY + 0.45, cz + 4.5));
         this.addBox(cx, cz + 4.5, 2.2, 1, altarY - 0.5, altarY + 0.9);
         this.addTorch(cx, altarY + 1.3, cz + 4.5, true, 0.9, { cup: true });
-        this.interactables.push({ id: 'altare', x: cx, z: cz + 2.8, r: 2.8, label: "Altare dei Sette Semi: Libro della Maestria e Rito dell'Oblio" });
+        this.interactables.push({ id: 'altare', x: cx, z: cz + 2.8, r: 2.8, label: 'Altare dei Sette Semi: risveglia la carta, incanta, infondi' });
         // muretti sparsi
         for (let i = 0; i < 26; i++) {
             const a = r() * Math.PI * 2, d = 22 + r() * 38;
@@ -1110,6 +1111,104 @@ export class World {
         this.animated.push((dt, t) => { boat.position.y = 0.15 + Math.sin(t * 1.2) * 0.06; boat.rotation.z = Math.sin(t * 0.9) * 0.05; });
         this.addTorch(x - w / 2 - 0.1, y + 1.95, z1, true, 0.9, { cup: true });
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 6), this.matWood); pole.position.set(x - w / 2 - 0.1, y + 0.8, z1); this.scene.add(pole);
+        // il posto del pescatore: un secchio, una cassa e due canne appoggiate
+        const fg = [];
+        fg.push(new THREE.CylinderGeometry(0.2, 0.16, 0.34, 10).translate(x + 0.85, y + 0.22, z1 - 1.1));
+        fg.push(new THREE.BoxGeometry(0.6, 0.45, 0.5).translate(x + 0.8, y + 0.28, z1 - 2.1));
+        for (const dx of [0.62, 0.78]) fg.push(new THREE.CylinderGeometry(0.015, 0.025, 2.3, 5).rotateX(-0.28).translate(x + dx, y + 1.1, z1 - 2.55));
+        const fm = new THREE.Mesh(mergeGeometries(fg), this.matWood);
+        fm.castShadow = true; this.scene.add(fm);
+        this.addBox(x + 0.8, z1 - 2.1, 0.6, 0.5, y, y + 0.5);
+        this.interactables.push({ id: 'pesca', x: FISH_SPOT.x, z: FISH_SPOT.z, r: 2.6, label: 'Pesca nella Nebbia: Perle, pesci e bottiglie' });
+    }
+
+    // --- RACCOLTA: frammenti di runa nel Cerchio di Pietre, fuochi fatui dorati nel cimitero ---
+    buildGather() {
+        this.gatherNodes = new Map();
+        const shardM = new THREE.MeshStandardMaterial({ color: '#a77aff', emissive: '#7a3cff', emissiveIntensity: 1.4, roughness: 0.25, metalness: 0.2, flatShading: true });
+        const shardG = mergeGeometries([new THREE.OctahedronGeometry(0.14).scale(0.7, 1.9, 0.7), new THREE.OctahedronGeometry(0.08).scale(0.7, 1.6, 0.7).translate(0.1, -0.08, 0.04), new THREE.OctahedronGeometry(0.07).scale(0.7, 1.5, 0.7).translate(-0.09, -0.1, -0.03)]);
+        for (const n of GATHER.nodes) {
+            const g = new THREE.Group();
+            if (n.kind === 'frammento') {
+                const y = this.terrainAt(n.x, n.z);
+                const m = new THREE.Mesh(shardG, shardM); m.position.y = 0.26; g.add(m);
+                const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: '#9a6aff', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.7 }));
+                glow.scale.set(0.9, 0.9, 1); glow.position.y = 0.3; g.add(glow);
+                g.position.set(n.x, y, n.z);
+                const it = { id: 'raccogli', node: n.id, kind: n.kind, x: n.x, z: n.z, r: 1.7, label: 'Raccogli il Frammento di Runa' };
+                this.interactables.push(it);
+                this.gatherNodes.set(n.id, { n, g, it, m, glow, phase: Math.random() * 6 });
+            } else {
+                // fuoco fatuo dorato: gira intorno alla sua tomba e scappa se ti avvicini
+                const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: '#ffe27a', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+                core.scale.set(0.55, 0.55, 1); g.add(core);
+                const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: '#7affd8', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.5 }));
+                halo.scale.set(1.4, 1.4, 1); g.add(halo);
+                const base = Math.max(this.terrainAt(n.x, n.z), 0);
+                g.position.set(n.x, base + 1.2, n.z);
+                const it = { id: 'raccogli', node: n.id, kind: n.kind, x: n.x, z: n.z, r: 1.7, label: 'Acchiappa il fuoco fatuo' };
+                this.interactables.push(it);
+                this.gatherNodes.set(n.id, { n, g, it, core, halo, base, phase: Math.random() * 6, off: new THREE.Vector2() });
+            }
+            this.scene.add(g);
+        }
+        this.gatherState = {};
+        this.gatherCheck = 0;
+    }
+    // readyAt per nodo (dal server): i nodi raccolti spariscono finché non ricrescono
+    setGather(map) {
+        this.gatherState = { ...(map || {}) };
+        this.refreshGather();
+    }
+    refreshGather() {
+        const now = Date.now();
+        for (const [id, N] of this.gatherNodes) {
+            const off = (this.gatherState[id] || 0) > now;
+            N.g.visible = !off; N.it.off = off;
+        }
+    }
+    // piccolo scoppio di luce dove si è raccolto
+    gatherFx(id) {
+        const N = this.gatherNodes.get(id);
+        if (!N) return;
+        const p = N.g.position.clone();
+        const col = N.n.kind === 'ecto' ? '#7affd8' : '#b880ff';
+        for (let i = 0; i < 14; i++) {
+            const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: col, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+            s.scale.set(0.25, 0.25, 1); s.position.copy(p).add(new THREE.Vector3(0, N.n.kind === 'ecto' ? 0 : 0.3, 0));
+            this.scene.add(s);
+            const v = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.9 + 0.3, Math.random() - 0.5).multiplyScalar(3);
+            let life = 0.9;
+            const fn = (dt) => {
+                life -= dt; s.position.addScaledVector(v, dt); v.y -= 2 * dt;
+                s.material.opacity = Math.max(0, life / 0.9);
+                if (life <= 0) { this.scene.remove(s); s.material.dispose(); this.animated.splice(this.animated.indexOf(fn), 1); }
+            };
+            this.animated.push(fn);
+        }
+    }
+    updateGather(dt, t, focus) {
+        if ((this.gatherCheck -= dt) <= 0) { this.gatherCheck = 1; this.refreshGather(); }
+        for (const N of this.gatherNodes.values()) {
+            if (!N.g.visible) continue;
+            if (N.n.kind === 'frammento') {
+                N.m.rotation.y = t * 0.8 + N.phase;
+                N.m.position.y = 0.26 + Math.sin(t * 1.6 + N.phase) * 0.05;
+                N.glow.material.opacity = 0.5 + Math.sin(t * 2.2 + N.phase) * 0.25;
+                continue;
+            }
+            const a = t * 0.7 + N.phase;
+            let x = N.n.x + Math.cos(a) * 1.3, z = N.n.z + Math.sin(a * 1.3) * 1.1;
+            if (focus) {
+                const dx = x - focus.x, dz = z - focus.z, d = Math.hypot(dx, dz);
+                const want = d < 3.2 && d > 0.01 ? new THREE.Vector2(dx / d, dz / d).multiplyScalar((3.2 - d) * 0.55) : new THREE.Vector2();
+                N.off.lerp(want, Math.min(1, dt * 2.5));
+            }
+            x += N.off.x; z += N.off.y;
+            N.g.position.set(x, N.base + 1.1 + Math.sin(t * 2.1 + N.phase) * 0.25, z);
+            N.it.x = x; N.it.z = z;
+            N.core.material.opacity = 0.75 + Math.sin(t * 5 + N.phase) * 0.25;
+        }
     }
 
     // --- FUOCHI FATUI ---
@@ -1180,7 +1279,9 @@ export class World {
             { x: WORLD.CEMETERY.x, z: WORLD.CEMETERY.z, ic: 'skull', label: 'Cimitero' },
             { x: WORLD.MIRROR.x, z: WORLD.MIRROR.z, ic: 'mirror', label: 'Specchio' },
             { x: WORLD.KEEP.x, z: WORLD.KEEP.z, ic: 'armchair', label: 'Stanza Bianca' },
-            { x: 30, z: 52, ic: 'rune', label: 'Altare dei Sette Semi' },
+            { x: 30, z: 52, ic: 'altar', label: 'Altare dei Sette Semi' },
+            { x: STONES.x, z: STONES.z, ic: 'runestone', label: 'Cerchio di Pietre' },
+            { x: FISH_SPOT.x, z: FISH_SPOT.z - 3, ic: 'rod', label: 'Pesca nella Nebbia' },
         ];
     }
 
@@ -1217,7 +1318,7 @@ export class World {
     nearestInteractable(x, z, y) {
         let best = null, bd = Infinity;
         for (const it of this.interactables) {
-            if (it.y != null && y != null && Math.abs(y - it.y) > 2.5) continue;
+            if (it.off || (it.y != null && y != null && Math.abs(y - it.y) > 2.5)) continue;
             const d = Math.hypot(x - it.x, z - it.z);
             if (d < it.r && d < bd) { bd = d; best = it; }
         }
@@ -1235,7 +1336,8 @@ export class World {
             w.s.material.opacity = 0.55 + Math.sin(t * 2 + w.a) * 0.35;
         }
         for (const m of this.mist) { m.a += m.sp * dt; m.s.position.x = Math.cos(m.a) * m.d; m.s.position.z = -20 + Math.sin(m.a) * m.d; }
-        for (const fn of this.animated) fn(dt, t);
+        for (const fn of [...this.animated]) fn(dt, t);
+        this.updateGather(dt, t, focus);
         this.fires.update(t);
         this.gallery.update(dt);
         if (focus && this.moonLight.castShadow) {

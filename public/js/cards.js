@@ -2,7 +2,7 @@
 //  CARD DEL POTERE (stile Magic / Yu-Gi-Oh)
 //  La texture scelta decide l'elemento → statistiche e super potere.
 // =====================================================================
-import { ELEMENTS, CARD_TEXTURES, CARD_ARTS, APPEARANCE_LABELS, elementFromHSL, cardPower, weaponStats } from './shared/catalog.js';
+import { ELEMENTS, CARD_TEXTURES, CARD_ARTS, APPEARANCE_LABELS, elementFromHSL, cardPower, weaponStats, SEALS, gradeOf } from './shared/catalog.js';
 import { loadImage } from './util.js';
 import { drawIcon } from './icons.js';
 
@@ -309,22 +309,78 @@ export function drawCard(g, W, H, info) {
     // piè di pagina
     g.font = `${13 * k}px Alegreya, Georgia, serif`; g.fillStyle = '#e8dcf0'; g.textAlign = 'left';
     g.shadowColor = '#000'; g.shadowBlur = 4 * k;
+    const G = info.grade || 0, GR = gradeOf(G);
     g.fillText(`SPUTNIK · ${info.number || '#0000'}`, 46 * k, H - 50 * k);
-    g.fillText(`© Sputnik Homies · ${rar.name}`, 46 * k, H - 33 * k);
+    g.fillText(`© Sputnik Homies · ${G ? `Carta ${GR.name}` : rar.name}`, 46 * k, H - 33 * k);
     g.shadowBlur = 0;
     const bx = W - 246 * k, by = H - 76 * k, bw = 204 * k, bh = 44 * k;
     rr(g, bx, by, bw, bh, 8 * k); g.fillStyle = 'rgba(12,6,16,0.9)'; g.fill();
     g.lineWidth = 2.5 * k; g.strokeStyle = '#c99a2e'; g.stroke();
     g.font = `700 ${19 * k}px Cinzel, Georgia, serif`; g.fillStyle = "#fff"; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(`ATK/${info.atk}   DEF/${info.def}`, bx + bw / 2, by + bh / 2 + 1 * k);
-    // riflesso olografico per le carte rare
-    if (info.level >= 4) {
+    // sigilli incastonati: piccoli bolli di ceralacca sull'illustrazione
+    (info.seals || []).filter(s => SEALS[s]).forEach((s, i) => {
+        const cx = ax + 30 * k + i * 46 * k, cy = ay + ah - 30 * k, r = 19 * k;
+        const wg = g.createRadialGradient(cx - 5 * k, cy - 6 * k, 2 * k, cx, cy, r);
+        wg.addColorStop(0, '#d8483a'); wg.addColorStop(0.7, '#8a1a14'); wg.addColorStop(1, '#4a0a08');
+        g.beginPath(); for (let j = 0; j < 14; j++) { const a = j / 14 * Math.PI * 2, rad = r * (j % 2 ? 0.92 : 1.04); g.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad); } g.closePath();
+        g.fillStyle = wg; g.fill(); g.lineWidth = 1.5 * k; g.strokeStyle = '#2a0402'; g.stroke();
+        drawIcon(g, SEALS[s].icon, cx, cy, 24 * k, '#ffd9a0');
+    });
+    // gradi del risveglio (Altare): Filigrana olografica, bordo Aurora, cornice d'oro Incisa
+    if (G >= 1) {
+        g.save();
+        rr(g, 0, 0, W, H, 30 * k); g.clip();
+        g.globalCompositeOperation = 'screen';
+        g.strokeStyle = 'rgba(200,255,240,0.05)'; g.lineWidth = 2 * k;
+        for (let x = -H; x < W; x += 9 * k) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + H, H); g.stroke(); }
         const hg = g.createLinearGradient(0, 0, W, H);
-        hg.addColorStop(0.25, 'rgba(255,255,255,0)'); hg.addColorStop(0.42, `rgba(255,255,255,${info.level >= 10 ? 0.16 : 0.08})`);
-        hg.addColorStop(0.5, 'rgba(180,140,255,0.06)'); hg.addColorStop(0.6, 'rgba(255,255,255,0)');
-        rr(g, 0, 0, W, H, 30 * k); g.fillStyle = hg; g.fill();
+        hg.addColorStop(0.2, 'rgba(255,255,255,0)'); hg.addColorStop(0.38, 'rgba(255,245,210,0.16)'); hg.addColorStop(0.46, 'rgba(130,220,255,0.14)');
+        hg.addColorStop(0.54, 'rgba(255,130,230,0.12)'); hg.addColorStop(0.62, 'rgba(255,255,255,0)');
+        g.fillStyle = hg; g.fillRect(0, 0, W, H);
+        g.restore();
+    }
+    if (G >= 2) {
+        const stops = ['#ff5a1f', '#ffe14a', '#5fbf4a', '#7fd8ff', '#b880ff', '#ff5a1f'];
+        const cg = g.createConicGradient ? g.createConicGradient(0, W / 2, H / 2) : g.createLinearGradient(0, 0, W, H);
+        stops.forEach((c, i) => cg.addColorStop(i / (stops.length - 1), c));
+        rr(g, 8 * k, 8 * k, W - 16 * k, H - 16 * k, 26 * k); g.lineWidth = 9 * k; g.strokeStyle = cg; g.stroke();
+    }
+    if (G >= 3) {
+        const gold = g.createLinearGradient(0, 0, W, H);
+        gold.addColorStop(0, '#fff6c0'); gold.addColorStop(0.3, '#c99a2e'); gold.addColorStop(0.5, '#ffe9a8'); gold.addColorStop(0.75, '#a8741a'); gold.addColorStop(1, '#fff0b0');
+        rr(g, 3 * k, 3 * k, W - 6 * k, H - 6 * k, 28 * k); g.lineWidth = 5 * k; g.strokeStyle = gold; g.stroke();
+        rr(g, 15 * k, 15 * k, W - 30 * k, H - 30 * k, 21 * k); g.lineWidth = 3 * k; g.stroke();
+        for (const [x, y] of [[22, 22], [W / k - 22, 22], [22, H / k - 22], [W / k - 22, H / k - 22]]) {
+            g.save(); g.translate(x * k, y * k); g.rotate(Math.PI / 4);
+            g.fillStyle = gold; g.fillRect(-9 * k, -9 * k, 18 * k, 18 * k); g.strokeStyle = '#3a2400'; g.lineWidth = 1.5 * k; g.strokeRect(-9 * k, -9 * k, 18 * k, 18 * k);
+            g.restore();
+        }
+        const rnd = srand(77);
+        g.save(); g.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 46; i++) {
+            const side = rnd(), t = rnd(), x = side < 0.5 ? ax + t * aw : (side < 0.75 ? ax : ax + aw), y = side < 0.5 ? (side < 0.25 ? ay : ay + ah) : ay + t * ah;
+            const pr = (2 + rnd() * 5) * k, pg = g.createRadialGradient(x, y, 0, x, y, pr * 2);
+            pg.addColorStop(0, el.glow); pg.addColorStop(1, 'rgba(0,0,0,0)');
+            g.fillStyle = pg; g.fillRect(x - pr * 2, y - pr * 2, pr * 4, pr * 4);
+        }
+        g.restore();
     }
     g.restore();
+}
+
+// Il riflesso olografico (CSS) segue il puntatore sopra la carta
+export function holoTrack(el) {
+    if (!el || el.dataset.holo) return el;
+    el.dataset.holo = '1';
+    const move = (e) => {
+        const r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+        el.style.setProperty('--mx', (x * 100).toFixed(1) + '%');
+        el.style.setProperty('--my', (y * 100).toFixed(1) + '%');
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerleave', () => { el.style.removeProperty('--mx'); el.style.removeProperty('--my'); });
+    return el;
 }
 
 export function cardNumber(id) {
@@ -339,7 +395,7 @@ export function defaultType(appearance, element) {
 
 // Compone la card completa su un canvas. studio serve per il ritratto 3D.
 export async function composeCard(opts, studio, W = CARD_W) {
-    const { card, appearance, look, level = 1, talents, id, name } = opts;
+    const { card, appearance, look, level = 1, talents, id, name, grade = 0, seals = [], gearPlus = 0 } = opts;
     const tex = await textureImage(card).catch(() => generateTexture('mura'));
     let art = null, artIsPortrait = false;
     try {
@@ -348,7 +404,7 @@ export async function composeCard(opts, studio, W = CARD_W) {
         else { art = studio.portrait(appearance, look, 512, 'bust'); artIsPortrait = true; }
     } catch { art = null; }
     const gear = ['head', 'face', 'cape', 'torso'].map(s => look?.[s]).filter(Boolean);
-    const pw = cardPower(card.element, look?.weapon, level, { talents, gear });
+    const pw = cardPower(card.element, look?.weapon, level, { talents, gear, gearPlus, seals });
     const w = look?.weapon;
     const ws = weaponStats(w);
     const c = document.createElement('canvas');
@@ -356,7 +412,7 @@ export async function composeCard(opts, studio, W = CARD_W) {
     drawCard(c.getContext('2d'), c.width, c.height, {
         title: card.title || name || 'Viandante', type: card.type || defaultType(appearance, card.element), flavor: card.flavor,
         element: card.element, tex, art, artIsPortrait, level, atk: pw.atk, def: pw.def,
-        weaponName: w ? `${w.name} (×${ws.dmg.toFixed(2)})` : null, number: cardNumber(id),
+        weaponName: w ? `${w.name}${ws.plus ? ` +${ws.plus}` : ''} (×${ws.dmg.toFixed(2)})` : null, number: cardNumber(id), grade, seals,
     });
     return c;
 }

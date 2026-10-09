@@ -61,7 +61,7 @@ function makeFighter(setup, side) {
         reach: st.reach, aspd: st.aspd, kbm: st.kbm, meterGain: st.meterGain, effMul: st.effMul,
         maxJumps: st.maxJumps, dashMul: st.dashMul, regen: st.regen,
         tr: st.traits, leech: st.leech, airAtk: st.airAtk, cleanse: st.cleanse, glide: st.glide,
-        heavyHeal: st.heavyHeal, startMeter: st.startMeter, stats: st,
+        heavyHeal: st.heavyHeal, startMeter: st.startMeter, stats: st, inf: st.inf,
         vs: { dmg: 1, meter: 1, rel: 'n' }, diss: { hit: 0, sp: 0 }, lastUsed: false,
         maxHp: st.hpMax, hp: st.hpMax, meter: st.startMeter, rw: 0,
         x: 0, y: 0, vx: 0, vy: 0, facing: side === 'a' ? 1 : -1,
@@ -437,13 +437,28 @@ function applyHit(S, att, def, o, ev) {
     if (att.heavyHeal && o.heavy) { att.hp = Math.min(att.maxHp, att.hp + att.heavyHeal); ev.push({ t: 'heal', s: att.side, d: att.heavyHeal }); }
     ev.push({ t: 'hit', s: def.side, x: def.x, y: def.y + 1.1, d: Math.round(dmg), h: o.heavy ? 1 : 0, c: att.combo, k: o.src, a: att.vs.dmg > 1 ? 1 : 0 });
     const em = att.effMul;
+    // Infusione dell'Altare: il colpo pesante porta l'effetto del seme infuso (doppio se è l'opposto del tuo)
+    let kbInf = 1;
+    if (att.inf && o.src === 'heavy' && !fizz) {
+        const k = att.inf.k, T = 1.2 * k * em;   // durata del fango
+        switch (att.inf.el) {
+            case 'fuoco': def.burn = Math.max(def.burn, 0.7 * k * em); break;
+            case 'ghiaccio': if (!def.cleanse) def.slow = Math.max(def.slow, 1.2 * k * em); break;
+            case 'palude': if (!def.cleanse) def.poison = Math.max(def.poison, 0.4 * k * em); break;
+            case 'pietra': kbInf = 1 + 0.2 * k; break;
+            case 'tempesta': hurt(S, def, 2 * k, ev); break;
+            case 'spettro': att.hp = Math.min(att.maxHp, att.hp + dmg * 0.2 * k); break;
+            case 'fango': if (def.dirty <= 0) ev.push({ t: 'dirty', s: def.side, x: def.x, y: def.y + 1.9 }); def.dirty = Math.max(def.dirty, T); break;
+        }
+        ev.push({ t: 'inf', e: att.inf.el, x: def.x, y: def.y + 1.2, k });
+    }
     if (o.eff === 'burn') def.burn = 3 * em;
     if (o.eff === 'slow' && !def.cleanse) def.slow = 2.2 * em;
     // Il fango sporca il seme: per qualche secondo niente SUPER e niente rigenerazione
     if (o.src === 'mud') { if (def.dirty <= 0) ev.push({ t: 'dirty', s: def.side, x: def.x, y: def.y + 1.9 }); def.dirty = WHEEL.MUD_TIME * em; }
     if (def.armor) return; // super armatura (Frana)
     const ratio = 1 - Math.max(0, def.hp) / def.maxHp;
-    const kb = (o.kb + o.grow * ratio) * att.kbm / def.weight * (def.tr.radici ? 0.75 : 1);
+    const kb = (o.kb + o.grow * ratio) * att.kbm * kbInf / def.weight * (def.tr.radici ? 0.75 : 1);
     def.vx = o.dir * kb; // dir = ±1, oppure ±0.3 per l'attacco verso l'alto
     def.vy = kb * (o.lift ?? 0.45) + 2;
     def.grounded = false; def.mv = null; def.armor = false;

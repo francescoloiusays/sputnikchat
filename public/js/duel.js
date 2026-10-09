@@ -8,7 +8,7 @@ import { Character } from './character.js';
 import { makeSky, makeWaterMaterial, glowTexture } from './world.js';
 import { FireSet, makeSconce, Gallery } from './decor.js';
 import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration } from './shared/fight.js';
-import { ELEMENTS, ECONOMY, weaponStats, seedRelation } from './shared/catalog.js';
+import { ELEMENTS, ECONOMY, weaponStats, seedRelation, MATS } from './shared/catalog.js';
 
 // Come si guardano i due semi sulla Ruota (riga sotto le barre e nella schermata delle scommesse)
 const VERB = { fuoco: 'scioglie', ghiaccio: 'gela', palude: 'spacca', pietra: 'spegne', tempesta: 'disperde', spettro: 'soffoca' };
@@ -607,6 +607,8 @@ export class DuelView {
                 break;
             }
             case 'tp': this.burst(e.x, e.y + 1, '#b06cff', 20, 5, 0.6); break;
+            // infusione dell'arma (Altare)
+            case 'inf': this.burst(e.x, e.y, ELEMENTS[e.e]?.glow || '#fff', e.k > 1 ? 18 : 10, 4, 0.32); break;
             case 'heal': { const p = fpos(e.s); this.burst(p.x, p.y + 1, '#5aff5a', 14, 3, 0.4); this.floatText(`+${e.d}`, p.x, p.y + 1.5, '#7aff7a'); break; }
             case 'quake': this.shake = 0.8; break;
             case 'bolt': this.lightning(e.x); A.play('thunder'); this.shake = 0.6; break;
@@ -641,6 +643,8 @@ export class DuelView {
             lines.push(h('div', { class: 'res-line' }, `Gloria ${d >= 0 ? '+' : ''}${d}`, h('span', { class: 'muted' }, '·'), coin(Math.abs(c)), c >= 0 ? ' guadagnate' : ' perse',
                 x ? h('span', { class: 'muted' }, '·') : null, x ? h('span', { class: 'res-xp' }, `+${x} esperienza`) : null));
             if (r.xp && !x && r.reason !== 'forfeit') lines.push(h('p', { class: 'muted small' }, 'Duello troppo breve: niente esperienza.'));
+            const loot = Object.entries(r.loot?.[me] || {}).filter(([k, n]) => n && MATS[k]);
+            if (loot.length) lines.push(h('div', { class: 'res-line res-loot' }, "Per l'Altare: ", loot.map(([k, n]) => `${n} ${MATS[k].name}`).join(' · ')));
         }
         if (this.role === 'local') this.app.practiceDone(won);
         if (r.reason === 'forfeit') lines.push(h('p', { class: 'muted' }, this.role === 'fighter' && !won ? 'Ti sei ritirato dal duello.' : 'Vittoria per abbandono.'));

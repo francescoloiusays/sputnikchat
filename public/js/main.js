@@ -14,10 +14,11 @@ import { Creator, randomAppearance } from './creator.js';
 import { Panels } from './panels.js';
 import { DuelView } from './duel.js';
 import { GameAudio } from './audio.js';
-import { composeCard } from './cards.js';
+import { composeCard, holoTrack } from './cards.js';
 import { Net, SOCKET_URL, IS_MOBILE, store, $, h, toast, fmt } from './util.js';
 import { installTheme, icon, iconSVG, drawIcon } from './icons.js';
-import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, sanitizeCard, sanitizeAppearance, STARTER_WEAPON, levelProgress, titleFor, talentPoints, TALENT_IDS } from './shared/catalog.js';
+import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, sanitizeCard, sanitizeAppearance, STARTER_WEAPON, levelProgress, titleFor, talentPoints, TALENT_IDS, plusOf, MATS, SEALS, gradeOf } from './shared/catalog.js';
+import { Fishing } from './fishing.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
@@ -83,6 +84,7 @@ class Game {
         this.studio = new Studio();
         this.creator = new Creator(this.studio);
         this.panels = new Panels(this);
+        this.fishing = new Fishing(this);
         this.players = new Map();
         this.duels = new Map();
         this.room = { id: 'pub', name: 'Isola Fantasma', private: false };
@@ -203,12 +205,17 @@ class Game {
         const o = {};
         for (const [slot, uid] of Object.entries(this.me.equipment || {})) {
             const it = this.me.inventory.find(i => i.uid === uid);
-            if (it) o[slot] = it.kind === 'weapon' ? it.spec : it.itemId;
+            if (!it) continue;
+            o[slot] = it.kind === 'weapon' ? it.spec : it.itemId;
+            if (it.kind !== 'weapon' && plusOf(it) >= 10) o.aura = 1;
         }
+        o.el = this.me.card?.element;
         return o;
     }
     // id dei vestiti indossati (servono a statistiche, corredi e card)
     gear() { const l = this.look(); return ['head', 'face', 'cape', 'torso'].map(s => l[s]).filter(Boolean); }
+    // incantamento totale dei vestiti indossati (+1% di difesa a livello)
+    gearPlus() { const eq = this.me?.equipment || {}; return ['head', 'face', 'cape', 'torso'].reduce((s, k) => s + plusOf(this.me.inventory?.find(i => i.uid === eq[k])), 0); }
     unspentPoints() { const t = this.me?.talents || {}; return Math.max(0, talentPoints(this.me?.level || 1) - TALENT_IDS.reduce((a, k) => a + (t[k] || 0), 0)); }
     isFriend(id) { return !!this.me?.friends?.some(f => f.id === id); }
     buildMyCharacter() {
@@ -221,11 +228,14 @@ class Game {
     }
     cardSignature() {
         const l = this.look();
-        return JSON.stringify([this.me.card, this.me.appearance, l, this.me.level, this.me.name, this.me.talents]);
+        return JSON.stringify([this.me.card, this.me.appearance, l, this.me.level, this.me.name, this.me.talents, this.me.grade, this.me.sealsOn, this.gearPlus()]);
+    }
+    cardOpts(card) {
+        return { card, appearance: this.me.appearance, look: this.look(), level: this.me.level || 1, talents: this.me.talents, id: this.me.id, name: this.me.name, grade: this.me.grade || 0, seals: this.me.sealsOn || [], gearPlus: this.gearPlus() };
     }
     async regenerateCard(upload = true) {
         const card = sanitizeCard(this.me.card || this.local.card);
-        const c = await composeCard({ card, appearance: this.me.appearance, look: this.look(), level: this.me.level || 1, talents: this.me.talents, id: this.me.id, name: this.me.name }, this.studio, 420);
+        const c = await composeCard(this.cardOpts(card), this.studio, 420);
         this.local.cardImage = c.toDataURL('image/jpeg', 0.86);
         this.local.cardSig = this.cardSignature();
         this.saveLocal();
@@ -234,13 +244,19 @@ class Game {
     }
     async saveCard(card) {
         card = sanitizeCard(card);
+        if (this.me.grade > 0 && this.me.card?.element && card.element !== this.me.card.element
+            && !confirm(`Questa texture cambia il tuo seme in ${ELEMENTS[card.element].name}: la nebbia ricorda, e la carta scenderà a ${gradeOf(this.me.grade - 1).name}. Salvare lo stesso?`)) return false;
         this.local.card = card;
         this.me.card = card;
         await this.regenerateCard(false);
         if (this.net.connected) {
             const r = await this.net.request('profile:update', { card, cardImage: this.local.cardImage });
             if (r.ok) this.applyMe(r.profile);
+            if (r.dropped) this.gradeDropToast(r.grade);
         }
+    }
+    gradeDropToast(g) {
+        toast(h('div', {}, h('b', {}, 'La nebbia ricorda'), h('div', {}, `Hai cambiato seme: la tua carta scende a ${gradeOf(g).name}.`)), { kind: 'bad', icon: 'card', duration: 8000 });
     }
     async editAppearance() {
         this.mode = 'menu';
@@ -273,7 +289,16 @@ class Game {
         const reqN = (p.requests || []).length;
         $('#req-badge').textContent = reqN; $('#req-badge').classList.toggle('hidden', !reqN);
         if (this.local.cardSig !== this.cardSignature()) { clearTimeout(this.cardTimer); this.cardTimer = setTimeout(() => this.regenerateCard(true), 800); }
-        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria']);
+        this.world?.setGather(p.gather);
+        this.setHolo(p.grade || 0);
+        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria', 'altare']);
+    }
+    // riflesso olografico della carta in alto a sinistra (Filigrana, Aurora, Incisa)
+    setHolo(grade) {
+        const pc = $('#power-card');
+        if (!pc) return;
+        for (const g of ['filigrana', 'aurora', 'incisa', 'viva']) pc.classList.remove('g-' + g);
+        if (grade > 0) pc.classList.add('holo', 'g-' + gradeOf(grade).id); else pc.classList.remove('holo');
     }
 
     // --- RETE ---
@@ -291,12 +316,14 @@ class Game {
             if (!hasLocal) {
                 Object.assign(this.local, { name: r.profile.name, appearance: r.profile.appearance, card: r.profile.card });
             }
+            this.local.card = r.profile.card;   // la carta del server è quella che conta
             this.saveLocal();
             const wasOffline = this.me?.offline;
             this.applyMe(r.profile);
             if (wasOffline || !hasLocal) this.buildMyCharacter();
             if (r.daily) { toast(h('div', {}, h('b', {}, 'Tributo del giorno'), h('div', {}, `Il tesoriere dell'isola ti consegna ${r.daily} Sputnik Coin${r.dailyXp ? ` e ${r.dailyXp} punti esperienza` : ''}.`)), { kind: 'coin' }); this.audio.play('coin'); }
             if (r.profile.rest > 0) toast(h('div', {}, h('b', {}, 'Ben riposato'), h('div', {}, `Sei stato lontano dall'isola: i prossimi ${r.profile.rest} duelli valgono doppia esperienza.`)), { kind: 'ok', icon: 'lantern' });
+            if (r.dropped) this.gradeDropToast(r.profile.grade);
             if (r.created) toast(h('div', {}, h('b', {}, 'Il tuo nome è inciso nell\'Albo'), h('div', {}, 'Ricevi 150 Sputnik Coin e una Spada di Legno. La Sartoria e la Forgia ti aspettano.')), { kind: 'coin', duration: 9000 });
             if (!this.local.cardImage || !hasLocal) this.regenerateCard(true);
             this.net.request('lb:get').then(lb => { if (lb.ok) this.world.setLeaderboard(lb.rating); });
@@ -451,9 +478,10 @@ class Game {
 
     // --- DUELLI ---
     myFighterInfo() {
-        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look: this.look(), element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), cardImage: this.local.cardImage };
+        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look: this.look(), element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), gearPlus: this.gearPlus(), seals: this.me.sealsOn || [], grade: this.me.grade || 0, cardImage: this.local.cardImage };
     }
     enterDuel(info, role, side) {
+        this.fishing?.stop(true);
         if (this.duel) this.exitDuel(true);
         this.panels.close();
         document.exitPointerLock?.();
@@ -494,15 +522,32 @@ class Game {
         };
         const pts = Math.max(0, ghost.level - 1);
         ghost.talents = { forza: Math.ceil(pts / 2), tempra: Math.floor(pts / 2), maestria: 0 };
+        this.practiceEl = el;
         this.enterDuel({ id: 'practice', a: this.myFighterInfo(), b: ghost, phase: 'fight' }, 'local', 'a');
     }
     restartPractice() { this.exitDuel(true); this.startPractice(this.practiceLevel); }
     async practiceDone(won) {
         if (!this.net.connected || !this.helloDone) return;
         const tier = this.practiceLevel < 0.8 ? 1 : this.practiceLevel < 1.3 ? 2 : 3;
-        const r = await this.net.request('practice:done', { tier, won });
-        if (r.ok && r.xp) toast(`+${r.xp} esperienza dall'allenamento`, { kind: 'ok', icon: 'star', duration: 3000 });
+        const r = await this.net.request('practice:done', { tier, won, el: this.practiceEl });
+        if (r.ok && r.xp) toast(`+${r.xp} esperienza dall'allenamento${r.ess ? ` e un'${MATS[r.ess].name}` : ''}`, { kind: 'ok', icon: r.ess ? 'vial' : 'star', duration: 3500 });
         else if (r.msg) toast(r.msg, { duration: 3500 });
+    }
+    // Frammenti di runa e fuochi fatui
+    async gatherPick(it) {
+        if (!this.net.connected || !this.helloDone) return toast('Il portale è chiuso: la raccolta si salva sul server', { kind: 'bad' });
+        if (this.picking) return;
+        this.picking = true;
+        const r = await this.net.request('gather:pick', { id: it.node });
+        this.picking = false;
+        if (!r.ok) { toast(r.msg, { kind: 'bad', duration: 2500 }); return; }
+        this.world.gatherFx(it.node);
+        this.myChar.play('light', 0.4);
+        this.audio.play(r.got ? 'coin' : 'ui');
+        const M = MATS[r.kind];
+        toast(r.got ? `+${r.got} ${M.name}${r.xp ? ` · +${r.xp} esperienza` : ''}` : r.kind === 'ecto' ? 'Il fuoco fatuo ti si scioglie tra le dita: per oggi ne hai presi tanti' : 'Il frammento si sbriciola: per oggi ne hai raccolti tanti',
+            { kind: r.got ? 'ok' : 'info', icon: M.icon, duration: 2600 });
+        if (r.seal) { this.audio.play('special'); toast(h('div', {}, h('b', {}, `Hai trovato il ${SEALS[r.seal].name}!`), h('div', {}, `${SEALS[r.seal].desc} Incastonalo sulla carta all'Altare.`)), { kind: 'coin', icon: SEALS[r.seal].icon, duration: 9000 }); }
     }
     renderTicker() {
         const box = $('#duel-ticker');
@@ -632,7 +677,9 @@ class Game {
         if (it.id === 'specchio') this.editAppearance();
         else if (it.id === 'quadro') { document.exitPointerLock?.(); window.open('https://www.youtube.com/watch?v=' + this.world.gallery.current(it.painting).video, '_blank', 'noopener'); }
         else if (it.id === 'canale') { document.exitPointerLock?.(); window.open('https://www.youtube.com/@SputnikHomies', '_blank', 'noopener'); }
-        else if (it.id === 'altare') this.openPanel('maestria', 'altare');
+        else if (it.id === 'altare') this.openPanel('altare');
+        else if (it.id === 'pesca') this.fishing.start();
+        else if (it.id === 'raccogli') this.gatherPick(it);
         else if (it.id === 'siedi') this.player.sit === it.seat ? this.standUp() : this.sitDown(it.seat);
         else this.openPanel(it.id);
     }
@@ -751,6 +798,7 @@ class Game {
         $('#btn-mic').onclick = () => this.toggleMic();
         $('#btn-music').onclick = () => this.audio.toggleMusic().then(on => { this.setMusicBtn(on); this.local.settings.musicOn = on; this.saveLocal(); });
         $('#power-card').onclick = () => this.openPanel('card');
+        holoTrack($('#power-card'));
         $('#minimap-wrap').onclick = () => this.toggleBigMap(true);
         $('#bigmap-close').onclick = () => this.toggleBigMap(false);
         $('#bigmap').addEventListener('click', (e) => { if (e.target.id === 'bigmap') this.toggleBigMap(false); });
@@ -898,6 +946,7 @@ class Game {
         if (this.mode === 'duel' && this.duel) { this.duel.update(dt); return; }
         if (!this.world) return;
         if (this.mode === 'world') this.updatePlayer(dt);
+        else if (this.mode === 'fish') this.fishing.update(dt);
         this.updateCamera(dt);
         this.world.update(dt, this.player.pos);
         this.myChar.update(dt);
@@ -1035,6 +1084,7 @@ class Game {
         for (const p of this.players.values()) { const d = p.distTo(P); if (d < nd) { nd = d; near = p; } }
         this.nearPlayer = near;
         const el = $('#prompt');
+        if (this.mode !== 'world') { el.classList.add('hidden'); return; }
         const label = it ? String(it.id === 'siedi' && this.player.sit === it.seat ? 'Alzati' : typeof it.label === "function" ? it.label() : it.label).replace(/[<>&]/g, "") : "";
         const html = it ? `<kbd>E</kbd>${label}` : near ? `<kbd>${IS_MOBILE ? 'E' : 'R'}</kbd>Profilo di ${near.info.name.replace(/[<>&]/g, '')}` : '';
         if (el.dataset.html !== html) { el.dataset.html = html; el.innerHTML = html; el.classList.toggle('hidden', !html || this.panels.isOpen); }

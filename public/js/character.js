@@ -5,7 +5,20 @@
 // =====================================================================
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { ITEMS, MATERIALS, HANDLES, GEMS, sanitizeAppearance } from './shared/catalog.js';
+import { ITEMS, MATERIALS, HANDLES, GEMS, ELEMENTS, sanitizeAppearance } from './shared/catalog.js';
+
+// bagliore morbido per scie, infusioni e aure (una sola texture per tutti)
+let glowTex = null;
+function fxGlow() {
+    if (glowTex) return glowTex;
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    glowTex = new THREE.CanvasTexture(c); glowTex.colorSpace = THREE.SRGBColorSpace;
+    return glowTex;
+}
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
 
 // --- CACHE (geometrie e materiali condivisi tra personaggi) ---
 const geoCache = new Map();
@@ -472,6 +485,7 @@ export class Character {
         this.weaponMesh = buildWeapon(this.look.weapon);
         this.weaponMesh.rotation.x = Math.PI / 2;
         this.arms.R.hand.add(this.weaponMesh);
+        this.setupFx();
 
         this.addCape(spine, ITEMS[this.look.cape], W, D, torsoH);
 
@@ -734,6 +748,80 @@ export class Character {
         });
     }
 
+    // --- ALTARE: scia dell'arma incantata (da +5), bagliore dell'infusione, aura dei vestiti a +10 ---
+    setupFx() {
+        if (this.fx) { this.fx.group.removeFromParent(); this.fx.dispose(); this.fx = null; }
+        const w = this.look.weapon, plus = w?.plus | 0, inf = ELEMENTS[w?.inf] ? w.inf : null;
+        const seed = ELEMENTS[this.look.el] ? this.look.el : null;
+        const armed = !!w?.type && w.type !== 'pugni';
+        const trailCol = plus >= 5 && armed ? ELEMENTS[inf || seed]?.glow || '#ffffff' : null;
+        const auraCol = this.look.aura ? ELEMENTS[seed]?.color || '#ffd76a' : null;
+        if (!trailCol && !(inf && armed) && !auraCol) return;
+        const fx = this.fx = { group: new THREE.Group(), mats: [], geos: [] };
+        this.root.add(fx.group);
+        const sprite = (col, sc, op = 1) => {
+            const m = new THREE.SpriteMaterial({ map: fxGlow(), color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false });
+            fx.mats.push(m);
+            const s = new THREE.Sprite(m); s.scale.set(sc, sc, 1);
+            return s;
+        };
+        if (inf && armed) {
+            fx.inf = sprite(ELEMENTS[inf].glow, 0.42, 0.8);
+            fx.inf.position.y = (this.weaponMesh.userData.length || 1) * 0.85;
+            this.weaponMesh.add(fx.inf);
+        }
+        if (trailCol) {
+            const n = 12, pos = new Float32Array(n * 2 * 3), col = new Float32Array(n * 2 * 3), idx = [];
+            for (let i = 0; i < n - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+            g.setIndex(idx);
+            const m = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+            fx.geos.push(g); fx.mats.push(m);
+            const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false;
+            fx.group.add(mesh);
+            fx.trail = { mesh, n, tips: [], bases: [], col: new THREE.Color(trailCol), k: 0 };
+        }
+        if (auraCol) {
+            fx.aura = sprite(auraCol, 2.4, 0.22); fx.aura.scale.set(1.9, 2.8, 1); fx.aura.position.y = 1.05;
+            fx.group.add(fx.aura);
+            fx.motes = Array.from({ length: 9 }, (_, i) => { const s = sprite(auraCol, 0.16, 0.9); fx.group.add(s); return { s, a: i / 9 * Math.PI * 2, y: Math.random() * 1.8, sp: 0.5 + Math.random() * 0.6 }; });
+        }
+        fx.dispose = () => { for (const m of fx.mats) m.dispose(); for (const g of fx.geos) g.dispose(); fx.inf?.removeFromParent(); };
+    }
+    updateFx(dt, t) {
+        const fx = this.fx;
+        if (!fx) return;
+        if (fx.inf) fx.inf.material.opacity = 0.55 + Math.sin(t * 5) * 0.3;
+        if (fx.aura) {
+            fx.aura.material.opacity = 0.16 + Math.sin(t * 1.8) * 0.06;
+            for (const m of fx.motes) {
+                m.a += dt * m.sp; m.y = (m.y + dt * 0.45) % 1.9;
+                m.s.position.set(Math.cos(m.a) * 0.55, 0.1 + m.y, Math.sin(m.a) * 0.55);
+                m.s.material.opacity = Math.sin(m.y / 1.9 * Math.PI) * 0.9;
+            }
+        }
+        const T = fx.trail;
+        if (!T || !this.weaponMesh || !this.root.parent) return;
+        const len = this.weaponMesh.userData.length || 1;
+        const tip = this.root.worldToLocal(this.weaponMesh.localToWorld(_v1.set(0, len, 0))).clone();
+        const base = this.root.worldToLocal(this.weaponMesh.localToWorld(_v2.set(0, len * 0.4, 0))).clone();
+        T.tips.unshift(tip); T.bases.unshift(base);
+        if (T.tips.length > T.n) { T.tips.length = T.n; T.bases.length = T.n; }
+        const speed = T.tips.length > 1 ? T.tips[0].distanceTo(T.tips[1]) / Math.max(dt, 1e-3) : 0;
+        T.k += ((speed > 3 ? 1 : 0) - T.k) * Math.min(1, dt * (speed > 3 ? 14 : 5));
+        const pos = T.mesh.geometry.attributes.position, col = T.mesh.geometry.attributes.color;
+        for (let i = 0; i < T.n; i++) {
+            const a = T.tips[Math.min(i, T.tips.length - 1)], b = T.bases[Math.min(i, T.bases.length - 1)];
+            pos.setXYZ(i * 2, a.x, a.y, a.z); pos.setXYZ(i * 2 + 1, b.x, b.y, b.z);
+            const f = (1 - i / (T.n - 1)) * T.k;
+            col.setXYZ(i * 2, T.col.r * f, T.col.g * f, T.col.b * f);
+            col.setXYZ(i * 2 + 1, T.col.r * f * 0.25, T.col.g * f * 0.25, T.col.b * f * 0.25);
+        }
+        pos.needsUpdate = true; col.needsUpdate = true;
+    }
+
     // Azioni one-shot (world) o con progresso esterno (duello)
     play(name, dur, loop = false) { this.action = { name, t: 0, dur, loop }; }
     stop() { this.action = null; }
@@ -808,6 +896,7 @@ export class Character {
         if (this.cape) this.cape.rotation.x = Math.max(0, C.cape) + Math.sin(t * 3.1) * 0.03;
         if (this.wings) for (const w of this.wings) w.piv.rotation.y = -w.s * (0.5 + Math.sin(t * (st === 'air' ? 12 : 2)) * (st === 'air' ? 0.5 : 0.12));
         if (this.halo) this.halo.position.y = HEAD_R * 1.55 + Math.sin(t * 2) * 0.02;
+        this.updateFx(dt, t);
 
         // ammiccamento
         this.blinkT -= dt;
@@ -827,6 +916,7 @@ export class Character {
     }
 
     dispose() {
+        if (this.fx) { this.fx.dispose(); this.fx = null; }
         if (this.tag) { this.tag.material.map.dispose(); this.tag.material.dispose(); }
         this.faceMat?.dispose();
         this.body.traverse(o => { if (o.isMesh && o.userData.tinted) o.material.dispose(); });

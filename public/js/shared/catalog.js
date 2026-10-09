@@ -143,21 +143,24 @@ export function weaponCost(spec) {
     return WEAPON_TYPES[spec.type].cost + MATERIALS[spec.material].cost + HANDLES[spec.handle].cost + GEMS[spec.gem].cost;
 }
 
-// Statistiche finali di un'arma (null = pugni)
+// Statistiche finali di un'arma (null = pugni). plus = incantamento dell'Altare, inf = infusione.
 export function weaponStats(spec) {
     const t = WEAPON_TYPES[spec?.type] || WEAPON_TYPES.pugni;
     const m = MATERIALS[spec?.material] || { dmg: 0, speed: 0 };
     const h = HANDLES[spec?.handle] || { dmg: 0, speed: 0 };
     const g = GEMS[spec?.gem] || GEMS.nessuna;
+    const plus = plusOf(spec);
     return {
-        dmg: +(t.dmg * (1 + m.dmg + h.dmg)).toFixed(3),
+        dmg: +(t.dmg * (1 + m.dmg + h.dmg) * (1 + ENCHANT_STEP.weapon * plus)).toFixed(3),
         speed: +(t.speed * (1 + m.speed + h.speed)).toFixed(3),
         reach: t.reach,
         kb: t.kb,
         meter: (t.meter || 0) + (g.element ? 0.2 : 0),
         gem: g.element,
+        plus, inf: ELEMENTS[spec?.inf] ? spec.inf : null,
     };
 }
+export const plusOf = (x) => Math.max(0, Math.min(10, (x?.plus | 0)));
 
 // --- VESTIARIO (Sartoria) ---
 export const SLOTS = ['head', 'face', 'cape', 'torso', 'weapon'];
@@ -264,12 +267,13 @@ const GEAR_STAT_TEXT = {
 const pct = v => `${Math.round(v * 1000) / 10}%`.replace('.', ',');
 const fmtN = v => `${Math.round(v * 10) / 10}`.replace('.', ',');
 // Righe di testo con le statistiche di un capo (già moltiplicate per sintonia o ripulsa)
-export function gearLines(id, element) {
+export function gearLines(id, element, plus = 0) {
     const G = GEAR[id];
     if (!G) return [];
     const aff = gearAffinity(id, element), k = aff === 'syn' ? 1.5 : aff === 'rep' ? 0.5 : 1;
     const out = [];
     for (const [s, f] of Object.entries(GEAR_STAT_TEXT)) if (G[s]) out.push(f(G[s] * k));
+    if (plus > 0) out.push(`+${plus}% di difesa dall'incantamento`);
     if (G.weight) out.push(`peso ${G.weight}`);
     if (G.cleanse) out.push('immune a veleno e rallentamento');
     if (G.glide) out.push('planata: tieni premuto su mentre cadi');
@@ -506,6 +510,13 @@ export function computeStats(setup = {}) {
     const sets = SETS.filter(s => s.items.every(i => gear.includes(i)) && (!s.weapon || s.weapon.includes(setup.weapon?.type))).map(s => s.id);
     if (sets.includes('pirata')) g.airAtk += 0.15;
     if (sets.includes('regale')) { g.atk += 0.1; g.def += 0.1; g.hp += 10; g.spd -= 0.1; }
+    // Altare: vestiti incantati, sigilli sulla carta, infusione dell'arma (l'opposto del tuo seme rende doppio ma porta Dissonanza)
+    g.def += ENCHANT_STEP.gear * Math.max(0, Math.min(40, setup.gearPlus | 0));
+    const seals = (setup.seals || []).filter(s => SEALS[s]);
+    if (seals.includes('marea')) g.regen += 0.3;
+    if (seals.includes('cerchio')) g.sup += 0.05;
+    const inf = w.inf ? { el: w.inf, k: OPPOSITE[el] === w.inf ? 2 : 1 } : null;
+    if (inf?.k === 2) g.rep++;
     const cap = (10 + T.tempra * 0.5) * (el === 'pietra' ? 1.5 : 1);
     const over = Math.max(0, g.weight - cap);
     const atkBonus = Math.min(STAT_CAP, T.forza * 0.015 + g.atk);
@@ -527,16 +538,185 @@ export function computeStats(setup = {}) {
         leech: g.leech, airAtk: g.airAtk, cleanse: g.cleanse, glide: g.glide, charisma: g.charisma,
         heavyHeal: sets.includes('negromante') ? 3 : 0,
         rep: g.rep, harmony: g.harmony + (gemMatch ? WHEEL.GEM_HARMONY : 0), immune: el === 'fango' || tr.puro,
-        load: g.weight, cap, over, atkBonus, defBonus,
+        load: g.weight, cap, over, atkBonus, defBonus, inf, seals, plus: w.plus,
     };
 }
 
 // Numeri ATK/DEF stampati sulla card (stile Yu-Gi-Oh), dalle statistiche vere
 export function cardPower(element, weaponSpec, level, extra = {}) {
-    const st = computeStats({ element, weapon: weaponSpec, level, talents: extra.talents, gear: extra.gear });
+    const st = computeStats({ element, weapon: weaponSpec, level, talents: extra.talents, gear: extra.gear, gearPlus: extra.gearPlus, seals: extra.seals });
     const atk = Math.round((1000 * st.atk + level * 40) / 50) * 50;
     const def = Math.round((900 * (1 + st.def) * st.hpMax / 100 + level * 30) / 50) * 50;
     return { atk, def };
+}
+
+// =====================================================================
+//  L'ALTARE E I LUOGHI DELL'ISOLA (Il Libro dei Sette Semi, fase 2)
+// =====================================================================
+// --- MATERIALI DELLA BISACCIA ---
+export const RUNE_NAMES = { fuoco: 'Brace', ghiaccio: 'Brina', palude: 'Radice', pietra: 'Masso', tempesta: 'Tuono', spettro: 'Eco', fango: 'Melma' };
+export const MATS = {
+    frammento: { name: 'Frammento di Runa', icon: 'shard', color: '#b880ff', where: 'Cerchio di Pietre, e uno per ogni duello combattuto', desc: 'Una scheggia che canta piano. Serve per incantare e per risvegliare le carte.' },
+    perla: { name: 'Perla della Laguna', icon: 'pearl', color: '#f2e6ff', where: 'Il Molo: la Pesca nella Nebbia', desc: 'Nasce nelle conchiglie sotto il molo. Serve per le carte e per gli incantamenti fino a +5.' },
+    ecto: { name: 'Ectoplasma', icon: 'ecto', color: '#7affd8', where: 'Cimitero Sommerso: acchiappa i fuochi fatui dorati', desc: 'Quello che resta di un fuoco fatuo. Serve per la carta Aurora.' },
+    pergamena: { name: 'Pergamena Benedetta', icon: 'scroll', color: '#ffe9a8', where: 'Il Molo: a volte nelle bottiglie', desc: 'Protegge un incantamento: se fallisce, il pezzo non scende di livello.' },
+};
+for (const el of Object.keys(ELEMENTS)) {
+    MATS['ess_' + el] = { name: `Essenza di ${ELEMENTS[el].name}`, icon: 'vial', color: ELEMENTS[el].color, el, where: `Vinci un duello contro un seme di ${ELEMENTS[el].name}`, desc: `Infonde l'arma con il potere di ${ELEMENTS[el].name}. Serve anche per gli incantamenti da +6.` };
+    MATS['runa_' + el] = { name: `Runa ${RUNE_NAMES[el]}`, icon: 'runestone', color: ELEMENTS[el].color, el, rune: true, where: "Altare: fondi 8 Frammenti con un'Essenza", desc: `La runa del seme di ${ELEMENTS[el].name}. Serve per i +9 e +10 e per la carta Incisa.` };
+}
+export const MAT_IDS = Object.keys(MATS);
+export const ESS_DAILY = 3;           // Essenze di uno stesso seme al giorno dai duelli
+export const PRACTICE_ESS_DAILY = 2;  // Essenze al giorno dall'allenamento col Fantasma
+
+// --- I SIGILLI (piccoli poteri da incastonare sulla carta) ---
+export const SEALS = {
+    corvo: { name: 'Sigillo del Corvo', icon: 'raven', desc: '+5% di esperienza da ogni cosa.', where: 'Cimitero Sommerso: a volte un fuoco fatuo lo lascia cadere' },
+    marea: { name: 'Sigillo della Marea', icon: 'wave', desc: 'In duello rigeneri 0,3 punti vita al secondo.', where: 'Il Molo: a volte sale con un pesce raro o una bottiglia' },
+    cerchio: { name: 'Sigillo del Cerchio', icon: 'orb', desc: 'La SUPER si carica il 5% più in fretta.', where: 'Cerchio di Pietre: a volte nasce insieme a un frammento' },
+    naufrago: { name: 'Sigillo del Naufrago', icon: 'bottle', desc: '+10% di monete dai duelli vinti.', where: 'Ritrova tutte le pagine del Diario del Naufrago' },
+};
+export const SEAL_CHANCE = 0.03;
+
+// --- RISVEGLIO DELLA CARTA ---
+// 'self' nei materiali = del seme della tua carta
+export const CARD_GRADES = [
+    { id: 'comune', name: 'Comune', lv: 1, seals: 0, color: '#d0d0d0' },
+    { id: 'filigrana', name: 'Filigrana', lv: 5, seals: 1, color: '#7fe3c1', coins: 150, mats: { frammento: 3, perla: 1 },
+        trial: { kind: 'wins', n: 5, text: '5 duelli vinti con questa carta' }, gives: 'Riflesso olografico e il primo sigillo' },
+    { id: 'aurora', name: 'Aurora', lv: 12, seals: 1, color: '#b880ff', coins: 500, mats: { frammento: 8, ecto: 3, ess_self: 2 },
+        trial: { kind: 'fish', fish: 'anguilla', text: "Pesca un'Anguilla di Nebbia al Molo (solo di notte)" }, gives: 'Bordo arcobaleno che si muove' },
+    { id: 'incisa', name: 'Incisa', lv: 20, seals: 2, color: '#ffc93b', coins: 1500, mats: { runa_self: 1, ess_self: 5 },
+        trial: { kind: 'wins', n: 25, text: '25 duelli vinti con questa carta' }, gives: "Cornice d'oro in rilievo, particelle del seme e il secondo sigillo" },
+    { id: 'viva', name: 'Viva', lv: 28, seals: 3, color: '#ff6a9a', locked: 'Serve il Cuore del Re Annegato, che si conquista nella Veglia dei Morti. Il cimitero non è ancora pronto.',
+        gives: 'Il ritratto si muove dentro la carta e il terzo sigillo' },
+];
+export const gradeOf = (g) => CARD_GRADES[Math.max(0, Math.min(CARD_GRADES.length - 1, g | 0))];
+export const sealSlots = (g) => gradeOf(g).seals;
+// Materiali con 'self' risolti per un seme
+export function resolveMats(mats, element) {
+    const o = {};
+    for (const [k, n] of Object.entries(mats || {})) o[k.replace('_self', '_' + element)] = n;
+    return o;
+}
+
+// --- INCANTAMENTO DA +1 A +10 ---
+export const ENCHANT_STEP = { weapon: 0.03, gear: 0.01 };   // a ogni livello: +3% di danni all'arma, +1% di difesa per un vestito
+// mats: 'ess' = un'Essenza qualsiasi, 'runa' = una Runa qualsiasi
+export const ENCHANT = [null,
+    { ok: 1, coins: 50, mats: { frammento: 1 } },
+    { ok: 1, coins: 100, mats: { frammento: 1 } },
+    { ok: 1, coins: 150, mats: { frammento: 1 } },
+    { ok: 0.95, coins: 200, mats: { frammento: 2, perla: 1 } },
+    { ok: 0.9, coins: 300, mats: { frammento: 2, perla: 1 } },
+    { ok: 0.75, coins: 400, mats: { ess: 1 }, drop: true },
+    { ok: 0.6, coins: 550, mats: { ess: 1 }, drop: true },
+    { ok: 0.45, coins: 700, mats: { ess: 1 }, drop: true },
+    { ok: 0.35, coins: 1000, mats: { runa: 1 }, drop: true },
+    { ok: 0.25, coins: 1500, mats: { runa: 1 }, drop: true },
+];
+// Fin dove si può incantare al tuo livello
+export const enchantCap = (L) => L >= 20 ? 10 : L >= 12 ? 8 : L >= 10 ? 5 : L >= 2 ? 3 : 0;
+export const enchantCapNext = (L) => L < 2 ? [2, 3] : L < 10 ? [10, 5] : L < 12 ? [12, 8] : L < 20 ? [20, 10] : null;
+export const ALTAR_LEVEL = 2;
+// I materiali "qualsiasi" (ess, runa) diventano quelli di cui hai di più,
+// lasciando per ultimi quelli del tuo seme, che servono per risvegliare la carta
+export function enchantMats(step, mats = {}, own = null) {
+    const out = {};
+    for (const [k, n] of Object.entries(step.mats)) {
+        if (k === 'ess' || k === 'runa') {
+            const mine = (m) => m === k + '_' + own && (mats[m] || 0) > 0 ? 1 : 0;
+            const pool = MAT_IDS.filter(m => m.startsWith(k + '_')).sort((a, b) => (Math.min(1, mats[b] || 0) - Math.min(1, mats[a] || 0)) || (mine(a) - mine(b)) || (mats[b] || 0) - (mats[a] || 0));
+            out[pool[0]] = (out[pool[0]] || 0) + n;
+        } else out[k] = (out[k] || 0) + n;
+    }
+    return out;
+}
+
+// --- INFUSIONI (l'arma prende un effetto del seme sul colpo pesante) ---
+export const INFUSE_LEVEL = 6, INFUSE_COST = 200;
+export const INFUSE = {
+    fuoco: 'Il colpo pesante incendia per un attimo: 2 danni.',
+    ghiaccio: 'Il colpo pesante rallenta per poco più di un secondo.',
+    palude: 'Il colpo pesante avvelena per un attimo: 2 danni.',
+    pietra: 'Il colpo pesante spinge il 20% più lontano.',
+    tempesta: 'Il colpo pesante fa saltare una scintilla: 2 danni in più.',
+    spettro: 'Il colpo pesante ti ridà il 20% del danno come vita.',
+    fango: 'Il colpo pesante sporca: niente SUPER per poco più di un secondo.',
+};
+
+// --- FUSIONE DELLE RUNE E TRASMUTAZIONE ---
+export const FUSE = { runa: { frammento: 8, ess: 1, coins: 100 }, trasmuta: { ess: 3, coins: 50 } };
+
+// --- OFFERTA ALLA CUSTODE (una benedizione al giorno) ---
+export const BLESSING = { coins: 100, ms: 3600 * 1000, xp: 0.25 };
+
+// --- I LUOGHI DOVE SI RACCOGLIE ---
+// Frammenti alla base delle pietre del Cerchio, fuochi fatui dorati fra le tombe
+export const STONES = { x: -40, z: -6 };
+export const GATHER = {
+    nodes: [
+        ...Array.from({ length: 9 }, (_, i) => { const a = (i + 0.5) / 9 * Math.PI * 2; return { id: 's' + i, kind: 'frammento', x: STONES.x + Math.cos(a) * 4.6, z: STONES.z + Math.sin(a) * 4.6 }; }),
+        ...[[-38.5, 36.5], [-30, 35.8], [-26.5, 42], [-36.5, 43.5], [-33, 39.5], [-40, 40.5]].map(([x, z], i) => ({ id: 'w' + i, kind: 'ecto', x, z })),
+    ],
+    cooldown: { frammento: 25 * 60 * 1000, ecto: 15 * 60 * 1000 },
+    daily: { frammento: 12, ecto: 8 },     // dopo, la raccolta dà qualcosa solo una volta su quattro
+    seal: { frammento: 'cerchio', ecto: 'corvo' },
+    xp: 3,
+};
+
+// --- LA PESCA NELLA NEBBIA ---
+export const FISH_SPOT = { x: 0, z: 99.2, r: 3.5 };
+export const FISH_DAILY = 8;    // pescate con premi pieni al giorno
+export const FISH_RARITY = {
+    junk: { name: 'Rottame', color: '#9a8f80', w: 6 },
+    com: { name: 'Comune', color: '#d0d0d0', w: 60, xp: 6, coins: 3, perla: 0.3 },
+    unc: { name: 'Non comune', color: '#5fd38a', w: 22, xp: 14, coins: 7, perla: 1 },
+    rar: { name: 'Raro', color: '#4aa8ff', w: 7, xp: 28, coins: 14, perla: 2 },
+    epi: { name: 'Epico', color: '#b37aff', w: 2, xp: 55, coins: 30, perla: 3 },
+    special: { name: 'Messaggio', color: '#ffe9a8', w: 4 },
+};
+// when: 'day' dalle 6 alle 20 (ora italiana), 'night' dalle 20 alle 6, 'any' sempre
+export const FISH = {
+    alborella: { name: 'Alborella Grigia', rar: 'com', when: 'any', size: [8, 16], diff: 0.2, move: 'calm', desc: 'Piccola, argentata e convinta di essere uno squalo.' },
+    carpa: { name: 'Carpa di Laguna', rar: 'com', when: 'any', size: [25, 62], diff: 0.32, move: 'sink', desc: 'Ha visto passare tre re e non si è mai scomposta.' },
+    persico: { name: 'Persico Lilla', rar: 'com', when: 'day', size: [15, 34], diff: 0.36, move: 'calm', desc: 'Lilla come il cielo al tramonto. Abbocca solo di giorno, quando la luce filtra nella nebbia.' },
+    luccio: { name: 'Luccio delle Canne', rar: 'unc', when: 'any', size: [40, 95], diff: 0.52, move: 'dart', desc: 'Si nasconde tra le canne e morde tutto quello che brilla, dita comprese.' },
+    gatto: { name: 'Pesce Gatto Brontolone', rar: 'unc', when: 'night', size: [30, 80], diff: 0.5, move: 'sink', desc: 'Brontola quando lo tiri su e brontola quando lo ributti giù.' },
+    lanterna: { name: 'Carpa Lanterna', rar: 'rar', when: 'night', size: [30, 55], diff: 0.66, move: 'float', desc: 'Una carpa che si porta la luce dentro. I pescatori la seguono per tornare a casa.' },
+    anguilla: { name: 'Anguilla di Nebbia', rar: 'rar', when: 'night', size: [60, 140], diff: 0.78, move: 'dart', desc: 'Fatta di nebbia, sguscia via dalle mani. Chi la prende vede la propria carta accendersi di tutti i colori.' },
+    storione: { name: 'Storione del Re', rar: 'epi', when: 'any', size: [120, 260], diff: 0.86, move: 'sink', desc: 'Il pesce preferito del Re Annegato. Ha ancora un anello infilato nella pinna.' },
+    pspettro: { name: 'Pesce Spettro', rar: 'epi', when: 'night', size: [20, 70], diff: 0.92, move: 'dart', desc: 'Trasparente. Lo vedi solo quando l\'hai già perso.' },
+    stivale: { name: 'Stivale del Traghettatore', rar: 'junk', when: 'any', size: [28, 30], diff: 0.08, move: 'calm', desc: 'Il Traghettatore giura di non averlo mai perso. Ne ha uno solo.' },
+    bottiglia: { name: 'Bottiglia con un messaggio', rar: 'special', when: 'any', size: [22, 30], diff: 0.15, move: 'float', desc: 'Dentro c\'è un foglio arrotolato.' },
+};
+export const FISH_IDS = Object.keys(FISH);
+// Le pagine del Diario del Naufrago, ritrovate nelle bottiglie
+export const DIARY = [
+    { t: 'Giorno uno', x: 'Mi sono svegliato sul molo con una carta in mano. Il Traghettatore dice che è la mia, che l\'ho sempre avuta. Non ricordo di averla mai vista. È fredda come la laguna.' },
+    { t: 'Le stelle sbagliate', x: 'Qui in cielo mancano sette stelle, dice il vecchio della Forgia. Sono cadute tutte la stessa notte e si sono piantate nel fango. Lui le chiama semi. Io le chiamo storie da osteria, ma non riesco a smettere di guardare in alto.' },
+    { t: 'La corona in Sartoria', x: 'Ho visto la Corona Spettrale in Sartoria. La Sarta giura che è solo una copia. Allora perché, quando l\'ho toccata, ho sentito l\'acqua salire fino alle ginocchia?' },
+    { t: 'La notte del castello', x: 'Il re voleva tutti e sette i semi e li fece incastonare in una corona. Ma il Fuoco non sopporta la Pietra, e la Palude non sopporta lo Spettro. La notte in cui la corona fu completa il castello si spezzò a metà. Lo racconta il Becchino a chiunque gli offra da bere.' },
+    { t: 'La Stanza Bianca', x: 'In cima al mastio c\'è una stanza tutta bianca. Due tizi parlano per ore seduti in poltrona e un ratto porta via i loro messaggi. Dicono di essere cronisti. Ho chiesto cosa raccontano. «Tutto», mi hanno risposto. Anche questo diario, immagino.' },
+    { t: 'Il canto delle pietre', x: 'Al Cerchio di Pietre le rune cantano quando nessuno ascolta. Ne ho contate sette: Brace, Brina, Radice, Masso, Tuono, Eco e Melma. Mastro Brace dice che, messe in fila dentro un\'arma, formano una parola. Non mi ha voluto dire quale.' },
+    { t: 'Ogni seme ha un padrone', x: 'Ho perso un duello contro un ragazzo di Ghiaccio: le mie fiamme gli scivolavano addosso. Poi una ragazza di Tempesta l\'ha steso in un minuto, e con me non ha avuto pietà. Ogni seme ha il suo padrone. Nessuno è il padrone di tutti.' },
+    { t: 'Tre volte Melma', x: 'Una storia dei pescatori: tre volte Melma, dentro un pugnale, e l\'arma ricorda com\'era il gioco sull\'isola quando bastava una palla di fango per vincere. Ridono tutti quando la racconto. Io ci credo.' },
+    { t: 'L\'anguilla', x: 'Di notte, sotto il molo, nuota un\'anguilla fatta di nebbia. Chi la prende, dicono, vede la propria carta accendersi di tutti i colori. La Custode dell\'altare non conferma e non smentisce. Non ha la faccia per farlo.' },
+    { t: 'Ultima pagina', x: 'Il Traghettatore mi ha chiesto se voglio tornare indietro. Gli ho detto di no. Se qualcuno trova questa bottiglia: il re non è morto. Dorme sotto la laguna e aspetta che qualcuno rimetta insieme la corona. Non fatelo.' },
+];
+// Ora italiana: di notte abboccano pesci diversi
+export function isNight(date = new Date()) {
+    let h;
+    try { h = +new Intl.DateTimeFormat('it-IT', { hour: 'numeric', hour12: false, timeZone: 'Europe/Rome' }).format(date); } catch { h = date.getHours(); }
+    return h >= 20 || h < 6;
+}
+// Sceglie il pesce che abbocca (rnd = funzione 0..1)
+export function rollFish(night, rnd = Math.random) {
+    const pool = FISH_IDS.filter(id => FISH[id].when === 'any' || FISH[id].when === (night ? 'night' : 'day'));
+    const w = id => FISH_RARITY[FISH[id].rar].w / pool.filter(x => FISH[x].rar === FISH[id].rar).length * (night && FISH[id].when === 'night' ? 1.6 : 1);
+    let tot = pool.reduce((s, id) => s + w(id), 0), r = rnd() * tot;
+    for (const id of pool) { r -= w(id); if (r <= 0) return id; }
+    return pool[0];
 }
 
 export function cleanText(s, max) {
