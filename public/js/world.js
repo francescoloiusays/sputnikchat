@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ELEMENTS } from './shared/catalog.js';
 import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.js';
+import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
 
 // --- LAYOUT (metri) ---
 export const WORLD = {
@@ -15,6 +16,8 @@ export const WORLD = {
     ISLET: { x: 0, z: -104, r: 34 },
     CASTLE: { x: 0, z: -104, half: 19, base: 3.2, wallH: 6.5 },
     ARENA: { x: 0, z: -100, r: 7.5, top: 3.55 },
+    KEEP: { x: 0, z: -118.8, w: 12, d: 10, h: 15, t: 1 },          // mastio, addossato al muro nord
+    ROOM: { x: 0, z: -118.8, w: 10, d: 8, floor: 7.6, h: 3.6 },    // Stanza Bianca al piano di sopra (pavimento = base + 4.4)
     BRIDGE: { x: 0, z0: -33, z1: -79, w: 3.4 },
     PLAZA: { x: 0, z: 14, r: 11, h: 1.5 },
     SPAWN: { x: 0, z: 32 },
@@ -214,7 +217,7 @@ export function makeWaterMaterial(heightTex, bounds) {
 }
 
 // Box con UV proporzionali alle dimensioni (texture muro senza stiramenti)
-function wallBox(w, h, d, tile = 2.6) {
+export function wallBox(w, h, d, tile = 2.6) {
     const g = new THREE.BoxGeometry(w, h, d);
     const uv = g.attributes.uv;
     const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
@@ -224,7 +227,7 @@ function wallBox(w, h, d, tile = 2.6) {
     }
     return g;
 }
-function place(g, x, y, z, ry = 0, rx = 0, rz = 0) {
+export function place(g, x, y, z, ry = 0, rx = 0, rz = 0) {
     g.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz)).setPosition(x, y, z));
     return g;
 }
@@ -352,8 +355,8 @@ export class World {
     // --- LUCI ---
     buildLights() {
         const s = this.scene;
-        s.add(new THREE.HemisphereLight('#6a4a9a', '#1a1022', 0.85));
-        s.add(new THREE.AmbientLight('#2a1838', 0.5));
+        s.add(this.hemiLight = new THREE.HemisphereLight('#6a4a9a', '#1a1022', 0.85));
+        s.add(this.ambLight = new THREE.AmbientLight('#2a1838', 0.5));
         const moon = this.moonLight = new THREE.DirectionalLight('#b8b0ff', 0.9);
         moon.position.copy(MOON_DIR).multiplyScalar(60);
         if (this.quality === 'alta') {
@@ -945,7 +948,9 @@ export class World {
             }
         };
         const gate = 3.2;
-        wall(C.x, C.z - hs, hs * 2, T);                       // nord
+        const kw = WORLD.KEEP.w / 2, nl = hs - kw;            // nord: il tratto centrale è il mastio
+        wall(C.x - kw - nl / 2, C.z - hs, nl, T);
+        wall(C.x + kw + nl / 2, C.z - hs, nl, T);
         wall(C.x - hs, C.z, T, hs * 2);                       // ovest
         wall(C.x + hs, C.z, T, hs * 2);                       // est
         const sw = hs - gate;
@@ -963,10 +968,9 @@ export class World {
         };
         for (const sx of [-1, 1]) for (const sz of [-1, 1]) tower(C.x + sx * hs, C.z + sz * hs, 3.2, 10.5);
         for (const sx of [-1, 1]) tower(C.x + sx * (gate + 1.4), C.z + hs + 0.6, 1.8, 8.6);
-        // mastio
-        geos.push(place(wallBox(12, 15, 10), C.x, y0 + 7.5, C.z - hs + 4.2));
+        // mastio: al piano di sopra la Stanza Bianca, con la scala di pietra sul lato ovest
+        buildKeep(this, geos);
         roofs.push(place(new THREE.ConeGeometry(8.6, 6, 4).rotateY(Math.PI / 4).scale(1, 1, 0.84), C.x, y0 + 18, C.z - hs + 4.2));
-        this.addBox(C.x, C.z - hs + 4.2, 12, 10, y0 - 2, y0 + 15);
         const castleMesh = new THREE.Mesh(mergeGeometries(geos), this.matWall);
         castleMesh.castShadow = castleMesh.receiveShadow = true;
         this.scene.add(castleMesh);
@@ -974,8 +978,10 @@ export class World {
         const roofMesh = new THREE.Mesh(mergeGeometries(roofs), this.matRoof);
         roofMesh.castShadow = true;
         this.scene.add(roofMesh);
-        // finestre illuminate del mastio
-        for (const [wx, wy] of [[-3, 6], [3, 6], [0, 10], [-3, 12], [3, 12]]) {
+        buildWhiteRoom(this);
+        buildGarden(this);
+        // finestre illuminate dei piani alti (quelle in basso sono le finestre vere della stanza)
+        for (const [wx, wy] of [[0, 10], [-3, 12], [3, 12]]) {
             const w = makeWindow(0.9, 1.6);
             w.position.set(C.x + wx, y0 + wy - 0.8, C.z - hs + 9.21); this.scene.add(w);
         }
@@ -1059,7 +1065,7 @@ export class World {
         for (const z of [C.z + 15, C.z - 7]) { sconce(C.x - inX, z, Math.PI / 2); sconce(C.x + inX, z, -Math.PI / 2); }
         for (const x of [9.6, 15.4]) for (const s of [-1, 1]) sconce(C.x + s * x, inZn, 0);
         for (const x of [5, 15]) for (const s of [-1, 1]) sconce(C.x + s * x, inZs, Math.PI);
-        sconce(C.x - 3.6, keepZ, 0, true); sconce(C.x + 3.6, keepZ, 0);
+        sconce(C.x - 3.6, keepZ, 0); sconce(C.x + 3.6, keepZ, 0);   // senza luce vera: sopra c'è la Stanza Bianca
         // quadri con i fotogrammi di Sputnik Homies
         const painting = (x, y, z, ry, w = 3.2) => {
             const p = this.gallery.make(w, { offset: this.gallery.paintings.length * 2.3 });
@@ -1151,6 +1157,11 @@ export class World {
         const [cx, cz] = toPx(C.x - C.half, C.z - C.half), cs = C.half * 2 / (MAX_X - MIN_X) * S;
         g.fillStyle = '#6a6278'; g.fillRect(cx, cz, cs, cs);
         g.fillStyle = '#3a3448'; g.fillRect(cx + 1.5, cz + 1.5, cs - 3, cs - 3);
+        const rect = (x0, z0, x1, z1, col) => { const [ax, az] = toPx(x0, z0), [bx, bz] = toPx(x1, z1); g.fillStyle = col; g.fillRect(ax, az, bx - ax, bz - az); };
+        for (const r of GARDENS) rect(r.x0, r.z0, r.x1, r.z1, '#2f5a3a');
+        const K = WORLD.KEEP;
+        rect(K.x - K.w / 2, K.z - K.d / 2, K.x + K.w / 2, K.z + K.d / 2, '#d8d2c8');
+        rect(K.x - K.w / 2 - 2.2, K.z - 1.9, K.x - K.w / 2, K.z + 7.2, '#6a6278');
         const [ax, az] = toPx(WORLD.ARENA.x, WORLD.ARENA.z);
         g.strokeStyle = '#b37aff'; g.lineWidth = 2; g.beginPath(); g.arc(ax, az, WORLD.ARENA.r / (MAX_X - MIN_X) * S, 0, Math.PI * 2); g.stroke();
         const B = WORLD.BRIDGE; const [b0x, b0z] = toPx(B.x, B.z0), [, b1z] = toPx(B.x, B.z1);
@@ -1167,12 +1178,18 @@ export class World {
             { x: WORLD.ARENA.x, z: WORLD.ARENA.z, ic: 'swords', label: 'Arena' },
             { x: WORLD.CEMETERY.x, z: WORLD.CEMETERY.z, ic: 'skull', label: 'Cimitero' },
             { x: WORLD.MIRROR.x, z: WORLD.MIRROR.z, ic: 'mirror', label: 'Specchio' },
+            { x: WORLD.KEEP.x, z: WORLD.KEEP.z, ic: 'armchair', label: 'Stanza Bianca' },
         ];
     }
 
     zoneName(x, z) {
         const C = WORLD.CASTLE;
-        if (Math.abs(x - C.x) < C.half && Math.abs(z - C.z) < C.half) return Math.hypot(x - WORLD.ARENA.x, z - WORLD.ARENA.z) < WORLD.ARENA.r + 2 ? "Arena dei Duelli" : 'Cortile del Castello';
+        if (Math.abs(x - C.x) < C.half && Math.abs(z - C.z) < C.half) {
+            const K = WORLD.KEEP;
+            if (Math.abs(x - K.x) < K.w / 2 && Math.abs(z - K.z) < K.d / 2) return 'La Stanza Bianca';
+            if (GARDENS.some(r => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1)) return 'Giardino del Castello';
+            return Math.hypot(x - WORLD.ARENA.x, z - WORLD.ARENA.z) < WORLD.ARENA.r + 2 ? "Arena dei Duelli" : 'Cortile del Castello';
+        }
         if (this.onBridge(x, z)) return 'Ponte dei Sospiri';
         if (Math.hypot(x - C.x, z - C.z) < 36) return 'Castello Spettrale';
         if (Math.hypot(x - WORLD.PLAZA.x, z - WORLD.PLAZA.z) < WORLD.PLAZA.r + 3) return 'Piazza della Gloria';
@@ -1184,9 +1201,21 @@ export class World {
         return 'Isola Fantasma';
     }
 
-    nearestInteractable(x, z) {
+    // al chiuso la luna e la luce lilla del cielo si attenuano (senza ombre passerebbero i muri)
+    setIndoor(on) {
+        this.moonLight.intensity = on ? 0.2 : 0.9;
+        this.hemiLight.intensity = on ? 0.3 : 0.85;
+        this.ambLight.intensity = on ? 0.3 : 0.5;
+    }
+    // dentro la Stanza Bianca la luce è calda e bianca
+    inRoom(p) {
+        const R = WORLD.ROOM;
+        return Math.abs(p.x - R.x) < R.w / 2 + 0.3 && Math.abs(p.z - R.z) < R.d / 2 + 0.3 && p.y > R.floor - 1;
+    }
+    nearestInteractable(x, z, y) {
         let best = null, bd = Infinity;
         for (const it of this.interactables) {
+            if (it.y != null && y != null && Math.abs(y - it.y) > 2.5) continue;
             const d = Math.hypot(x - it.x, z - it.z);
             if (d < it.r && d < bd) { bd = d; best = it; }
         }

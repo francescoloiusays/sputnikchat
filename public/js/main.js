@@ -19,7 +19,7 @@ import { Net, SOCKET_URL, IS_MOBILE, store, $, h, toast, fmt } from './util.js';
 import { installTheme, icon, iconSVG, drawIcon } from './icons.js';
 import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, levelFromWins, sanitizeCard, sanitizeAppearance, STARTER_WEAPON } from './shared/catalog.js';
 
-const ANIMS = ['idle', 'walk', 'run', 'air'];
+const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
 const EMOTE_DUR = { saluta: 2, balla: 4, inchino: 1.8, ride: 2 };
 const lerpAngle = (a, b, t) => { let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * t; };
@@ -59,7 +59,7 @@ class RemotePlayer {
         this.speed += (moved - this.speed) * Math.min(1, dt * 8);
         r.rotation.y = lerpAngle(r.rotation.y, this.ry, Math.min(1, dt * 10));
         const a = ANIMS[this.anim] || 'idle';
-        this.ch.state = a === 'air' ? 'air' : this.speed > 6 ? 'run' : this.speed > 0.4 ? 'walk' : 'idle';
+        this.ch.state = a === 'air' || a === 'sit' ? a : this.speed > 6 ? 'run' : this.speed > 0.4 ? 'walk' : 'idle';
         this.ch.speed = this.speed;
         const d = camPos.distanceTo(r.position);
         if (this.ch.tag) this.ch.tag.visible = d < 40;
@@ -449,6 +449,7 @@ class Game {
         this.panels.close();
         document.exitPointerLock?.();
         this.keys = {};
+        if (role !== 'spectator') this.standUp();
         this.mode = 'duel';
         $('#hud').classList.add('duel-mode');
         $('#click-to-play').classList.add('hidden');
@@ -603,6 +604,7 @@ class Game {
 
     jump() {
         const P = this.player;
+        if (P.sit) return this.standUp();
         if (P.grounded) { P.vel.y = 8.4; P.grounded = false; this.audio.play('jump'); this.myChar.stop(); }
     }
     interact() {
@@ -610,7 +612,23 @@ class Game {
         if (!it) { if (this.nearPlayer) this.openPanel('profilo', this.nearPlayer.info.id); return; }
         if (it.id === 'specchio') this.editAppearance();
         else if (it.id === 'quadro') { document.exitPointerLock?.(); window.open('https://www.youtube.com/watch?v=' + this.world.gallery.current(it.painting).video, '_blank', 'noopener'); }
+        else if (it.id === 'canale') { document.exitPointerLock?.(); window.open('https://www.youtube.com/@SputnikHomies', '_blank', 'noopener'); }
+        else if (it.id === 'siedi') this.player.sit === it.seat ? this.standUp() : this.sitDown(it.seat);
         else this.openPanel(it.id);
+    }
+    // poltrone della Stanza Bianca e panchine del giardino
+    sitDown(seat) {
+        const P = this.player;
+        if (this.players.size && [...this.players.values()].some(p => p.anim === 4 && Math.hypot(p.target.x - seat.x, p.target.z - seat.z) < 0.3)) return toast('Qualcuno è già seduto qui', { kind: 'bad' });
+        P.sit = seat; P.vel.set(0, 0, 0); P.grounded = true;
+        P.pos.set(seat.x, seat.y, seat.z); P.yaw = seat.ry;
+        this.myChar.stop();
+    }
+    standUp() {
+        const P = this.player, s = P.sit;
+        if (!s) return;
+        P.sit = null;
+        P.pos.set(s.x + Math.sin(s.ry) * 0.8, s.floor, s.z + Math.cos(s.ry) * 0.8);
     }
     emote(name) {
         this.myChar.play(name, EMOTE_DUR[name]);
@@ -890,6 +908,17 @@ class Game {
         const wish = f.multiplyScalar(fwd).add(r.multiplyScalar(right));
         const len = Math.min(1, wish.length());
         if (len > 0.01) wish.normalize();
+        if (P.sit) {
+            if (len > 0.2) this.standUp();
+            else {
+                const ch = this.myChar;
+                ch.root.position.copy(P.pos); ch.root.rotation.y = P.yaw;
+                ch.state = 'sit'; ch.speed = 0; ch.root.visible = !this.cam.first;
+                this.updateFill(P);
+                this.sendPos(dt, 4);
+                return;
+            }
+        }
         const terrainH = W.terrainAt(P.pos.x, P.pos.z);
         const inWater = terrainH < -0.05 && !W.onBridge(P.pos.x, P.pos.z);
         const running = (K.ShiftLeft || K.ShiftRight || this.joy?.run) && !inWater;
@@ -921,11 +950,25 @@ class Game {
         ch.state = !P.grounded ? 'air' : hs > 6 ? 'run' : hs > 0.4 ? 'walk' : 'idle';
         ch.speed = hs;
         ch.root.visible = !this.cam.first;
-        this.fillLight.position.set(P.pos.x + Math.sin(this.cam.yaw) * 2, P.pos.y + 2.6, P.pos.z + Math.cos(this.cam.yaw) * 2);
+        this.updateFill(P);
         if (P.grounded && hs > 0.5) { P.stepT -= dt * hs; if (P.stepT <= 0) { P.stepT = 2.2; this.audio.play('step'); } }
-        // invio posizione (~15Hz)
+        this.sendPos(dt, !P.grounded ? 3 : hs > 6 ? 2 : hs > 0.4 ? 1 : 0);
+    }
+    // luce di riempimento: lilla all'aperto, bianca e calda nella Stanza Bianca
+    updateFill(P) {
+        this.fillLight.position.set(P.pos.x + Math.sin(this.cam.yaw) * 2, P.pos.y + 2.6, P.pos.z + Math.cos(this.cam.yaw) * 2);
+        const inRoom = this.world.inRoom(P.pos);
+        if (inRoom !== this.fillInRoom) {
+            this.fillInRoom = inRoom;
+            this.fillLight.color.set(inRoom ? '#fff1e2' : '#d8c4ff');
+            this.fillLight.intensity = inRoom ? 1.5 : 9;
+            this.world.setIndoor(inRoom);
+        }
+    }
+    // invio posizione (~15Hz)
+    sendPos(dt, anim) {
+        const P = this.player;
         P.lastSend -= dt;
-        const anim = !P.grounded ? 3 : hs > 6 ? 2 : hs > 0.4 ? 1 : 0;
         const st = [+P.pos.x.toFixed(2), +P.pos.y.toFixed(2), +P.pos.z.toFixed(2), +P.yaw.toFixed(2), anim];
         const changed = !P.lastSent || st.some((v, i) => v !== P.lastSent[i]);
         if (P.lastSend <= 0 && (changed || P.lastSend < -1)) {
@@ -961,13 +1004,13 @@ class Game {
 
     updatePrompt() {
         const P = this.player.pos;
-        const it = this.world.nearestInteractable(P.x, P.z);
+        const it = this.world.nearestInteractable(P.x, P.z, P.y);
         this.nearInteract = it;
         let near = null, nd = 3.5;
         for (const p of this.players.values()) { const d = p.distTo(P); if (d < nd) { nd = d; near = p; } }
         this.nearPlayer = near;
         const el = $('#prompt');
-        const label = it ? String(typeof it.label === "function" ? it.label() : it.label).replace(/[<>&]/g, "") : "";
+        const label = it ? String(it.id === 'siedi' && this.player.sit === it.seat ? 'Alzati' : typeof it.label === "function" ? it.label() : it.label).replace(/[<>&]/g, "") : "";
         const html = it ? `<kbd>E</kbd>${label}` : near ? `<kbd>${IS_MOBILE ? 'E' : 'R'}</kbd>Profilo di ${near.info.name.replace(/[<>&]/g, '')}` : '';
         if (el.dataset.html !== html) { el.dataset.html = html; el.innerHTML = html; el.classList.toggle('hidden', !html || this.panels.isOpen); }
         else el.classList.toggle('hidden', !html || this.panels.isOpen);

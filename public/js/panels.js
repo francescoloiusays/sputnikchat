@@ -19,6 +19,8 @@ export function itemInfo(e) {
     return { name: it.name, sub: SLOT_NAMES[it.slot], slot: it.slot, value: it.price, desc: it.desc };
 }
 const SLOT_ICON = { head: 'head', face: 'face', cape: 'cape', torso: 'torso', weapon: 'weapon' };
+// icona della maglietta del suo colore (quelle scure restano leggibili sul fondo scuro)
+const shirtTint = (hex) => { const n = parseInt(hex.slice(1), 16), l = ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) / 255; return l < 0.25 ? '#8a8494' : hex; };
 const ORDER = { weapon: 0, head: 1, face: 2, cape: 3, torso: 4 };
 const sect = (ic, text, ...extra) => h('h3', { class: 'sect', html: iconSVG(ic) }, text, ...extra);
 const lore = (text) => h('p', { class: 'lore' }, text);
@@ -150,20 +152,31 @@ export class Panels {
 
     // --- SARTORIA (provi il capo selezionato sul manichino) ---
     p_sartoria() {
-        const me = this.app.me;
         const [tab, bar] = this.tabBar('shop', [['head', 'Copricapi', 'head'], ['face', 'Maschere', 'face'], ['cape', 'Mantelli', 'cape'], ['torso', 'Armature', 'torso']]);
-        const wares = Object.entries(ITEMS).filter(([, it]) => it.slot === tab);
+        this.shopView('needle', 'Sartoria Spettrale', Object.entries(ITEMS).filter(([, it]) => it.slot === tab && !it.shop), bar,
+            '«Guardati pure allo specchio, viandante. Non si paga per sognare.»');
+    }
+
+    // --- ARMADIO DELLA STANZA BIANCA (merch ufficiale Sputnik Homies) ---
+    p_armadio() {
+        this.shopView('hanger', 'Armadio degli Sputnik Homies', Object.entries(ITEMS).filter(([, it]) => it.shop === 'armadio'),
+            lore('Appese nell\'armadio della Stanza Bianca ci sono le magliette ufficiali, con il logo giallo davanti e la scritta dietro.'),
+            '«Taglia unica: va bene a umani, elfi, ratti e scheletri.»');
+    }
+
+    shopView(ic, title, wares, bar, motto) {
+        const me = this.app.me;
         const owned = (id) => (me.inventory || []).filter(e => e.itemId === id).length;
         const selId = wares.find(([id]) => id === this.selShop)?.[0] || wares[0][0];
         this.selShop = selId;
         const it = ITEMS[selId], r = rarityOf(it.price);
-        this.set('needle', 'Sartoria Spettrale', this.needOnline(),
+        this.set(ic, title, this.needOnline(),
             h('div', { class: 'split' },
                 h('div', {}, this.studioBox(S => S.setCharacter(me.appearance, { ...this.app.look(), [it.slot]: selId })),
-                    h('p', { class: 'lore center', style: { marginTop: '10px' } }, '«Guardati pure allo specchio, viandante. Non si paga per sognare.»')),
+                    h('p', { class: 'lore center', style: { marginTop: '10px' } }, motto)),
                 h('div', {}, bar,
                     h('div', { class: 'slot-grid' }, wares.map(([id, w]) => this.slot({
-                        ic: itemIconName(id), rar: rarityOf(w.price).id, sel: id === selId, price: w.price, count: owned(id), title: w.name,
+                        ic: itemIconName(id), rar: rarityOf(w.price).id, sel: id === selId, price: w.price, count: owned(id), title: w.name, color: w.shirt ? shirtTint(w.color) : null,
                         onclick: () => { this.selShop = id; this.app.audio.play('ui'); this.render(); },
                     }))),
                     h('div', { class: 'detail' },

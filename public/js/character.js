@@ -40,6 +40,46 @@ const cyl = (rt, rb, h, s = 12, open = false) => geo(`cy${rt.toFixed(3)}_${rb.to
 const cone = (r, h, s = 12) => geo(`co${r.toFixed(3)}_${h.toFixed(3)}_${s}`, () => new THREE.ConeGeometry(r, h, s));
 const torus = (R, t, arc = Math.PI * 2, rs = 8, ts = 24) => geo(`to${R}_${t}_${arc.toFixed(3)}`, () => new THREE.TorusGeometry(R, t, rs, ts, arc));
 
+// --- STAMPE SPUTNIK HOMIES (logo ricolorato o scritta), usate da magliette, felpa e Stanza Bianca ---
+let logoImg = null;
+const printCache = new Map();
+export function shPrintTexture(color, kind = 'logo') {
+    const key = kind + color;
+    if (printCache.has(key)) return printCache.get(key);
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = kind === 'logo' ? 390 : 205;
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    printCache.set(key, tex);
+    const g = c.getContext('2d');
+    if (kind === 'back') {
+        g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.font = '84px "Times New Roman", Times, Georgia, serif';
+        g.fillText('Sputnik', 256, 56); g.fillText('Homies', 256, 150);
+        tex.needsUpdate = true;
+        return tex;
+    }
+    const draw = () => {
+        const t = document.createElement('canvas'); t.width = c.width; t.height = c.height;
+        const tg = t.getContext('2d');
+        tg.drawImage(logoImg, 0, 0, c.width, c.height);
+        tg.globalCompositeOperation = 'source-in';
+        tg.fillStyle = color; tg.fillRect(0, 0, c.width, c.height);
+        g.clearRect(0, 0, c.width, c.height);
+        g.drawImage(t, 0, 0);
+        tex.needsUpdate = true;
+    };
+    if (!logoImg) { logoImg = new Image(); logoImg.src = './img/sh_logo.png'; }
+    if (logoImg.complete && logoImg.naturalWidth) draw(); else logoImg.addEventListener('load', draw, { once: true });
+    return tex;
+}
+const printMats = new Map();
+function printMat(color, kind) {
+    const key = kind + color;
+    if (!printMats.has(key)) printMats.set(key, new THREE.MeshStandardMaterial({ map: shPrintTexture(color, kind), transparent: true, alphaTest: 0.2, depthWrite: false, roughness: 0.9 }));
+    return printMats.get(key);
+}
+
 const BUILD = {
     snello: { w: 0.36, d: 0.22, limb: 0.055 },
     medio: { w: 0.44, d: 0.26, limb: 0.066 },
@@ -289,8 +329,9 @@ export class Character {
         const skinCol = skel ? '#e9e2cf' : a.skin;
         const skinM = stdMat(skinCol, { o: op, e: em, ei: 0.35, r: skel ? 0.6 : 0.8 });
         const torsoItem = ITEMS[this.look.torso];
-        const robe = a.topStyle === 'veste' || this.look.torso === 'tunica_mago';
-        const topCol = this.look.torso === 'tunica_mago' ? torsoItem.color : a.top;
+        const shirt = torsoItem?.shirt;   // magliette e felpa dell'Armadio: sostituiscono la parte di sopra
+        const robe = (a.topStyle === 'veste' && !shirt) || this.look.torso === 'tunica_mago';
+        const topCol = this.look.torso === 'tunica_mago' || shirt ? torsoItem.color : a.top;
         const topM = stdMat(topCol, { o: op, e: em, ei: 0.3 });
         const botM = stdMat(a.bottom, { o: op, e: em, ei: 0.3 });
         const shoeM = stdMat(a.shoes, { o: op, r: 0.6 });
@@ -348,7 +389,7 @@ export class Character {
         const torsoH = 0.52;
         spine.add(M(rbox(W, torsoH, D, 0.07), topM, 0, torsoH / 2, 0));
         if (a.topStyle === 'tunica' && !torsoItem) spine.add(M(box(W * 1.02, 0.06, D * 1.04), stdMat(shade(a.bottom, 0.6)), 0, 0.06, 0));
-        if (a.topStyle === 'giacca') {
+        if (a.topStyle === 'giacca' && !shirt) {
             spine.add(M(torus(0.1, 0.035), topM, 0, torsoH + 0.01, 0)).rotation.x = Math.PI / 2;
             const btn = stdMat('#c8a24a', { m: 0.8, r: 0.3 });
             for (let i = 0; i < 4; i++) spine.add(M(sphere(0.016, 8, 6), btn, 0, 0.12 + i * 0.1, D / 2 + 0.005));
@@ -410,7 +451,7 @@ export class Character {
 
         // --- BRACCIA (L = +x, R = -x: il personaggio guarda verso +z) ---
         this.arms = {};
-        const sleeveFull = a.topStyle !== 'tunica';
+        const sleeveFull = shirt ? shirt === 'hoodie' : a.topStyle !== 'tunica';
         for (const [key, s] of [['L', 1], ['R', -1]]) {
             const sh = new THREE.Group();
             sh.rotation.order = 'YXZ';
@@ -563,6 +604,25 @@ export class Character {
 
     addTorsoItem(spine, it, W, D, H) {
         if (!it) return;
+        if (it.shirt) {
+            // logo giallo davanti, scritta dietro, girocollo (e cappuccio, tasca e lacci per la felpa)
+            const front = M(geo('shlogo', () => new THREE.PlaneGeometry(1, 0.76)), printMat(it.print, 'logo'), 0, H * 0.6, D / 2 + 0.004);
+            front.scale.setScalar(W * 0.62); front.castShadow = false;
+            spine.add(front);
+            const back = M(geo('shback', () => new THREE.PlaneGeometry(1, 0.4)), printMat(it.print, 'back'), 0, H * 0.64, -D / 2 - 0.004);
+            back.rotation.y = Math.PI; back.scale.setScalar(W * 0.78); back.castShadow = false;
+            spine.add(back);
+            const rib = stdMat(shade(it.color, 0.78));
+            spine.add(M(torus(0.085, 0.02), rib, 0, H + 0.005, 0)).rotation.x = Math.PI / 2;
+            if (it.shirt === 'hoodie') {
+                const hood = M(geo('hood', () => new THREE.SphereGeometry(0.17, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2)), stdMat(it.color, { side: THREE.DoubleSide }), 0, H - 0.02, -D * 0.42);
+                hood.rotation.x = -2.1; hood.scale.set(1.1, 0.85, 0.75);
+                spine.add(hood);
+                spine.add(M(box(W * 0.56, 0.13, 0.02), rib, 0, 0.12, D / 2 + 0.008));
+                for (const s of [1, -1]) spine.add(M(box(0.012, 0.13, 0.012), stdMat('#e8e4dc'), s * 0.045, H - 0.08, D / 2 + 0.012));
+            }
+            return;
+        }
         const id = Object.keys(ITEMS).find(k => ITEMS[k] === it);
         switch (id) {
             case 'grembiule': {

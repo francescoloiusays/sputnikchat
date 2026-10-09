@@ -21,6 +21,8 @@ Client in HTML/JS con Three.js (GitHub Pages), server Node.js con socket.io (Ren
 - **Musica**: la colonna sonora originale sull'isola e, durante i duelli, `battaglia.mp3`, un remix d'azione dello stesso brano (137 BPM con batteria aggiunta).
 - **Minimappa** in basso a sinistra (clic o N per la mappa grande), logo che gira in alto al centro, chat, voice chat di prossimità e il lancio di fango del gioco originale.
 - **Il castello dentro**: torce a muro in ferro e bracieri con fiamme generate in tempo reale (fuori restano le torce della laguna) e **quadri con fotogrammi degli episodi di Sputnik Homies** che cambiano immagine ogni 10–15 secondi. Premendo E davanti a un quadro si apre l'episodio su YouTube. Le immagini sono in `public/img/quadri/`, l'elenco è in `public/js/decor.js`.
+- **La Stanza Bianca**: al piano di sopra del mastio c'è la stanza dei video di Sputnik Homies. Ci si sale con la scala di pietra sul lato ovest del mastio. Entrando trovi il letto matrimoniale a destra, l'armadio a sinistra e, di fronte alla porta, le due poltrone (quella di legno e la sedia da ufficio nera) con il tavolino di OSB e il logo giallo. Dietro ci sono il pannello nero con gli archi, la lampada, il poster e lo specchio. Le due finestre in basso del mastio sono le finestre vere della stanza e danno sul **giardino del castello** (prati, alberi in fiore, fontana e fiori luminosi). Premi E vicino a una poltrona (o a una panchina del giardino) per sederti: gli altri ti vedono seduto. Il tavolino apre il canale YouTube.
+- **Armadio degli Sputnik Homies**: dentro l'armadio ci sono le magliette ufficiali (bianca, nera, gialla e grigia) e la felpa con cappuccio, tutte con il logo davanti e la scritta dietro. Si provano addosso e si comprano con gli Sputnik Coin, come in Sartoria.
 - **Musica di battaglia**: durante i duelli parte `battaglia.mp3`, un remix d'azione della colonna sonora (più veloce, 137 BPM, con batteria, tamburi e piatti a tempo). Lo script che lo genera è in `tools/remix-battaglia.mjs`.
 - **Interfaccia da gioco di ruolo**: finestre in legno scuro con filigrane d'oro, pergamene per registri e notifiche, slot degli oggetti colorati per rarità (comune, raro, epico, leggendario), barra delle azioni con le scorciatoie, ritratto in cornice dorata, titoli delle zone a tutto schermo e mappa grande su pergamena. Font: Almendra (titoli), Cinzel (etichette), Alegreya (testi); il Planewalker resta per il marchio "SputnikChat".
 
@@ -59,6 +61,7 @@ public/js/cards.js        disegno, stampa e analisi colore delle card
 public/js/creator.js      creazione del personaggio ed editor della card
 public/js/panels.js       inventario, botteghe, Bazar, classifica, amici, collezione...
 public/js/decor.js        fiamme procedurali, torce a muro, bracieri, quadri del castello
+public/js/room.js         mastio, scala, Stanza Bianca con i suoi arredi e giardino del castello
 public/js/icons.js        icone del gioco e ornamenti dell'interfaccia (filigrane, grana della carta)
 public/js/icon-paths.js   disegni delle icone (game-icons.net)
 tools/remix-battaglia.mjs genera la musica di battaglia dal brano originale

@@ -37,6 +37,7 @@ export function itemIconName(e) {
     if (e.kind === 'weapon' || e.type) return (e.spec || e).type || 'spada';
     const id = e.itemId || e;
     if (ICON_PATHS[id]) return id;
+    if (ITEMS[id]?.shirt) return 'shirt';
     if (String(id).startsWith('mantello')) return id === 'mantello_regale' ? 'mantello_regale' : 'mantello';
     return ITEMS[id]?.slot || 'rune';
 }

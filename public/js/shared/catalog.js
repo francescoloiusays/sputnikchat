@@ -186,6 +186,12 @@ export const ITEMS = {
     tunica_mago:     { slot: 'torso', name: 'Veste Stellata',          price: 90,  color: '#1d2a6b', color2: '#ffe680', desc: 'Ricamata con le stelle della laguna.' },
     ossa:            { slot: 'torso', name: "Armatura d'Ossa",         price: 180, color: '#e6dcc3', desc: 'Meglio non chiedere di chi.' },
     corazza:         { slot: 'torso', name: 'Corazza Dorata',          price: 280, color: '#e0b13a', desc: 'Brilla anche al chiaro di luna.' },
+    // Armadio della Stanza Bianca: il merch ufficiale di Sputnik Homies
+    maglia_sh_bianca: { slot: 'torso', shop: 'armadio', shirt: 'tee',    name: 'Maglietta Sputnik Homies',        price: 35, color: '#ebe8e1', print: '#e3bd00', desc: 'Bianca come la stanza in cui è nata. Logo giallo davanti, scritta dietro.' },
+    maglia_sh_nera:   { slot: 'torso', shop: 'armadio', shirt: 'tee',    name: 'Maglietta Sputnik Homies Nera',   price: 35, color: '#18161c', print: '#ffe100', desc: 'Il nero sfina. Il logo giallo si vede anche nella nebbia.' },
+    maglia_sh_gialla: { slot: 'torso', shop: 'armadio', shirt: 'tee',    name: 'Maglietta Sputnik Homies Gialla', price: 45, color: '#f2c81e', print: '#1b1720', desc: 'Edizione al contrario: maglia gialla, logo nero.' },
+    maglia_sh_grigia: { slot: 'torso', shop: 'armadio', shirt: 'tee',    name: 'Maglietta Sputnik Homies Grigia', price: 40, color: '#8f9198', print: '#ffe100', desc: 'Grigio melange, per le puntate del lunedì.' },
+    felpa_sh:         { slot: 'torso', shop: 'armadio', shirt: 'hoodie', name: 'Felpa Sputnik Homies',            price: 90, color: '#1d1b22', print: '#ffe100', desc: 'Con cappuccio e tasca davanti, come quella che si vede in poltrona.' },
 };
 
 // --- ASPETTO DEL PERSONAGGIO ---
