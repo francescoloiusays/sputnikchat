@@ -2,7 +2,7 @@
 //  CARD DEL POTERE (stile Magic / Yu-Gi-Oh)
 //  La texture scelta decide l'elemento → statistiche e super potere.
 // =====================================================================
-import { ELEMENTS, CARD_TEXTURES, CARD_ARTS, APPEARANCE_LABELS, elementFromHSL, cardPower, weaponStats, SEALS, gradeOf } from './shared/catalog.js';
+import { ELEMENTS, CARD_TEXTURES, CARD_ARTS, APPEARANCE_LABELS, elementFromHSL, cardPower, weaponStats, SEALS, gradeOf, LEAGUES } from './shared/catalog.js';
 import { loadImage } from './util.js';
 import { drawIcon } from './icons.js';
 
@@ -328,6 +328,22 @@ export function drawCard(g, W, H, info) {
         drawIcon(g, SEALS[s].icon, cx, cy, 24 * k, '#ffd9a0');
     });
     // gradi del risveglio (Altare): Filigrana olografica, bordo Aurora, cornice d'oro Incisa
+    // cornice della lega conquistata a fine stagione e stelle della Rinascita
+    const LG = LEAGUES.find(l => l.id === info.frame);
+    if (LG) {
+        rr(g, 12 * k, 12 * k, W - 24 * k, H - 24 * k, 24 * k); g.lineWidth = 3 * k; g.strokeStyle = LG.color; g.stroke();
+        const ex = 48 * k, ey = 140 * k;
+        g.beginPath(); g.moveTo(ex - 15 * k, ey - 14 * k); g.lineTo(ex + 15 * k, ey - 14 * k); g.lineTo(ex + 15 * k, ey + 2 * k); g.quadraticCurveTo(ex + 15 * k, ey + 14 * k, ex, ey + 20 * k); g.quadraticCurveTo(ex - 15 * k, ey + 14 * k, ex - 15 * k, ey + 2 * k); g.closePath();
+        g.fillStyle = LG.color; g.fill(); g.lineWidth = 2 * k; g.strokeStyle = '#140a04'; g.stroke();
+        g.fillStyle = '#140a04'; g.font = `900 ${15 * k}px Cinzel, Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(LG.name[0], ex, ey + 1 * k);
+    }
+    for (let i = 0; i < (info.rebirths || 0); i++) {
+        const sx = 74 * k + i * 26 * k;
+        star(g, sx, 122 * k, 11 * k);
+        const sg = g.createRadialGradient(sx, 118 * k, 1, sx, 122 * k, 12 * k);
+        sg.addColorStop(0, '#ffd0c0'); sg.addColorStop(1, '#c8202a');
+        g.fillStyle = sg; g.fill(); g.lineWidth = 1.5 * k; g.strokeStyle = '#2a0000'; g.stroke();
+    }
     if (G >= 1) {
         g.save();
         rr(g, 0, 0, W, H, 30 * k); g.clip();
@@ -394,8 +410,36 @@ export function defaultType(appearance, element) {
 }
 
 // Compone la card completa su un canvas. studio serve per il ritratto 3D.
+function cardInfo(opts, tex, art, artIsPortrait) {
+    const { card, appearance, look, level = 1, talents, id, name, grade = 0, seals = [], gearPlus = 0, frame = null, rebirths = 0 } = opts;
+    const gear = ['head', 'face', 'cape', 'torso'].map(s => look?.[s]).filter(Boolean);
+    const pw = cardPower(card.element, look?.weapon, level, { talents, gear, gearPlus, seals });
+    const w = look?.weapon, ws = weaponStats(w);
+    return {
+        title: card.title || name || 'Viandante', type: card.type || defaultType(appearance, card.element), flavor: card.flavor,
+        element: card.element, tex, art, artIsPortrait, level, atk: pw.atk, def: pw.def,
+        weaponName: w ? `${w.name}${ws.plus ? ` +${ws.plus}` : ''} (×${ws.dmg.toFixed(2)})` : null, number: cardNumber(id), grade, seals, frame, rebirths,
+    };
+}
+const newCanvas = (W) => { const c = document.createElement('canvas'); c.width = W; c.height = Math.round(W * CARD_H / CARD_W); return c; };
+// Carta Viva: il ritratto 3D si muove dentro la carta (una dozzina di pose che girano piano)
+export async function composeCardFrames(opts, studio, W = CARD_W, n = 12) {
+    const { card, appearance, look } = opts;
+    if (card.art && card.art !== 'ritratto') return null;
+    const tex = await textureImage(card).catch(() => generateTexture('mura'));
+    const out = [];
+    for (let i = 0; i < n; i++) {
+        const t = i / n * Math.PI * 2;
+        const art = studio.portrait(appearance, look, 320, 'bust', { ry: 0.32 + Math.sin(t) * 0.34, head: Math.sin(t + 0.6) * 0.24, tilt: Math.cos(t) * 0.04 });
+        const c = newCanvas(W);
+        drawCard(c.getContext('2d'), c.width, c.height, cardInfo(opts, tex, art, true));
+        out.push(c);
+        await new Promise(r => setTimeout(r, 0));
+    }
+    return out;
+}
 export async function composeCard(opts, studio, W = CARD_W) {
-    const { card, appearance, look, level = 1, talents, id, name, grade = 0, seals = [], gearPlus = 0 } = opts;
+    const { card, appearance, look } = opts;
     const tex = await textureImage(card).catch(() => generateTexture('mura'));
     let art = null, artIsPortrait = false;
     try {
@@ -403,17 +447,8 @@ export async function composeCard(opts, studio, W = CARD_W) {
         else if (card.art && card.art.startsWith('propic:')) art = await cachedImage(CARD_ARTS.find(a => a.id === card.art).file);
         else { art = studio.portrait(appearance, look, 512, 'bust'); artIsPortrait = true; }
     } catch { art = null; }
-    const gear = ['head', 'face', 'cape', 'torso'].map(s => look?.[s]).filter(Boolean);
-    const pw = cardPower(card.element, look?.weapon, level, { talents, gear, gearPlus, seals });
-    const w = look?.weapon;
-    const ws = weaponStats(w);
-    const c = document.createElement('canvas');
-    c.width = W; c.height = Math.round(W * CARD_H / CARD_W);
-    drawCard(c.getContext('2d'), c.width, c.height, {
-        title: card.title || name || 'Viandante', type: card.type || defaultType(appearance, card.element), flavor: card.flavor,
-        element: card.element, tex, art, artIsPortrait, level, atk: pw.atk, def: pw.def,
-        weaponName: w ? `${w.name}${ws.plus ? ` +${ws.plus}` : ''} (×${ws.dmg.toFixed(2)})` : null, number: cardNumber(id), grade, seals,
-    });
+    const c = newCanvas(W);
+    drawCard(c.getContext('2d'), c.width, c.height, cardInfo(opts, tex, art, artIsPortrait));
     return c;
 }
 

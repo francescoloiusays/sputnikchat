@@ -130,7 +130,7 @@ export class Studio {
     }
 
     // Ritratto con sfondo trasparente (per card e profilo)
-    portrait(appearance, look, size = 512, framing = 'bust') {
+    portrait(appearance, look, size = 512, framing = 'bust', pose = null) {
         const wasRunning = this.running;
         const prevSize = new THREE.Vector2(); this.renderer.getSize(prevSize);
         const prevAspect = this.camera.aspect;
@@ -141,8 +141,8 @@ export class Studio {
         const ch = new Character(appearance, look);
         this.scene.add(ch.root);
         for (let i = 0; i < 30; i++) ch.update(1 / 30);
-        ch.pose.headRy = 0; ch.pose.headRx = 0.05;
-        ch.root.rotation.y = 0.32;
+        ch.pose.headRy = pose?.head || 0; ch.pose.headRx = 0.05 + (pose?.tilt || 0);
+        ch.root.rotation.y = pose?.ry ?? 0.32;
         ch.update(0.0001);
         this.renderer.setSize(size, size, false);
         this.camera.aspect = 1; this.camera.updateProjectionMatrix();

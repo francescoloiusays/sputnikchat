@@ -5,7 +5,8 @@
 // =====================================================================
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ELEMENTS, GATHER, FISH_SPOT, STONES } from './shared/catalog.js';
+import { ELEMENTS, GATHER, FISH_SPOT, STONES, GRAVES, GRAVES_LEVEL, BOUNTY_BOARD, FOUNTAIN, PHONE_SPOT, CANTO_SEEDS, WHITE_ROOM, TOLL } from './shared/catalog.js';
+import { TABLETS } from './shared/lore.js';
 import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.js';
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
 
@@ -271,6 +272,7 @@ export class World {
         this.buildDock();
         this.buildWisps();
         this.buildGather();
+        this.buildPlaces();
         this.buildMapImage();
     }
 
@@ -738,11 +740,7 @@ export class World {
         const C = WORLD.CEMETERY, r = rng(5);
         const stoneG = mergeGeometries([new THREE.BoxGeometry(0.7, 0.9, 0.18).translate(0, 0.45, 0), new THREE.CylinderGeometry(0.35, 0.35, 0.18, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 0.9, 0)]);
         const crossG = mergeGeometries([new THREE.BoxGeometry(0.12, 1.2, 0.12).translate(0, 0.6, 0), new THREE.BoxGeometry(0.6, 0.12, 0.12).translate(0, 0.88, 0)]);
-        const graves = [];
-        for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) {
-            if (r() < 0.15) continue;
-            graves.push([C.x - 7.5 + i * 3 + (r() - 0.5) * 0.6, C.z - 4.5 + j * 3 + (r() - 0.5) * 0.6, r() < 0.35]);
-        }
+        const graves = GRAVES.map(g => [g.x, g.z, g.cross]);
         const m4 = new THREE.Matrix4();
         const stones = graves.filter(g => !g[2]), crosses = graves.filter(g => g[2]);
         const mk = (geo_, mat, list) => {
@@ -1122,6 +1120,111 @@ export class World {
         this.interactables.push({ id: 'pesca', x: FISH_SPOT.x, z: FISH_SPOT.z, r: 2.6, label: 'Pesca nella Nebbia: Perle, pesci e bottiglie' });
     }
 
+    // --- I LUOGHI: Bacheca delle Taglie, Tavolette, Canto delle Pietre, Prato dei Morti, Fontana, telefono bianco ---
+    buildPlaces() {
+        const glow = (col, sc, op = 0.8) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false })); sp.scale.set(sc, sc, 1); return sp; };
+        // Bacheca delle Taglie in piazza
+        const B = BOUNTY_BOARD, by = this.groundAt(B.x, B.z);
+        const board = new THREE.Group();
+        board.position.set(B.x, by, B.z); board.rotation.y = B.ry;
+        for (const sx of [-0.95, 0.95]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 2.4, 6), this.matWood); post.position.set(sx, 1.2, 0); board.add(post); }
+        const notes = canvasTex(512, 320, (g, w, h) => {
+            g.fillStyle = '#3d2a1c'; g.fillRect(0, 0, w, h);
+            g.strokeStyle = '#c99a2e'; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
+            g.fillStyle = '#f0d58a'; g.font = '700 46px Almendra, serif'; g.textAlign = 'center'; g.fillText('Bacheca delle Taglie', w / 2, 56);
+            const r = rng(31);
+            for (let i = 0; i < 6; i++) {
+                const x = 30 + (i % 3) * 160 + r() * 14, y = 84 + Math.floor(i / 3) * 112 + r() * 10;
+                g.save(); g.translate(x + 66, y + 48); g.rotate((r() - 0.5) * 0.16);
+                g.fillStyle = i === 5 ? '#d8c08a' : '#efe5cd'; g.fillRect(-66, -48, 132, 96);
+                g.fillStyle = '#5a1a10'; g.beginPath(); g.arc(0, -40, 6, 0, Math.PI * 2); g.fill();
+                g.fillStyle = 'rgba(43,28,14,0.75)';
+                for (let l = 0; l < 4; l++) g.fillRect(-52, -22 + l * 16, 70 + r() * 34, 4);
+                g.restore();
+            }
+        });
+        const plank = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 1.3), new THREE.MeshStandardMaterial({ map: notes, roughness: 0.9, side: THREE.DoubleSide, emissive: '#fff', emissiveMap: notes, emissiveIntensity: 0.18 }));
+        plank.position.set(0, 1.75, 0.02); board.add(plank);
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.5), this.matWood); roof.position.set(0, 2.44, 0.05); roof.rotation.x = 0.25; board.add(roof);
+        this.scene.add(board);
+        this.addBox(B.x, B.z, 2.2, 0.3, by, by + 2.4, B.ry);
+        this.interactables.push({ id: 'bacheca', x: B.x + Math.sin(B.ry) * 1.2, z: B.z + Math.cos(B.ry) * 1.2, r: B.r, label: 'Bacheca delle Taglie: i lavori del giorno' });
+        this.addTorch(B.x + Math.sin(B.ry) * 0.2 + Math.cos(B.ry) * 1.2, by + 2.2, B.z + Math.cos(B.ry) * 0.2 - Math.sin(B.ry) * 1.2, false, 0.7, { cup: true });
+
+        // Tavolette della Cronaca: una stele per seme, con la runa che brilla
+        this.tablets = {};
+        const steleG = mergeGeometries([new THREE.BoxGeometry(0.72, 1.05, 0.2).translate(0, 0.52, 0), new THREE.CylinderGeometry(0.36, 0.36, 0.2, 14, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 1.05, 0)]);
+        for (const [el, T] of Object.entries(TABLETS)) {
+            const y = this.terrainAt(T.x, T.z) - 0.05, E = ELEMENTS[el];
+            const g = new THREE.Group(); g.position.set(T.x, y, T.z); g.rotation.y = Math.atan2(WORLD.MAIN.x - T.x, WORLD.MAIN.z - T.z);
+            g.add(new THREE.Mesh(steleG, this.matStone));
+            const glyph = canvasTex(128, 128, (c) => { c.clearRect(0, 0, 128, 128); c.strokeStyle = '#fff'; c.lineWidth = 9; c.lineCap = 'round'; const r2 = rng(el.length * 13 + el.charCodeAt(0)); c.beginPath(); c.moveTo(64, 14); c.lineTo(64, 114); for (let k = 0; k < 4; k++) { const yy = 28 + k * 22; c.moveTo(64, yy); c.lineTo(64 + (r2() < 0.5 ? -1 : 1) * (20 + r2() * 26), yy + 16); } c.stroke(); });
+            const gm = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.46), new THREE.MeshBasicMaterial({ map: glyph, color: E.color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+            gm.position.set(0, 0.72, 0.105); g.add(gm);
+            const halo = glow(E.glow, 1.3, 0.35); halo.position.set(0, 0.75, 0.2); g.add(halo);
+            this.scene.add(g);
+            this.addBox(T.x, T.z, 0.75, 0.3, y, y + 1.4, g.rotation.y);
+            this.interactables.push({ id: 'tavoletta', tab: el, x: T.x + Math.sin(g.rotation.y) * 0.9, z: T.z + Math.cos(g.rotation.y) * 0.9, r: 2, label: `Leggi la ${T.name}` });
+            this.tablets[el] = { gm, halo, phase: Math.random() * 6 };
+        }
+        this.animated.push((dt, t) => { for (const T of Object.values(this.tablets)) { T.halo.material.opacity = (T.read ? 0.12 : 0.3) + Math.sin(t * 1.8 + T.phase) * 0.1; } });
+
+        // Canto delle Pietre: ogni pietra del cerchio ha una nota e il colore di un seme
+        this.cantoGlows = [];
+        for (let i = 0; i < 9; i++) {
+            const a = i / 9 * Math.PI * 2, x = STONES.x + Math.cos(a) * 6, z = STONES.z + Math.sin(a) * 6;
+            const col = i < 7 ? ELEMENTS[CANTO_SEEDS[i]].color : '#ffffff';
+            const sp = glow(col, 3.2, 0); sp.position.set(x, this.terrainAt(x, z) + 1.6, z);
+            this.scene.add(sp);
+            this.cantoGlows.push({ sp, t: 0 });
+        }
+        this.animated.push((dt) => { for (const g of this.cantoGlows) { g.t = Math.max(0, g.t - dt); g.sp.material.opacity = Math.min(1, g.t * 2.2); } });
+        this.interactables.push({ id: 'canto', x: STONES.x, z: STONES.z, r: 2.4, label: 'Il Canto delle Pietre: ripeti la canzone delle rune' });
+
+        // Prato dei Morti: si scava con E, l'epitaffio dice quante tombe maledette ci sono intorno
+        this.graveMarks = GRAVES.map(g => {
+            const it = { id: 'tomba', k: g.k, x: g.x, z: g.z + 0.55, r: 1.25, label: 'Scava la tomba', off: true };
+            this.interactables.push(it);
+            return { g, it, sprite: null, val: undefined };
+        });
+        this.graveLevelOk = false;
+
+        // Fontana dei Desideri e telefono bianco
+        this.interactables.push({ id: 'fontana', x: FOUNTAIN.x, z: FOUNTAIN.z, y: 3.2, r: FOUNTAIN.r, label: 'Fontana dei Desideri: getta una moneta' });
+        this.phoneIt = { id: 'telefono', x: PHONE_SPOT.x, z: PHONE_SPOT.z + 0.9, y: WHITE_ROOM.floor, r: 1.6, label: 'Rispondi al telefono bianco', off: true };
+        this.interactables.push(this.phoneIt);
+        this.phoneGlow = glow('#fff4c0', 0.9, 0); this.phoneGlow.position.set(PHONE_SPOT.x, WHITE_ROOM.floor + 0.62, PHONE_SPOT.z);
+        this.scene.add(this.phoneGlow);
+        this.animated.push((dt, t) => { this.phoneGlow.material.opacity = this.phoneIt.off ? 0 : 0.55 + Math.sin(t * 18) * 0.4; this.phoneGlow.position.y = WHITE_ROOM.floor + 0.62 + (this.phoneIt.off ? 0 : Math.abs(Math.sin(t * 18)) * 0.03); });
+    }
+    cantoGlow(i, dur = 0.45) { const g = this.cantoGlows?.[i]; if (g) g.t = dur; }
+    setPhoneRing(on) { if (this.phoneIt) this.phoneIt.off = !on; }
+    setTablets(read = []) { for (const [el, T] of Object.entries(this.tablets || {})) { T.read = read.includes(el); T.gm.material.opacity = T.read ? 0.45 : 1; } }
+    // numeri sugli epitaffi delle tombe scavate, teschi su quelle maledette già battute
+    setGraves(state, level) {
+        if (!this.graveMarks) return;
+        const dug = state?.dug || {}, closed = !!state?.over || state?.pending != null || level < GRAVES_LEVEL;
+        const colors = ['#c8c0b0', '#7ac8ff', '#7aff9a', '#ffd23a', '#ff8a5a', '#ff5ad0', '#ff3a3a'];
+        for (const M of this.graveMarks) {
+            const v = dug[M.g.k];
+            M.it.off = closed || v != null;
+            if (v === M.val) continue;
+            M.val = v;
+            if (M.sprite) { this.scene.remove(M.sprite); M.sprite.material.map.dispose(); M.sprite.material.dispose(); M.sprite = null; }
+            if (v == null) continue;
+            const tex = canvasTex(128, 128, (g) => {
+                g.clearRect(0, 0, 128, 128);
+                g.fillStyle = 'rgba(10,6,4,0.72)'; g.beginPath(); g.arc(64, 64, 52, 0, Math.PI * 2); g.fill();
+                g.strokeStyle = v === 'x' ? '#ff6a1a' : '#8a6a2e'; g.lineWidth = 6; g.stroke();
+                g.fillStyle = v === 'x' ? '#ff6a1a' : colors[v] || '#fff'; g.font = '900 70px Cinzel, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+                g.fillText(v === 'x' ? '☠' : String(v), 64, 70);
+            });
+            const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+            sp.scale.set(0.7, 0.7, 1); sp.position.set(M.g.x, this.terrainAt(M.g.x, M.g.z) + 1.55, M.g.z);
+            this.scene.add(sp); M.sprite = sp;
+        }
+    }
+
     // --- RACCOLTA: frammenti di runa nel Cerchio di Pietre, fuochi fatui dorati nel cimitero ---
     buildGather() {
         this.gatherNodes = new Map();
@@ -1282,6 +1385,9 @@ export class World {
             { x: 30, z: 52, ic: 'altar', label: 'Altare dei Sette Semi' },
             { x: STONES.x, z: STONES.z, ic: 'runestone', label: 'Cerchio di Pietre' },
             { x: FISH_SPOT.x, z: FISH_SPOT.z - 3, ic: 'rod', label: 'Pesca nella Nebbia' },
+            { x: BOUNTY_BOARD.x, z: BOUNTY_BOARD.z, ic: 'scroll', label: 'Bacheca delle Taglie' },
+            { x: TOLL.spot.x, z: TOLL.spot.z, ic: 'ecto', label: 'Pedaggio dello Spettro' },
+            { x: FOUNTAIN.x, z: FOUNTAIN.z, ic: 'wave', label: 'Fontana dei Desideri' },
         ];
     }
 

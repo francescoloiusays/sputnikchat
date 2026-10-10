@@ -63,6 +63,7 @@ export class DuelView {
             const f = info[s];
             const ch = new Character(f.appearance, f.look, {}); // i nomi sono già nelle barre vita
             ch.root.position.set(s === 'a' ? -4 : 4, 0, 0);
+            if (f.boss) ch.root.scale.setScalar(1.3);   // il Re Annegato
             this.scene.add(ch.root);
             const ws = weaponStats(f.look?.weapon);
             this.fighters[s] = {
@@ -77,7 +78,7 @@ export class DuelView {
         this.buildHud();
         this.bindInput();
         if (this.role === 'local') {
-            const setup = (x) => ({ id: x.id, name: x.name, element: x.element, weapon: x.look?.weapon, level: x.level || 1, talents: x.talents, gear: x.gear });
+            const setup = (x) => ({ id: x.id, name: x.name, element: x.element, weapon: x.look?.weapon, level: x.level || 1, talents: x.talents, gear: x.gear, gearPlus: x.gearPlus, seals: x.seals, boss: x.boss });
             this.sim = createDuel(setup(info.a), setup(info.b));
             this.bot = createBot(opts.botLevel || 1);
             this.acc = 0;
@@ -459,7 +460,9 @@ export class DuelView {
         });
         this.syncPool(this.zoneMeshes, S.z, () => this.makeZone(), (m, z) => {
             m.position.set(z[1], z[2], 0);
-            m.scale.set(z[3] / 3.2, 1, 1);
+            m.scale.set(z[3] / 3.2, z[0] === 'lava' ? 0.45 : 1, 1);
+            const zc = z[0] === 'lava' ? '#ff6a1a' : '#5aff5a';
+            if (m.userData.k !== z[0]) { m.userData.k = z[0]; m.children.forEach(c => c.material.color.set(zc)); }
             m.children.forEach((c, i) => { c.material.opacity = Math.min(0.5, z[4]) * (0.6 + Math.sin(this.t * 3 + i) * 0.3); c.position.y = 0.6 + Math.sin(this.t * 2 + i * 1.7) * 0.3; });
         });
         this.syncPool(this.boltMeshes, S.b, () => this.makeBoltMark(), (m, bo) => {
@@ -637,7 +640,8 @@ export class DuelView {
             ? (r.winner ? `${this.info[r.winner].name} vince!` : 'Pareggio')
             : r.winner ? (won ? 'VITTORIA!' : 'SCONFITTA') : 'PAREGGIO';
         const lines = [];
-        if (this.role === 'local') lines.push(h('p', { class: 'muted' }, won ? 'Lo spirito si dissolve nella nebbia. Ora sfida un vero avversario!' : 'Il Fantasma ride di te... la rivincita ti aspetta.'));
+        const tx = this.info.texts || ['Lo spirito si dissolve nella nebbia. Ora sfida un vero avversario!', 'Il Fantasma ride di te... la rivincita ti aspetta.'];
+        if (this.role === 'local') lines.push(h('p', { class: 'muted' }, won ? tx[0] : tx[1]));
         if (this.role === 'fighter' && r.rating) {
             const d = r.rating[me], c = r.coins[me], x = r.xp?.[me] || 0;
             lines.push(h('div', { class: 'res-line' }, `Gloria ${d >= 0 ? '+' : ''}${d}`, h('span', { class: 'muted' }, '·'), coin(Math.abs(c)), c >= 0 ? ' guadagnate' : ' perse',
@@ -648,7 +652,7 @@ export class DuelView {
         }
         if (this.role === 'local') this.app.practiceDone(won);
         if (r.reason === 'forfeit') lines.push(h('p', { class: 'muted' }, this.role === 'fighter' && !won ? 'Ti sei ritirato dal duello.' : 'Vittoria per abbandono.'));
-        const again = this.role === 'local' ? h('button', { class: 'btn', onclick: () => this.app.restartPractice() }, 'Rivincita') : null;
+        const again = this.role === 'local' && !this.info.noRematch ? h('button', { class: 'btn', onclick: () => this.app.restartPractice() }, 'Rivincita') : null;
         box.replaceChildren(
             h('h1', { class: this.role === 'fighter' && !won && r.winner ? 'lose' : '' }, title),
             ...lines,

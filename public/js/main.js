@@ -14,11 +14,16 @@ import { Creator, randomAppearance } from './creator.js';
 import { Panels } from './panels.js';
 import { DuelView } from './duel.js';
 import { GameAudio } from './audio.js';
-import { composeCard, holoTrack } from './cards.js';
+import { composeCard, composeCardFrames, holoTrack } from './cards.js';
 import { Net, SOCKET_URL, IS_MOBILE, store, $, h, toast, fmt } from './util.js';
 import { installTheme, icon, iconSVG, drawIcon } from './icons.js';
 import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, sanitizeCard, sanitizeAppearance, STARTER_WEAPON, levelProgress, titleFor, talentPoints, TALENT_IDS, plusOf, MATS, SEALS, gradeOf } from './shared/catalog.js';
 import { Fishing } from './fishing.js';
+import { Npcs } from './npcs.js';
+import { Canto } from './canto.js';
+import { Onda } from './onda.js';
+import { TITLES, KING, MATS as MAT_INFO, GRAVES_LEVEL } from './shared/catalog.js';
+import { INSULTS, TABLETS } from './shared/lore.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
@@ -42,7 +47,7 @@ class RemotePlayer {
     }
     updateTag() {
         const friend = this.app.isFriend(this.info.id);
-        this.ch.setNameTag(this.info.name, `${this.info.duel ? '⚔ ' : ''}${titleFor(this.info.level || 1)} · Lv ${this.info.level || 1}`, friend ? '#7aff9a' : '#ffff00');
+        this.ch.setNameTag(this.info.name, `${this.info.duel ? '⚔ ' : ''}${this.info.title || titleFor(this.info.level || 1)} · Lv ${this.info.level || 1}`, friend ? '#7aff9a' : '#ffff00');
     }
     setState(s) { this.target.set(s[0], s[1], s[2]); this.ry = s[3]; this.anim = s[4] | 0; }
     setLook(d) {
@@ -85,6 +90,8 @@ class Game {
         this.creator = new Creator(this.studio);
         this.panels = new Panels(this);
         this.fishing = new Fishing(this);
+        this.canto = new Canto(this);
+        this.onda = new Onda(this);
         this.players = new Map();
         this.duels = new Map();
         this.room = { id: 'pub', name: 'Isola Fantasma', private: false };
@@ -141,6 +148,7 @@ class Game {
         };
         this.cam = { yaw: 0, pitch: 0.28, dist: 9, wantDist: innerWidth < innerHeight ? 6.2 : 4.6, first: false };
         this.buildMyCharacter();
+        this.npcs = new Npcs(this);
         // luce di riempimento: il personaggio non resta mai in controluce
         this.fillLight = new THREE.PointLight('#d8c4ff', 9, 10, 1.4);
         this.scene.add(this.fillLight);
@@ -218,9 +226,10 @@ class Game {
     gearPlus() { const eq = this.me?.equipment || {}; return ['head', 'face', 'cape', 'torso'].reduce((s, k) => s + plusOf(this.me.inventory?.find(i => i.uid === eq[k])), 0); }
     unspentPoints() { const t = this.me?.talents || {}; return Math.max(0, talentPoints(this.me?.level || 1) - TALENT_IDS.reduce((a, k) => a + (t[k] || 0), 0)); }
     isFriend(id) { return !!this.me?.friends?.some(f => f.id === id); }
+    tagSub() { const me = this.me || {}; return `${(me.titleOn && TITLES[me.titleOn]?.name) || titleFor(me.level || 1)} · Lv ${me.level || 1}${me.rebirths ? ' ' + '★'.repeat(me.rebirths) : ''}`; }
     buildMyCharacter() {
         if (this.myChar) this.myChar.dispose();
-        this.myChar = new Character(this.me.appearance, this.look(), { name: this.me.name, sub: `${titleFor(this.me.level || 1)} · Lv ${this.me.level || 1}`, color: '#ffd23a' });
+        this.myChar = new Character(this.me.appearance, this.look(), { name: this.me.name, sub: this.tagSub(), color: '#ffd23a' });
         this.myChar.root.position.copy(this.player.pos);
         this.myChar.root.rotation.y = this.player.yaw;
         if (this.myChar.tag) this.myChar.tag.visible = false;
@@ -228,10 +237,11 @@ class Game {
     }
     cardSignature() {
         const l = this.look();
-        return JSON.stringify([this.me.card, this.me.appearance, l, this.me.level, this.me.name, this.me.talents, this.me.grade, this.me.sealsOn, this.gearPlus()]);
+        return JSON.stringify([this.me.card, this.me.appearance, l, this.me.level, this.me.name, this.me.talents, this.me.grade, this.me.sealsOn, this.gearPlus(), this.me.frames, this.me.rebirths]);
     }
     cardOpts(card) {
-        return { card, appearance: this.me.appearance, look: this.look(), level: this.me.level || 1, talents: this.me.talents, id: this.me.id, name: this.me.name, grade: this.me.grade || 0, seals: this.me.sealsOn || [], gearPlus: this.gearPlus() };
+        const best = ['spettro', 'oro', 'argento', 'bronzo'].find(f => (this.me.frames || []).includes(f)) || null;
+        return { card, appearance: this.me.appearance, look: this.look(), level: this.me.level || 1, talents: this.me.talents, id: this.me.id, name: this.me.name, grade: this.me.grade || 0, seals: this.me.sealsOn || [], gearPlus: this.gearPlus(), frame: best, rebirths: this.me.rebirths || 0 };
     }
     async regenerateCard(upload = true) {
         const card = sanitizeCard(this.me.card || this.local.card);
@@ -239,7 +249,9 @@ class Game {
         this.local.cardImage = c.toDataURL('image/jpeg', 0.86);
         this.local.cardSig = this.cardSignature();
         this.saveLocal();
+        this.vivaFrames = null; clearInterval(this.vivaT);
         this.updatePowerCard();
+        if ((this.me.grade || 0) >= 4) this.buildViva();
         if (upload && this.net.connected && this.helloDone) this.net.request('profile:update', { cardImage: this.local.cardImage });
     }
     async saveCard(card) {
@@ -290,8 +302,12 @@ class Game {
         $('#req-badge').textContent = reqN; $('#req-badge').classList.toggle('hidden', !reqN);
         if (this.local.cardSig !== this.cardSignature()) { clearTimeout(this.cardTimer); this.cardTimer = setTimeout(() => this.regenerateCard(true), 800); }
         this.world?.setGather(p.gather);
+        this.world?.setGraves(p.graves, p.level || 1);
+        this.world?.setTablets(p.tablets || []);
         this.setHolo(p.grade || 0);
-        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria', 'altare']);
+        if ((p.grade || 0) >= 4 && !this.vivaFrames && this.local.cardSig === this.cardSignature()) this.buildViva();
+        else if ((p.grade || 0) < 4 && this.vivaFrames) this.startViva(null);
+        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria', 'altare', 'bacheca', 'tombe', 'npc', 'pedaggio']);
     }
     // riflesso olografico della carta in alto a sinistra (Filigrana, Aurora, Incisa)
     setHolo(grade) {
@@ -324,6 +340,7 @@ class Game {
             if (r.daily) { toast(h('div', {}, h('b', {}, 'Tributo del giorno'), h('div', {}, `Il tesoriere dell'isola ti consegna ${r.daily} Sputnik Coin${r.dailyXp ? ` e ${r.dailyXp} punti esperienza` : ''}.`)), { kind: 'coin' }); this.audio.play('coin'); }
             if (r.profile.rest > 0) toast(h('div', {}, h('b', {}, 'Ben riposato'), h('div', {}, `Sei stato lontano dall'isola: i prossimi ${r.profile.rest} duelli valgono doppia esperienza.`)), { kind: 'ok', icon: 'lantern' });
             if (r.dropped) this.gradeDropToast(r.profile.grade);
+            if (r.seasonMsg) toast(h('div', {}, h('b', {}, `Fine della stagione ${r.seasonMsg.season}`), h('div', {}, `Hai chiuso in lega ${r.seasonMsg.league}: la sua cornice ora decora la tua carta. La gloria riparte da metà strada.`)), { kind: 'coin', icon: 'trophy', duration: 12000 });
             if (r.created) toast(h('div', {}, h('b', {}, 'Il tuo nome è inciso nell\'Albo'), h('div', {}, 'Ricevi 150 Sputnik Coin e una Spada di Legno. La Sartoria e la Forgia ti aspettano.')), { kind: 'coin', duration: 9000 });
             if (!this.local.cardImage || !hasLocal) this.regenerateCard(true);
             this.net.request('lb:get').then(lb => { if (lb.ok) this.world.setLeaderboard(lb.rating); });
@@ -378,6 +395,14 @@ class Game {
             toast(h('div', {}, h('b', {}, `Livello ${u.level}: ${u.title}`), h('div', {}, u.points > 0 ? `Hai ${u.points} ${u.points === 1 ? 'punto' : 'punti'} Maestria da spendere nel Libro della Maestria (L).` : 'Nuovi capi e materiali ti aspettano nelle botteghe.')),
                 { kind: 'coin', icon: 'star', duration: 9000, actions: u.points > 0 ? [{ label: 'Apri il Libro', primary: true, fn: () => this.openPanel('maestria') }] : null });
         });
+        N.on('title', (t) => {
+            this.audio.play('special');
+            toast(h('div', {}, h('b', {}, `Nuovo titolo: ${t.name}`), h('div', {}, 'Lo puoi scegliere nel Libro della Maestria (L).')), { kind: 'coin', icon: 'crown', duration: 9000 });
+        });
+        N.on('bounty:done', (b) => { this.audio.play('coin'); toast(h('div', {}, h('b', {}, b.weekly ? 'Taglia della settimana compiuta!' : 'Taglia compiuta!'), h('div', {}, `${b.text}. Riscuotila alla Bacheca in piazza.`)), { kind: 'coin', icon: 'scroll', duration: 7000 }); });
+        N.on('mission:done', (m) => { this.audio.play('special'); toast(h('div', {}, h('b', {}, 'Missione segreta compiuta'), h('div', {}, `${m.text} +${m.xp} esperienza e una Pergamena Benedetta.`)), { kind: 'coin', icon: 'letter', duration: 9000 }); });
+        N.on('phone:ring', () => this.phoneRing());
+        N.on('veglia:state', (v) => { this.vegliaState = v; this.panels.refresh(['tombe', 'npc']); });
         N.on('player:stats', (s) => {
             const p = this.players.get(s.id);
             if (p) { Object.assign(p.info, s); p.updateTag(); }
@@ -523,11 +548,115 @@ class Game {
         const pts = Math.max(0, ghost.level - 1);
         ghost.talents = { forza: Math.ceil(pts / 2), tempra: Math.floor(pts / 2), maestria: 0 };
         this.practiceEl = el;
+        this.localKind = 'practice';
         this.enterDuel({ id: 'practice', a: this.myFighterInfo(), b: ghost, phase: 'fight' }, 'local', 'a');
     }
     restartPractice() { this.exitDuel(true); this.startPractice(this.practiceLevel); }
+    async foeDone(ev, data) {
+        const r = await this.net.request(ev, data);
+        if (!r.ok) return toast(r.msg, { kind: 'bad' });
+        const loot = Object.entries(r.loot || {}).filter(([, n]) => n).map(([k, n]) => `+${n} ${MAT_INFO[k].name}`);
+        if (r.xp) loot.unshift(`+${r.xp} esperienza`);
+        if (r.won && loot.length) toast(loot.join(' · '), { kind: 'ok', icon: r.king ? 'crown' : 'skull', duration: 6000 });
+        if (r.cleared) this.gravesCleared(r.cleared);
+        if (!r.won && ev === 'graves:skeleton') toast('Il Becchino ricopre le tombe: per oggi il Prato dei Morti è chiuso.', { icon: 'skull', duration: 6000 });
+    }
+    gravesCleared(c) {
+        this.audio.play('special');
+        toast(h('div', {}, h('b', {}, 'Hai ripulito il Prato dei Morti!'), h('div', {}, `Il Becchino ti regala ${c.ossa} Ossa Antiche, una Pergamena Benedetta e ${c.coins} monete. +${c.xp} esperienza.`)), { kind: 'coin', icon: 'skull', duration: 10000 });
+    }
+
+    // --- I LUOGHI DELL'ISOLA ---
+    async talkTo(id) {
+        if (!this.net.connected || !this.helloDone) return this.openPanel('npc', { id });
+        const r = await this.net.request('npc:talk', { id });
+        this.npcs?.greet(id);
+        this.openPanel('npc', { id, ...(r.ok ? r : {}) });
+    }
+    async readTablet(el) {
+        if (!this.net.connected || !this.helloDone) return this.openPanel('tavoletta', { el });
+        const r = await this.net.request('tablet:read', { id: el });
+        if (r.ok && r.first) this.audio.play(r.all ? 'special' : 'coin');
+        this.openPanel('tavoletta', { el, ...(r.ok ? r : {}) });
+    }
+    async digGrave(k) {
+        if (!this.net.connected || !this.helloDone) return toast('Il portale è chiuso: il Becchino tiene il registro sul server', { kind: 'bad' });
+        if ((this.me.level || 1) < GRAVES_LEVEL) return toast(`Il Becchino presta la vanga dal livello ${GRAVES_LEVEL}`, { kind: 'bad' });
+        if (this.digging) return;
+        this.digging = true;
+        this.myChar.play('heavy', 0.6);
+        const r = await this.net.request('graves:dig', { k });
+        this.digging = false;
+        if (!r.ok) return toast(r.msg, { kind: 'bad', duration: 3000 });
+        this.audio.play('step');
+        if (r.cursed) {
+            this.audio.play('gong');
+            toast(h('div', {}, h('b', {}, 'Tomba maledetta!'), h('div', {}, 'Uno scheletro salta fuori dalla terra e ti sfida.')), { kind: 'bad', icon: 'skull', duration: 4000 });
+            setTimeout(() => { if (this.mode === 'world') this.startSkeleton(); }, 1400);
+            return;
+        }
+        const loot = Object.entries(r.loot || {}).filter(([, n]) => n).map(([key, n]) => `+${n} ${MAT_INFO[key].name}`);
+        if (r.coins) loot.push(`+${r.coins} monete`);
+        toast(h('div', {}, h('b', {}, r.n ? `L'epitaffio dice: ${r.n} ${r.n === 1 ? 'tomba maledetta' : 'tombe maledette'} qui intorno` : 'Epitaffio sereno: nessuna tomba maledetta qui intorno'), loot.length ? h('div', {}, loot.join(' · ')) : h('div', {}, 'Solo terra e vermi.')), { icon: 'skull', duration: 4500 });
+        if (r.cleared) this.gravesCleared(r.cleared);
+    }
+    async wish() {
+        if (!this.net.connected || !this.helloDone) return toast('Il portale è chiuso', { kind: 'bad' });
+        const r = await this.net.request('fountain:wish', {});
+        if (!r.ok) return toast(r.msg, { kind: 'bad' });
+        this.myChar.play('throw', 0.5);
+        this.audio.play('splash');
+        setTimeout(() => { this.audio.play(r.wish === 'xp' || r.wish === 'pergamena' ? 'special' : 'coin'); toast(h('div', {}, h('b', {}, 'La Fontana dei Desideri'), h('div', {}, r.text)), { kind: 'coin', icon: 'wave', duration: 7000 }); }, 700);
+    }
+    phoneRing() {
+        this.world?.setPhoneRing(true);
+        toast(h('div', {}, h('b', {}, 'Squilla il telefono bianco!'), h('div', {}, 'È sul tavolino della Stanza Bianca: rispondi con E.')), { icon: 'letter', duration: 7000 });
+        clearInterval(this.ringT);
+        let n = 0;
+        const ring = () => { this.audio.tone(880, 880, 0.12, { vol: 0.18 }); this.audio.tone(1100, 1100, 0.12, { vol: 0.18, delay: 0.16 }); if (++n > 12) clearInterval(this.ringT); };
+        ring(); this.ringT = setInterval(ring, 1800);
+    }
+    async answerPhone() {
+        const r = await this.net.request('phone:answer', {});
+        clearInterval(this.ringT);
+        this.world?.setPhoneRing(false);
+        if (!r.ok) return toast(r.msg, { kind: 'bad' });
+        this.audio.play('notify');
+        toast(h('div', {}, h('b', {}, r.line), h('div', {}, `Missione segreta: ${r.text}`)), { kind: 'ok', icon: 'letter', duration: 12000 });
+    }
+    // avversari del cimitero: lo scheletro di una tomba maledetta, le ondate della Veglia e il Re Annegato
+    startFoe({ kind, name, botLevel, level, element, look, boss, height = 1, texts }) {
+        this.localKind = kind; this.practiceLevel = botLevel; this.practiceEl = element;
+        const pts = Math.max(0, level - 1);
+        const foe = {
+            id: kind, name, element, rating: 1000, level, boss, cardImage: null, gear: [look.cape, look.head].filter(Boolean),
+            appearance: { ...randomAppearance(), species: 'scheletro', height, eyes: 'luminosi', eyeColor: kind === 'king' ? '#7fd8ff' : '#ff6a1a', mouth: 'zanne', top: '#1e1a22', bottom: '#14101a' },
+            look, talents: { forza: Math.ceil(pts / 2), tempra: Math.floor(pts / 2), maestria: 0 },
+        };
+        this.enterDuel({ id: kind, a: this.myFighterInfo(), b: foe, phase: 'fight', noRematch: true, texts }, 'local', 'a');
+    }
+    startSkeleton() {
+        const L = this.me.level || 1, els = ELEMENT_IDS;
+        this.startFoe({ kind: 'skeleton', name: 'Scheletro Inquieto', botLevel: 0.8 + Math.min(1, L / 25) * 0.6, level: L, element: els[Math.floor(Math.random() * els.length)],
+            look: { weapon: { type: Math.random() < 0.5 ? 'falce' : 'spada', material: 'osso', handle: 'osso', gem: 'nessuna', name: 'Lama d\'Osso' } },
+            texts: ['Lo scheletro torna a dormire nella sua tomba.', 'Lo scheletro ti rincorre fino al cancello: il Becchino ricopre le tombe.'] });
+    }
+    startVeglia(wave) {
+        const els = ELEMENT_IDS;
+        this.startFoe({ kind: 'veglia', name: `Morto della Veglia ${wave}`, botLevel: 0.8 + wave * 0.12, level: Math.min(30, 8 + wave * 2), element: els[Math.floor(Math.random() * els.length)],
+            look: { weapon: { type: ['spada', 'ascia', 'lancia', 'falce'][wave % 4], material: wave > 5 ? 'ossidiana' : 'osso', handle: 'osso', gem: 'nessuna', name: 'Arma dei Morti' }, head: wave > 6 ? 'elmo' : null },
+            texts: [`L'ondata ${wave} torna sotto terra.`, 'I morti ti respingono fuori dal cimitero.'] });
+    }
+    startKing() {
+        this.startFoe({ kind: 'king', name: KING.name, botLevel: 1.1, level: 18, element: 'ghiaccio', boss: { hp: KING.hp, atk: KING.atk }, height: 1.15,
+            look: { head: 'corona', cape: 'mantello_regale', weapon: { type: 'lancia', material: 'argento', handle: 'oro', gem: 'zaffiro', name: 'Tridente del Re' } },
+            texts: ['Il Re Annegato si sbriciola in acqua salata. Il suo cuore smette di battere... quasi.', 'Il Re Annegato torna nella laguna, ridendo.'] });
+    }
     async practiceDone(won) {
         if (!this.net.connected || !this.helloDone) return;
+        const kind = this.localKind || 'practice';
+        if (kind === 'skeleton') return this.foeDone('graves:skeleton', { won });
+        if (kind === 'veglia' || kind === 'king') return this.foeDone('veglia:end', { won });
         const tier = this.practiceLevel < 0.8 ? 1 : this.practiceLevel < 1.3 ? 2 : 3;
         const r = await this.net.request('practice:done', { tier, won, el: this.practiceEl });
         if (r.ok && r.xp) toast(`+${r.xp} esperienza dall'allenamento${r.ess ? ` e un'${MATS[r.ess].name}` : ''}`, { kind: 'ok', icon: r.ess ? 'vial' : 'star', duration: 3500 });
@@ -621,7 +750,7 @@ class Game {
             if (!$('#bigmap').classList.contains('hidden')) { if (['Escape', 'KeyN'].includes(e.code) || e.key === 'Escape') this.toggleBigMap(false); return; }
             this.keys[e.code] = true;
             if (e.repeat) return;
-            const P = { KeyI: 'inventario', KeyC: 'card', KeyO: 'amici', Tab: 'classifica', KeyK: 'collezione', KeyP: 'impostazioni', KeyL: 'maestria' };
+            const P = { KeyI: 'inventario', KeyC: 'card', KeyO: 'amici', Tab: 'classifica', KeyK: 'collezione', KeyP: 'impostazioni', KeyL: 'maestria', KeyJ: 'bacheca' };
             if (P[e.code]) { e.preventDefault(); this.openPanel(P[e.code]); return; }
             switch (e.code) {
                 case 'Enter': e.preventDefault(); document.exitPointerLock?.(); chat.focus(); break;
@@ -680,6 +809,12 @@ class Game {
         else if (it.id === 'altare') this.openPanel('altare');
         else if (it.id === 'pesca') this.fishing.start();
         else if (it.id === 'raccogli') this.gatherPick(it);
+        else if (it.id === 'npc') this.talkTo(it.npc);
+        else if (it.id === 'tavoletta') this.readTablet(it.tab);
+        else if (it.id === 'canto') this.canto.start();
+        else if (it.id === 'tomba') this.digGrave(it.k);
+        else if (it.id === 'fontana') this.wish();
+        else if (it.id === 'telefono') this.answerPhone();
         else if (it.id === 'siedi') this.player.sit === it.seat ? this.standUp() : this.sitDown(it.seat);
         else this.openPanel(it.id);
     }
@@ -806,7 +941,23 @@ class Game {
         this.mmT = 0;
     }
     setMusicBtn(on) { $('#btn-music').classList.toggle('off', !on); }
+    // la carta Viva respira: il ritratto gira piano dentro la carta in alto a sinistra
+    async buildViva() {
+        if (this.vivaBusy) return;
+        this.vivaBusy = true;
+        try { this.startViva(await composeCardFrames(this.cardOpts(sanitizeCard(this.me.card || this.local.card)), this.studio, 315, 12)); }
+        finally { this.vivaBusy = false; }
+    }
+    startViva(frames) {
+        clearInterval(this.vivaT);
+        this.vivaFrames = frames && frames.length ? frames : null;
+        if (!this.vivaFrames) return this.updatePowerCard();
+        const c = $('#power-card-canvas'), g = c.getContext('2d');
+        let i = 0;
+        this.vivaT = setInterval(() => { if (document.hidden || !this.vivaFrames) return; g.clearRect(0, 0, c.width, c.height); g.drawImage(this.vivaFrames[i], 0, 0, c.width, c.height); i = (i + 1) % this.vivaFrames.length; }, 140);
+    }
     updatePowerCard() {
+        if (this.vivaFrames) return;
         const c = $('#power-card-canvas'), g = c.getContext('2d');
         if (!this.local.cardImage) return;
         const img = new Image();
@@ -832,7 +983,7 @@ class Game {
             const g = $('#pc-portrait').getContext('2d');
             g.clearRect(0, 0, 128, 128); g.drawImage(p, 0, 0);
         }
-        if (this.myChar) this.myChar.setNameTag(me.name, `${titleFor(me.level || 1)} · Lv ${me.level || 1}`, '#ffd23a');
+        if (this.myChar) this.myChar.setNameTag(me.name, this.tagSub(), '#ffd23a');
         if (this.myChar?.tag) this.myChar.tag.visible = false;
     }
     coinPop(delta) {
@@ -947,6 +1098,9 @@ class Game {
         if (!this.world) return;
         if (this.mode === 'world') this.updatePlayer(dt);
         else if (this.mode === 'fish') this.fishing.update(dt);
+        else if (this.mode === 'canto') { const ch = this.myChar; ch.root.position.copy(this.player.pos); ch.state = 'idle'; ch.speed = 0; this.updateFill(this.player); }
+        this.npcs?.update(dt, this.player.pos, this.camera.position);
+        this.onda?.update();
         this.updateCamera(dt);
         this.world.update(dt, this.player.pos);
         this.myChar.update(dt);

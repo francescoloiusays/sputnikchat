@@ -18,7 +18,12 @@ import {
     MATS, ESS_DAILY, PRACTICE_ESS_DAILY, SEALS, SEAL_CHANCE, CARD_GRADES, sealSlots, resolveMats,
     ENCHANT, enchantCap, enchantMats, ALTAR_LEVEL, INFUSE_LEVEL, INFUSE_COST, FUSE, BLESSING,
     GATHER, FISH, FISH_SPOT, FISH_DAILY, FISH_RARITY, DIARY, isNight, rollFish, plusOf,
+    FISH_IDS, STONES, boneCost, romeTime, weekOf, seasonOf, seasonEnds, LEAGUES, leagueOf, RANKED_LEVEL, isFriday, TITLES,
+    CANTO, CANTO_SEEDS, cantoMinMs, cantoSeq, GRAVES, GRAVES_LEVEL, GRAVES_CURSED, graveNeighbors,
+    BOUNTY_BOARD, BOUNTIES, WEEKLY, BOUNTY_REWARD, rollBounties, FOUNTAIN, WISHES, TOLL, ONDA, inWhiteRoom, PHONE_SPOT,
+    SOCKETS, SOCKET_CLEAR, RUNEWORDS, runeWordOf, VEGLIA, vegliaOpen, KING, REBIRTH,
 } from './public/js/shared/catalog.js';
+import { INSULTS, TOLL_START, TOLL_LINES, NPCS, ONDA_Q, ONDA_PLOT, TABLETS, MISSIONS, PHONE_LINES } from './public/js/shared/lore.js';
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -92,7 +97,80 @@ function migrate(p) {
     // fase 2: materiali, grado della carta, sigilli, diario di pesca, raccolta
     if (!p.mats) { Object.assign(p, { mats: {}, grade: 0, cardWins: 0, seals: [], sealsOn: [], fishLog: {}, diary: [], gather: {} }); changed = true; }
     p.sealsOn = (p.sealsOn || []).filter(s => p.seals.includes(s)).slice(0, sealSlots(p.grade));
+    // fasi 3 e 4: titoli, Pedaggio, tavolette, Parole di Runa, In Onda!, leghe, Rinascita
+    if (!p.titles) {
+        Object.assign(p, { titles: [], titleOn: null, comebacks: [...TOLL_START], tablets: [], recipes: [], npcs: [], episodes: 0, charisma: 0, rebirths: 0, frames: [], peakLeague: leagueOf(p.rating) });
+        changed = true;
+    }
+    updateSeason(p);
     return changed;
+}
+// Titoli: si guadagnano una volta sola, il primo si indossa da sé
+function award(p, id) {
+    if (!TITLES[id] || p.titles.includes(id)) return false;
+    p.titles.push(id);
+    if (!p.titleOn) p.titleOn = id;
+    const S = sessionOf(p.id);
+    if (S) { S.socket.emit('title', { id, name: TITLES[id].name }); io.to(S.room).emit('player:stats', statsOf(p)); }
+    return true;
+}
+const titleName = p => (p.titleOn && TITLES[p.titleOn]?.name) || null;
+const statsOf = p => ({ id: p.id, rating: p.rating, level: levelOf(p), wins: p.wins, losses: p.losses, title: titleName(p), league: leagueOf(p.rating) });
+// Stagioni di sei settimane: a fine stagione la lega più alta raggiunta diventa una cornice per la carta
+function updateSeason(p) {
+    const sid = seasonOf();
+    if (!p.season || p.season.id !== sid) {
+        if (p.season && p.season.id < sid) {
+            const lg = LEAGUES[p.season.peak || 0];
+            if (!p.frames.includes(lg.id)) p.frames.push(lg.id);
+            if (lg.id === 'spettro') award(p, 'spettrale');
+            p.seasonMsg = { season: p.season.id, league: lg.name };
+            p.rating = Math.round(1000 + (p.rating - 1000) * 0.5);
+        }
+        p.season = { id: sid, peak: leagueOf(p.rating) };
+    }
+    const L = leagueOf(p.rating);
+    if (L > p.season.peak) p.season.peak = L;
+    if (L > (p.peakLeague || 0)) p.peakLeague = L;
+}
+// --- LA BACHECA DELLE TAGLIE ---
+function ensureBounties(p) {
+    const d = today(), w = weekOf();
+    if (!p.bounty || p.bounty.day !== d) {
+        const roll = rollBounties(p.id + d, levelOf(p), p.card?.element);
+        p.bounty = { ...(p.bounty || {}), day: d, daily: roll.daily, mission: null };
+    }
+    if (p.bounty.week !== w) { p.bounty.week = w; p.bounty.weekly = rollBounties(p.id + 'w' + w, levelOf(p), p.card?.element).weekly; }
+    return p.bounty;
+}
+const DAILY_EV = { winSeed: 'duelWin', duel: 'duel', practice: 'practice', fish: 'fish', fishRar: 'fish', frammento: 'gather', ecto: 'gather', canto: 'canto', toll: 'toll', dig: 'dig', bet: 'bet', enchant: 'enchant', onda: 'onda' };
+const WEEKLY_EV = { duelWin: 'duelWin', fish: 'fish', dig: 'dig', canto: 'canto', veglia: 'veglia', gather: 'gather' };
+const MISSION_EV = { mud: 'mud', fishId: 'fish', dig: 'dig', bet: 'bet', canto: 'canto', toll: 'toll' };
+function bountyMatch(b, kind, ev, data) {
+    if (kind !== ev) return false;
+    if (b.k === 'winSeed') return data.el === b.el;
+    if (b.k === 'fishRar') return data.rar === 'rar' || data.rar === 'epi';
+    if (b.k === 'frammento' || b.k === 'ecto') return data.mat === b.k;
+    if (b.k === 'fishId') return data.id === b.id;
+    return true;
+}
+// Avanza le taglie del giorno, della settimana e la missione del telefono
+function progress(p, ev, amt = 1, data = {}) {
+    const B = ensureBounties(p), S = sessionOf(p.id);
+    const step = (b, kind, max) => {
+        if (!b || b.done || !bountyMatch(b, kind, ev, data)) return false;
+        b.have = max ? Math.max(b.have, amt) : b.have + amt;
+        if (b.have >= b.n) { b.have = b.n; b.done = true; return true; }
+        return false;
+    };
+    for (const b of B.daily) if (step(b, DAILY_EV[b.k], BOUNTIES[b.k]?.max) && S) S.socket.emit('bounty:done', { text: BOUNTIES[b.k].text(b) });
+    if (step(B.weekly, WEEKLY_EV[B.weekly?.k], WEEKLY[B.weekly?.k]?.max) && S) S.socket.emit('bounty:done', { text: WEEKLY[B.weekly.k].text(B.weekly), weekly: true });
+    const M = B.mission;
+    if (M && step(M, MISSION_EV[M.kind], M.kind === 'canto')) {
+        M.claimed = true;
+        const xp = grantXp(p, BOUNTY_REWARD.mission.xp); addMat(p, 'pergamena', BOUNTY_REWARD.mission.pergamena);
+        if (S) S.socket.emit('mission:done', { text: M.text, xp });
+    }
 }
 // Contatori del giorno (pescate e raccolte con premi pieni, Essenze dai duelli)
 function dayc(p) {
@@ -117,7 +195,6 @@ function setCard(p, card) {
     return dropped;
 }
 
-for (const p of store.all()) { pidIndex.set(p.id, p.token); if (migrate(p)) store.put(p); }
 
 const uid = () => crypto.randomBytes(6).toString('hex');
 function shortId() {
@@ -166,9 +243,15 @@ function publicPlayer(S) {
     const p = S.p;
     return {
         id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element,
-        rating: p.rating, wins: p.wins, losses: p.losses, level: levelOf(p),
+        rating: p.rating, wins: p.wins, losses: p.losses, level: levelOf(p), title: titleName(p), league: leagueOf(p.rating),
         pos: S.pos, duel: !!S.duelId,
     };
+}
+// lo stato del Prato dei Morti che il giocatore può vedere (mai dove stanno le tombe maledette)
+function gravesView(p) {
+    const G = p.graves;
+    if (!G || G.day !== today()) return { dug: {}, over: false, won: false, pending: null };
+    return { dug: G.dug, over: G.over, won: G.won, pending: G.pending };
 }
 function privateView(p) {
     const d = today();
@@ -182,6 +265,12 @@ function privateView(p) {
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
         fishLeft: Math.max(0, FISH_DAILY - dayc(p).fish),
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
+        titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
+        episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
+        league: leagueOf(p.rating), season: p.season, bounty: ensureBounties(p), graves: gravesView(p),
+        cantoLeft: Math.max(0, CANTO.daily - (dayc(p).canto || 0)), cantoBest: p.cantoBest || 0, wishedToday: p.wishDay === d,
+        fountainUntil: p.fountain?.until || 0, tollToday: p.tollDay === d, ondaToday: p.ondaDay === d,
+        veglia: p.veglia || null, kingWeek: p.kingWeek || null,
         friends: p.friends.map(id => ({ id, name: byPid(id)?.name || '???', online: sidByPid.has(id) })),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
         collectionCount: p.collection.length,
@@ -220,11 +309,14 @@ function cleanupSession(room, leaving) {
 let lbCache = null, lbAt = 0;
 function leaderboard() {
     if (lbCache && Date.now() - lbAt < 5000) return lbCache;
-    const all = store.all();
-    const row = p => ({ id: p.id, name: p.name, rating: p.rating, wins: p.wins, losses: p.losses, coins: p.coins, level: levelOf(p), element: p.card?.element, online: sidByPid.has(p.id) });
+    const all = store.all(), wk = weekOf();
+    const row = p => ({ id: p.id, name: p.name, rating: p.rating, wins: p.wins, losses: p.losses, coins: p.coins, level: levelOf(p), element: p.card?.element, online: sidByPid.has(p.id), league: leagueOf(p.rating), title: titleName(p), fri: p.fri?.week === wk ? p.fri.w : 0, friC: p.friC?.week === wk ? p.friC.w : 0 });
     lbCache = {
         rating: [...all].sort((a, b) => b.rating - a.rating || b.wins - a.wins).slice(0, 50).map(row),
         coins: [...all].sort((a, b) => b.coins - a.coins).slice(0, 50).map(row),
+        friday: all.filter(p => p.fri?.week === wk && p.fri.w > 0).sort((a, b) => b.fri.w - a.fri.w).slice(0, 30).map(row),
+        champions: all.filter(p => p.friC?.week === wk && p.friC.w > 0).sort((a, b) => b.friC.w - a.friC.w).slice(0, 30).map(row),
+        season: seasonOf(), seasonEnds: seasonEnds().getTime(), isFriday: isFriday(),
         total: all.length,
     };
     lbAt = Date.now();
@@ -261,7 +353,9 @@ function fighterSetup(p) {
 // Esperienza: aggiorna livello e punti Maestria, avvisa il giocatore se sale di livello.
 // La benedizione della Custode e il Sigillo del Corvo ne aggiungono un po'.
 function grantXp(p, amount) {
-    amount = Math.max(0, Math.round(amount * (1 + (blessed(p) ? BLESSING.xp : 0) + (p.sealsOn?.includes('corvo') ? 0.05 : 0))));
+    // benedizione della Custode, Fontana dei Desideri, Sigillo del Corvo, Rinascite
+    const fount = (p.fountain?.until || 0) > Date.now() ? 1 : 0;
+    amount = Math.max(0, Math.round(amount * (1 + (blessed(p) ? BLESSING.xp : 0) + fount + (p.sealsOn?.includes('corvo') ? 0.05 : 0) + (p.rebirths || 0) * REBIRTH.xp)));
     const before = levelOf(p);
     p.xp = (p.xp || 0) + amount;
     const after = levelOf(p);
@@ -269,7 +363,7 @@ function grantXp(p, amount) {
         const S = sessionOf(p.id);
         if (S) {
             S.socket.emit('levelup', { level: after, title: titleFor(after), points: talentPoints(after) - spentPoints(p.talents) });
-            io.to(S.room).emit('player:stats', { id: p.id, rating: p.rating, level: after, wins: p.wins, losses: p.losses });
+            io.to(S.room).emit('player:stats', statsOf(p));
         }
         lbCache = null;
     }
@@ -378,15 +472,29 @@ function endDuel(d, winner, reason) {
             const W = P[winner], el = P[winner === 'a' ? 'b' : 'a'].card.element, c = dayc(W);
             if ((c.ess[el] || 0) < ESS_DAILY) { c.ess[el] = (c.ess[el] || 0) + 1; addMat(W, 'ess_' + el, 1); result.loot[winner]['ess_' + el] = 1; }
             W.cardWins = (W.cardWins || 0) + 1;
+            progress(W, 'duelWin', 1, { el });
         }
+        for (const s of ['a', 'b']) progress(P[s], 'duel');
     }
+    // Arena classificata: la gloria si muove solo se entrambi sono almeno al livello 5
+    const ranked = levelOf(P.a) >= RANKED_LEVEL && levelOf(P.b) >= RANKED_LEVEL;
+    result.ranked = ranked;
     if (winner) {
         const loser = winner === 'a' ? 'b' : 'a';
         const W = P[winner], L = P[loser];
         const exp = 1 / (1 + Math.pow(10, (L.rating - W.rating) / 400));
-        const delta = Math.max(4, Math.round(32 * (1 - exp)));
+        const delta = ranked ? Math.max(4, Math.round(32 * (1 - exp))) : 0;
         W.rating += delta; L.rating = Math.max(100, L.rating - delta);
         result.rating[winner] = delta; result.rating[loser] = -delta;
+        updateSeason(W); updateSeason(L);
+        // il venerdì è giorno di torneo: contano le vittorie classificate (dal 25 anche nel Torneo dei Campioni)
+        if (ranked && fought && isFriday()) {
+            const wk = weekOf();
+            if (W.fri?.week !== wk) W.fri = { week: wk, w: 0 };
+            W.fri.w++;
+            if (levelOf(W) >= 25) { if (W.friC?.week !== wk) W.friC = { week: wk, w: 0 }; W.friC.w++; }
+            result.friday = true;
+        }
         // Sigillo del Naufrago: +10% sulle monete vinte
         const extra = W.sealsOn?.includes('naufrago') ? Math.round((d.stake + ECONOMY.WIN_BONUS) * 0.1) : 0;
         W.coins += d.stake * 2 + ECONOMY.WIN_BONUS + extra; L.coins += ECONOMY.LOSS_BONUS;
@@ -400,13 +508,13 @@ function endDuel(d, winner, reason) {
             const S = sessionOf(b.pid);
             if (b.side === winner) {
                 // Carisma (merch di Sputnik Homies): qualche moneta in più dal banco
-                const charisma = computeStats({ element: p.card?.element, gear: gearOf(p) }).charisma;
+                const charisma = computeStats({ element: p.card?.element, gear: gearOf(p) }).charisma + (p.charisma || 0);
                 const payout = Math.floor(b.amount / winPool * tot * (1 + charisma));
-                p.coins += payout; grantXp(p, XP.BET_WIN); save(p);
+                p.coins += payout; grantXp(p, XP.BET_WIN); progress(p, 'bet'); save(p);
                 if (S) { sendMe(S); S.socket.emit('bet:result', { won: true, amount: b.amount, payout, name: W.name, xp: XP.BET_WIN }); }
             } else if (S) S.socket.emit('bet:result', { won: false, amount: b.amount, payout: 0, name: W.name });
         }
-        sysChat(d.room, `🏆 ${W.name} ha sconfitto ${L.name} nell'Arena${reason === 'forfeit' ? ' (abbandono)' : ''}! (+${delta} rating)`);
+        sysChat(d.room, `🏆 ${W.name} ha sconfitto ${L.name} nell'Arena${reason === 'forfeit' ? ' (abbandono)' : ''}! ${ranked ? `(+${delta} gloria)` : '(amichevole)'}`);
     } else {
         P.a.coins += d.stake; P.b.coins += d.stake; P.a.draws++; P.b.draws++;
         refundBets(d);
@@ -414,8 +522,9 @@ function endDuel(d, winner, reason) {
     }
     save(P.a); save(P.b);
     sendMe(sessionOf(P.a.id)); sendMe(sessionOf(P.b.id));
-    for (const p of [P.a, P.b]) io.to(d.room).emit('player:stats', { id: p.id, rating: p.rating, level: levelOf(p), wins: p.wins, losses: p.losses });
+    for (const p of [P.a, P.b]) io.to(d.room).emit('player:stats', statsOf(p));
     result.level = { a: levelOf(P.a), b: levelOf(P.b) };
+    result.league = { a: leagueOf(P.a.rating), b: leagueOf(P.b.rating) };
     lbCache = null;
     io.to('duel:' + d.id).emit('duel:end', result);
     finishDuel(d);
@@ -449,6 +558,95 @@ setInterval(() => {
 // =====================================================================
 //  CONNESSIONI
 // =====================================================================
+// =====================================================================
+//  IN ONDA! (Stanza Bianca) e LA VEGLIA DEI MORTI: stato condiviso
+// =====================================================================
+const ondas = new Map();   // stanza → puntata in corso
+const ondaPeople = (room) => [...online.values()].filter(S => S.room === room && inWhiteRoom(S.pos[0], S.pos[1], S.pos[2]));
+function startOnda(room, hosts) {
+    const pref = [...ONDA_Q].sort(() => Math.random() - 0.5).slice(0, ONDA.questions - 1).map(q => ({ text: q[0], a: q[1], b: q[2] }));
+    const plot = ONDA_PLOT[crypto.randomInt(ONDA_PLOT.length)];
+    const qs = [...pref, { text: `Il complotto della settimana: «${plot}»`, a: 'Ci credo', b: 'Non ci credo' }];
+    const ep = { room, hosts: hosts.map(S => S.p.id), names: hosts.map(S => S.p.name), ratto: hosts.length < 2, qs, i: -1, open: false, votes: new Map(), voters: new Set(), hostXp: 0, results: [] };
+    ondas.set(room, ep);
+    io.to(room).emit('onda:start', { hosts: ep.names, ratto: ep.ratto, n: qs.length });
+    sysChat(room, `🎙 In Onda! ${ep.names.join(' e ')}${ep.ratto ? ' e il Ratto' : ''} sono in diretta dalla Stanza Bianca.`);
+    setTimeout(() => ondaNext(ep), 4000);
+}
+function ondaNext(ep) {
+    if (ondas.get(ep.room) !== ep) return;
+    ep.i++;
+    if (ep.i >= ep.qs.length) return ondaEnd(ep);
+    ep.votes = new Map(); ep.open = true;
+    const q = ep.qs[ep.i];
+    io.to(ep.room).emit('onda:q', { i: ep.i, n: ep.qs.length, text: q.text, a: q.a, b: q.b, ms: ONDA.voteMs, hosts: ep.names });
+    setTimeout(() => {
+        ep.open = false;
+        let a = 0, b = 0;
+        for (const v of ep.votes.values()) v ? b++ : a++;
+        const tot = a + b, split = tot ? 1 - Math.abs(a - b) / tot : 0;
+        // i conduttori guadagnano di più quando il pubblico si divide
+        ep.hostXp += ONDA.hostXp + Math.round(ONDA.splitXp * split * Math.min(1, tot / 2));
+        ep.results.push({ a, b });
+        io.to(ep.room).emit('onda:res', { i: ep.i, a, b, split: Math.round(split * 100) });
+        setTimeout(() => ondaNext(ep), 4500);
+    }, ONDA.voteMs);
+}
+function ondaEnd(ep) {
+    ondas.delete(ep.room);
+    const d = today();
+    for (const pid of new Set([...ep.hosts, ...ep.voters])) {
+        const p = byPid(pid); if (!p) continue;
+        const S = sessionOf(pid), host = ep.hosts.includes(pid), out = { host, xp: 0 };
+        if (host) {
+            if (p.ondaDay !== d) {
+                p.ondaDay = d; out.xp = grantXp(p, ep.hostXp); p.episodes = (p.episodes || 0) + 1;
+                p.charisma = Math.min(ONDA.charismaMax, (p.charisma || 0) + ONDA.charisma); out.charisma = p.charisma;
+                if (p.episodes >= 5) out.title = award(p, 'conduttore');
+                // a volte i Cronisti si lasciano sfuggire una Parola di Runa
+                const words = Object.keys(RUNEWORDS).filter(w => !p.recipes.includes(w));
+                if (words.length && Math.random() < 0.35) { const w = words[crypto.randomInt(words.length)]; p.recipes.push(w); out.recipe = w; }
+            } else out.repeat = true;
+        }
+        // ogni puntata insegna una risposta per il Pedaggio dello Spettro
+        const unk = INSULTS.map((_, i) => i).filter(i => !p.comebacks.includes(i));
+        if (unk.length) { const c = unk[crypto.randomInt(unk.length)]; p.comebacks.push(c); out.learned = c; }
+        progress(p, 'onda');
+        save(p);
+        if (S) { sendMe(S); S.socket.emit('onda:end', out); }
+    }
+    io.to(ep.room).emit('onda:off', { results: ep.results });
+}
+
+let veglia = null;
+function vegliaState() {
+    const key = romeTime().day;
+    if (!veglia || veglia.key !== key) veglia = { key, kills: 0, participants: new Set(), kingUp: false, kings: new Set() };
+    const goal = Math.min(VEGLIA.goalMax, VEGLIA.goalBase + VEGLIA.goalPer * veglia.participants.size);
+    return { open: vegliaOpen() || !!process.env.VEGLIA_ALWAYS, key, kills: veglia.kills, goal, kingUp: veglia.kingUp, participants: veglia.participants.size };
+}
+
+// Il campione del venerdì (e dei Campioni, dal livello 25) riceve il titolo a torneo finito
+let fridayAwarded = null;
+function awardFriday() {
+    const t = romeTime(), w = weekOf(), target = t.wd === 6 || t.wd === 0 ? w : w - 1;
+    if (fridayAwarded === target) return;
+    fridayAwarded = target;
+    for (const [field, title] of [['fri', 'venerdi'], ['friC', 'campioni']]) {
+        const cands = store.all().filter(p => p[field]?.week === target && p[field].w > 0).sort((a, b) => b[field].w - a[field].w);
+        if (!cands.length || cands.some(p => p.titleWeek?.[title] === target)) continue;
+        const top = cands[0];
+        award(top, title);
+        top.titleWeek = { ...(top.titleWeek || {}), [title]: target };
+        save(top);
+        sysChat('pub', `🏆 ${top.name} è ${TITLES[title].name}: ${top[field].w} vittorie classificate di venerdì!`);
+    }
+}
+setInterval(awardFriday, 10 * 60 * 1000);
+
+// profili di prima: si aggiornano all'avvio (qui sotto tutti gli aiuti sono già pronti)
+for (const p of store.all()) { pidIndex.set(p.id, p.token); if (migrate(p)) store.put(p); }
+
 io.on('connection', (socket) => {
     let me = null;
     const on = (ev, fn) => socket.on(ev, (d, ack) => {
@@ -492,7 +690,9 @@ io.on('connection', (socket) => {
         me = { sid: socket.id, socket, p, room: null, pos: [0, 2, 34, Math.PI, 0], duelId: null, watching: null, lastChat: 0, lastCard: 0 };
         online.set(socket.id, me);
         sidByPid.set(p.id, socket.id);
-        reply({ ok: true, token: p.token, profile: privateView(p), daily, dailyXp: daily ? XP.DAILY : 0, created, dropped });
+        const seasonMsg = p.seasonMsg || null;
+        if (seasonMsg) { delete p.seasonMsg; save(p); }
+        reply({ ok: true, token: p.token, profile: privateView(p), daily, dailyXp: daily ? XP.DAILY : 0, created, dropped, seasonMsg });
         joinRoom(me, 'pub');
         for (const fid of p.friends) { const F = sessionOf(fid); if (F) F.socket.emit('friend:status', { id: p.id, name: p.name, online: true }); }
         console.log(`+ ${p.name} (${p.id}) — online: ${online.size}`);
@@ -515,6 +715,15 @@ io.on('connection', (socket) => {
         if (!me || !Array.isArray(s) || s.length < 5 || !s.slice(0, 5).every(Number.isFinite)) return;
         me.pos = s.slice(0, 5);
         socket.volatile.to(me.room).emit('mv', { i: me.p.id, s: me.pos });
+        // il telefono bianco squilla una volta al giorno, poco dopo che sei entrato nella Stanza Bianca
+        if (!me.phoneT && !me.phoneRing && me.p.phoneDay !== today() && levelOf(me.p) >= 2 && inWhiteRoom(me.pos[0], me.pos[1], me.pos[2])) {
+            me.phoneT = setTimeout(() => {
+                me.phoneT = null;
+                if (!me || !online.has(me.sid) || me.p.phoneDay === today() || !inWhiteRoom(me.pos[0], me.pos[1], me.pos[2])) return;
+                me.phoneRing = true;
+                me.socket.emit('phone:ring');
+            }, 15000 + Math.random() * 30000);
+        }
     });
     on('emote', (d) => {
         if (!['saluta', 'balla', 'inchino', 'ride'].includes(d.e)) return;
@@ -524,7 +733,11 @@ io.on('connection', (socket) => {
         if (!Array.isArray(d.o) || !Array.isArray(d.v) || ![...d.o, ...d.v].every(Number.isFinite)) return;
         socket.to(me.room).emit('mud', { i: me.p.id, o: d.o.slice(0, 3), v: d.v.slice(0, 3) });
     });
-    on('mud:hit', (d) => { io.to(me.room).emit('mud:splat', { i: me.p.id, by: String(d.by || '') }); });
+    on('mud:hit', (d) => {
+        io.to(me.room).emit('mud:splat', { i: me.p.id, by: String(d.by || '') });
+        const T = sessionOf(String(d.by || ''));
+        if (T && T !== me && T.room === me.room && Date.now() - (me.lastSplat || 0) > 1500) { me.lastSplat = Date.now(); progress(T.p, 'mud'); }
+    });
     on('chat', (d) => {
         const now = Date.now();
         if (now - me.lastChat < 350) return;
@@ -562,9 +775,11 @@ io.on('connection', (socket) => {
         const need = weaponLevel(spec);
         if (need > levelOf(me.p)) return fail(reply, `Mastro Brace lavora quei materiali solo dal livello ${need}`);
         if (me.p.inventory.length >= 80) return fail(reply, 'Inventario pieno');
-        const cost = weaponCost(spec);
+        const cost = weaponCost(spec), bones = boneCost(spec);
         if (me.p.coins < cost) return fail(reply, 'Sputnik Coin insufficienti');
+        if ((me.p.mats.ossa || 0) < bones) return fail(reply, `L'osso costa anche ${bones} Ossa Antiche: le trovi nel Prato dei Morti`);
         me.p.coins -= cost;
+        if (bones) me.p.mats.ossa -= bones;
         const entry = { uid: uid(), kind: 'weapon', spec };
         me.p.inventory.push(entry);
         save(me.p); sendMe(me);
@@ -640,6 +855,7 @@ io.on('connection', (socket) => {
         let ess = null;
         if (d.won && tier >= 2) {
             me.p.cardWins = (me.p.cardWins || 0) + 1;
+            progress(me.p, 'practice');
             const c = dayc(me.p), el = String(d.el);
             if (ELEMENTS[el] && c.pess < PRACTICE_ESS_DAILY) { c.pess++; addMat(me.p, 'ess_' + el, 1); ess = 'ess_' + el; }
         }
@@ -659,7 +875,7 @@ io.on('connection', (socket) => {
     const lookChanged = (uid) => {
         if (Object.values(me.p.equipment || {}).includes(uid)) io.to(me.room).emit('player:look', { id: me.p.id, name: me.p.name, appearance: me.p.appearance, look: look(me.p), element: me.p.card.element });
     };
-    const trialDone = (p, g) => !g.trial || (g.trial.kind === 'wins' ? (p.cardWins || 0) >= g.trial.n : g.trial.kind === 'fish' ? !!p.fishLog?.[g.trial.fish]?.n : false);
+    const trialDone = (p, g) => !g.trial || (g.trial.kind === 'wins' ? (p.cardWins || 0) >= g.trial.n : g.trial.kind === 'fish' ? !!p.fishLog?.[g.trial.fish]?.n : g.trial.kind === 'league' ? (p.peakLeague || 0) >= g.trial.n : false);
     // Risveglio della carta: Filigrana, Aurora, Incisa
     on('altar:awaken', (d, reply) => {
         if (!altarOk(reply)) return;
@@ -696,6 +912,7 @@ io.on('connection', (socket) => {
         const success = Math.random() < step.ok;
         const plus = success ? cur + 1 : step.drop && !scroll ? cur - 1 : cur;
         if (plus > 0) obj.plus = plus; else delete obj.plus;
+        progress(p, 'enchant');
         save(p); sendMe(me); lookChanged(it.uid);
         if (success && plus >= 8) sysChat(me.room, `✦ ${p.name} ha incantato un pezzo a +${plus}!`);
         reply({ ok: true, success, plus, from: cur, saved: !success && scroll });
@@ -773,6 +990,7 @@ io.on('connection', (socket) => {
         const got = addMat(p, n.kind, full ? (n.kind === 'frammento' && Math.random() < 0.15 ? 2 : 1) : Math.random() < 0.25 ? 1 : 0);
         const xp = full ? grantXp(p, GATHER.xp) : 0;
         const seal = Math.random() < SEAL_CHANCE ? giveSeal(p, GATHER.seal[n.kind]) : null;
+        if (got) progress(p, 'gather', got, { mat: n.kind });
         save(p); sendMe(me);
         reply({ ok: true, kind: n.kind, got, xp, seal, full });
     });
@@ -806,6 +1024,7 @@ io.on('connection', (socket) => {
             const next = DIARY.findIndex((_, i) => !p.diary.includes(i));
             if (next >= 0) {
                 p.diary.push(next); out.page = next;
+                if (next === 7 && !p.recipes.includes('lancio')) { p.recipes.push('lancio'); out.recipe = 'lancio'; }
                 if (p.diary.length === DIARY.length) out.seal = giveSeal(p, 'naufrago');
                 if (Math.random() < 0.2) out.loot.pergamena = addMat(p, 'pergamena', 1);
             } else out.loot.pergamena = addMat(p, 'pergamena', 1);
@@ -821,9 +1040,366 @@ io.on('connection', (socket) => {
             if (perle) out.loot.perla = addMat(p, 'perla', perle);
             if ((f.rar === 'rar' || f.rar === 'epi') && Math.random() < SEAL_CHANCE * 3) out.seal = giveSeal(p, 'marea');
         }
+        progress(p, 'fish', 1, { id: F.fish, rar: f.rar });
+        if (FISH_IDS.filter(id => FISH[id].rar !== 'special').every(id => p.fishLog[id]?.n)) award(p, 'pescatore');
         save(p); sendMe(me);
         if (f.rar === 'epi') sysChat(me.room, `🎣 ${p.name} ha pescato un ${f.name} di ${size} cm!`);
         reply(out);
+    });
+
+    // =================================================================
+    //  I LUOGHI DELL'ISOLA (fase 3) e LA CRONACA (fase 4)
+    // =================================================================
+    const near = (x, z, r) => Math.hypot(me.pos[0] - x, me.pos[2] - z) <= r;
+    const needLv = (reply, lv, what) => { if (levelOf(me.p) < lv) { fail(reply, `${what} dal livello ${lv}`); return false; } return true; };
+
+    // --- LA BACHECA DELLE TAGLIE (si riscuote in piazza) ---
+    on('bounty:claim', (d, reply) => {
+        if (!near(BOUNTY_BOARD.x, BOUNTY_BOARD.z, BOUNTY_BOARD.r + 2)) return fail(reply, 'Le taglie si riscuotono alla Bacheca in piazza');
+        const p = me.p, B = ensureBounties(p);
+        const b = d.weekly ? B.weekly : B.daily[int(d.i, 0, 2)];
+        if (!b || !b.done) return fail(reply, 'Taglia non ancora compiuta');
+        if (b.claimed) return fail(reply, 'Taglia già riscossa');
+        b.claimed = true;
+        const R = d.weekly ? BOUNTY_REWARD.weekly : BOUNTY_REWARD.daily;
+        const xp = grantXp(p, R.xp);
+        p.coins += R.coins;
+        if (R.pergamena) addMat(p, 'pergamena', R.pergamena);
+        save(p); sendMe(me);
+        reply({ ok: true, xp, coins: R.coins, pergamena: R.pergamena || 0 });
+    });
+
+    // --- IL CANTO DELLE PIETRE (Cerchio di Pietre) ---
+    on('canto:start', (d, reply) => {
+        if (!needLv(reply, CANTO.level, 'Il Canto delle Pietre si impara')) return;
+        if (me.duelId) return fail(reply, 'Non durante un duello');
+        if (!near(STONES.x, STONES.z, 4.5)) return fail(reply, 'Mettiti al centro del Cerchio di Pietre');
+        me.canto = { id: uid(), seed: crypto.randomInt(1, 2 ** 31 - 1), at: Date.now() };
+        reply({ ok: true, id: me.canto.id, seed: me.canto.seed, left: Math.max(0, CANTO.daily - (dayc(me.p).canto || 0)) });
+    });
+    on('canto:end', (d, reply) => {
+        const C = me.canto;
+        if (!C || C.id !== d.id) return fail(reply, 'Il canto si è interrotto');
+        me.canto = null;
+        const notes = int(d.notes, 0, 40);
+        if (Date.now() - C.at < cantoMinMs(notes)) return fail(reply, 'Le pietre non hanno sentito bene: troppo in fretta');
+        const p = me.p, c = dayc(p), full = (c.canto || 0) < CANTO.daily;
+        c.canto = (c.canto || 0) + 1;
+        const out = { ok: true, notes, full, xp: 0, frammenti: 0, rune: [], seal: null, best: notes > (p.cantoBest || 0) };
+        p.cantoBest = Math.max(p.cantoBest || 0, notes);
+        if (notes > 0) {
+            out.xp = grantXp(p, full ? notes * 3 : notes);
+            if (full) {
+                out.frammenti = addMat(p, 'frammento', Math.min(6, Math.floor(notes / 3)));
+                // una Runa ogni 10 note: del seme della decima nota
+                const seq = cantoSeq(C.seed, notes);
+                for (let k = 1; k <= Math.floor(notes / CANTO.runeEvery); k++) { const r = 'runa_' + CANTO_SEEDS[seq[k * CANTO.runeEvery - 1]]; addMat(p, r, 1); out.rune.push(r); }
+                if (notes >= 8 && Math.random() < SEAL_CHANCE * 2) out.seal = giveSeal(p, 'cerchio');
+            }
+            if (notes >= CANTO.titleAt) out.title = award(p, 'cantore');
+            progress(p, 'canto', notes);
+        }
+        save(p); sendMe(me);
+        reply(out);
+    });
+
+    // --- IL PRATO DEI MORTI (le tombe del Becchino) ---
+    const gravesToday = (p) => {
+        if (!p.graves || p.graves.day !== today()) p.graves = { day: today(), cursed: null, dug: {}, over: false, won: false, pending: null, lost: false };
+        return p.graves;
+    };
+    const gravesCheckWin = (p, G, out) => {
+        if (!GRAVES.filter(g => !G.cursed.includes(g.k)).every(g => G.dug[g.k] != null)) return;
+        G.over = true; G.won = true;
+        p.coins += 50;
+        out.cleared = { xp: grantXp(p, 80), coins: 50, ossa: addMat(p, 'ossa', 3), pergamena: addMat(p, 'pergamena', 1) };
+        if (!G.lost) out.title = award(p, 'becchino');
+        sysChat(me.room, `⚰ ${p.name} ha ripulito il Prato dei Morti!`);
+    };
+    on('graves:dig', (d, reply) => {
+        if (!needLv(reply, GRAVES_LEVEL, 'Il Becchino presta la vanga')) return;
+        if (me.duelId) return fail(reply, 'Non durante un duello');
+        const g = GRAVES[int(d.k, 0, GRAVES.length - 1)];
+        if (!g || !near(g.x, g.z, 3)) return fail(reply, 'Avvicinati alla tomba');
+        const p = me.p, G = gravesToday(p);
+        if (G.over) return fail(reply, G.won ? 'Il Prato dei Morti è già ripulito: torna domani' : 'Il Becchino ha già ricoperto le tombe: torna domani');
+        if (G.pending != null) return fail(reply, 'Prima rimetti a dormire lo scheletro che hai svegliato');
+        if (G.dug[g.k] != null) return fail(reply, "Questa tomba l'hai già scavata");
+        // la prima tomba non è mai maledetta, e nemmeno quelle intorno
+        if (!G.cursed) {
+            const pool = GRAVES.map(x => x.k).filter(k => k !== g.k && !graveNeighbors(g.k).includes(k));
+            G.cursed = [];
+            while (G.cursed.length < GRAVES_CURSED && pool.length) G.cursed.push(pool.splice(crypto.randomInt(pool.length), 1)[0]);
+        }
+        progress(p, 'dig');
+        if (G.cursed.includes(g.k)) {
+            G.pending = g.k; G.pendingAt = Date.now();
+            save(p); sendMe(me);
+            return reply({ ok: true, cursed: true, k: g.k });
+        }
+        const n = graveNeighbors(g.k).filter(k => G.cursed.includes(k)).length;
+        G.dug[g.k] = n;
+        const out = { ok: true, k: g.k, n, loot: {}, coins: 0 };
+        const r = Math.random();
+        if (r < 0.45) out.loot.ossa = addMat(p, 'ossa', 1);
+        else if (r < 0.65) { out.coins = 8 + crypto.randomInt(13); p.coins += out.coins; }
+        else if (r < 0.8) out.loot.ecto = addMat(p, 'ecto', 1);
+        else if (r < 0.9) out.loot.frammento = addMat(p, 'frammento', 1);
+        out.xp = grantXp(p, 6);
+        gravesCheckWin(p, G, out);
+        save(p); sendMe(me);
+        reply(out);
+    });
+    on('graves:skeleton', (d, reply) => {
+        const p = me.p, G = p.graves;
+        if (!G || G.day !== today() || G.pending == null) return fail(reply, 'Nessuno scheletro sveglio');
+        if (d.won && Date.now() - (G.pendingAt || 0) < 12000) return fail(reply, 'Lo scheletro non è ancora tornato nella tomba');
+        const k = G.pending;
+        G.pending = null;
+        const out = { ok: true, won: !!d.won, loot: {}, xp: 0 };
+        if (d.won) {
+            G.dug[k] = 'x';
+            out.loot.ossa = addMat(p, 'ossa', 2); out.loot.ecto = addMat(p, 'ecto', 1);
+            out.xp = grantXp(p, 30);
+            gravesCheckWin(p, G, out);
+        } else { G.over = true; G.lost = true; }
+        save(p); sendMe(me);
+        reply(out);
+    });
+
+    // --- LA FONTANA DEI DESIDERI (giardino del castello) ---
+    on('fountain:wish', (d, reply) => {
+        if (!near(FOUNTAIN.x, FOUNTAIN.z, FOUNTAIN.r + 1) || me.pos[1] < 2) return fail(reply, 'La Fontana dei Desideri è nel giardino del castello');
+        const p = me.p;
+        if (p.wishDay === today()) return fail(reply, 'Un desiderio al giorno: la fontana ha già la tua moneta');
+        if (p.coins < FOUNTAIN.coins) return fail(reply, `Serve una moneta da ${FOUNTAIN.coins} Sputnik Coin`);
+        p.coins -= FOUNTAIN.coins; p.wishDay = today();
+        let r = Math.random() * WISHES.reduce((s, w) => s + w.w, 0), W = WISHES[0];
+        for (const w of WISHES) { r -= w.w; if (r <= 0) { W = w; break; } }
+        if (W.id === 'xp') p.fountain = { until: Date.now() + FOUNTAIN.ms };
+        else if (W.id === 'perla') addMat(p, 'perla', 1);
+        else if (W.id === 'frammenti') addMat(p, 'frammento', 2);
+        else if (W.id === 'monete') p.coins += 30;
+        else if (W.id === 'pergamena') addMat(p, 'pergamena', 1);
+        save(p); sendMe(me);
+        reply({ ok: true, wish: W.id, text: W.text });
+    });
+
+    // --- IL PEDAGGIO DELLO SPETTRO (Ponte dei Sospiri) ---
+    const tollNext = (T) => {
+        const pool = INSULTS.map((_, i) => i).filter(i => !T.asked.includes(i));
+        T.q = pool[crypto.randomInt(pool.length)];
+        T.asked.push(T.q);
+        return T.q;
+    };
+    on('toll:start', (d, reply) => {
+        if (!needLv(reply, TOLL.level, 'Lo Spettro del Pedaggio sfida chi è')) return;
+        if (!near(TOLL.spot.x, TOLL.spot.z, TOLL.spot.r + 1.5)) return fail(reply, "Lo Spettro aspetta all'inizio del Ponte dei Sospiri");
+        me.toll = { w: 0, l: 0, asked: [], q: null };
+        reply({ ok: true, q: tollNext(me.toll), known: me.p.comebacks });
+    });
+    on('toll:answer', (d, reply) => {
+        const T = me.toll;
+        if (!T) return fail(reply, "Lo Spettro se n'è andato");
+        const p = me.p, c = int(d.c, -1, INSULTS.length - 1), q = T.q;
+        if (c >= 0 && !p.comebacks.includes(c)) return fail(reply, 'Non conosci questa risposta');
+        const correct = c === q;
+        let learned = null;
+        if (correct) T.w++;
+        else { T.l++; if (!p.comebacks.includes(q)) { p.comebacks.push(q); learned = q; } }
+        const out = { ok: true, correct, right: q, learned, w: T.w, l: T.l, end: null, next: null };
+        if (T.w >= TOLL.wins) {
+            out.end = 'win'; me.toll = null;
+            if (p.tollDay !== today()) { p.tollDay = today(); p.coins += TOLL.coins; out.coins = TOLL.coins; out.xp = grantXp(p, TOLL.xp); }
+            out.title = award(p, 'lingua');
+            progress(p, 'toll');
+        } else if (T.l >= TOLL.losses) { out.end = 'lose'; me.toll = null; }
+        else out.next = tollNext(T);
+        save(p); sendMe(me);
+        reply(out);
+    });
+
+    // --- GLI ABITANTI: la prima chiacchierata insegna una risposta per il Pedaggio ---
+    on('npc:talk', (d, reply) => {
+        const id = String(d.id), N = NPCS[id];
+        if (!N) return fail(reply, 'Non c\'è nessuno qui');
+        if (!near(N.x, N.z, 5)) return fail(reply, 'Troppo lontano');
+        const p = me.p, first = !p.npcs.includes(id);
+        let learned = null, xp = 0;
+        if (first) {
+            p.npcs.push(id); xp = grantXp(p, 10);
+            if (N.teach != null && !p.comebacks.includes(N.teach)) { p.comebacks.push(N.teach); learned = N.teach; }
+            save(p); sendMe(me);
+        }
+        reply({ ok: true, first, learned, xp });
+    });
+
+    // --- LE TAVOLETTE DELLA CRONACA ---
+    on('tablet:read', (d, reply) => {
+        const id = String(d.id), T = TABLETS[id];
+        if (!T || !near(T.x, T.z, 3.5)) return fail(reply, 'Troppo lontano');
+        const p = me.p;
+        if (p.tablets.includes(id)) return reply({ ok: true, first: false, n: p.tablets.length });
+        p.tablets.push(id);
+        const out = { ok: true, first: true, xp: grantXp(p, 25), n: p.tablets.length };
+        if (p.tablets.length >= Object.keys(TABLETS).length) {
+            out.all = true; out.title = award(p, 'cronista');
+            if (!p.recipes.includes('vulcano')) p.recipes.push('vulcano');
+        }
+        save(p); sendMe(me);
+        reply(out);
+    });
+
+    // --- IN ONDA! (Stanza Bianca) ---
+    on('onda:start', (d, reply) => {
+        if (!needLv(reply, ONDA.level, 'In Onda! si conduce')) return;
+        if (!inWhiteRoom(me.pos[0], me.pos[1], me.pos[2]) || me.pos[4] !== 4) return fail(reply, 'Siediti in poltrona nella Stanza Bianca');
+        if (ondas.has(me.room)) return fail(reply, "C'è già una puntata in onda");
+        const other = ondaPeople(me.room).find(S => S !== me && S.pos[4] === 4 && !S.duelId);
+        startOnda(me.room, other ? [me, other] : [me]);
+        reply({ ok: true, cohost: other ? other.p.name : 'il Ratto' });
+    });
+    on('onda:vote', (d, reply) => {
+        const ep = ondas.get(me.room);
+        if (!ep || !ep.open) return fail(reply, 'Nessuna domanda aperta');
+        if (ep.hosts.includes(me.p.id)) return fail(reply, 'I conduttori non votano');
+        if (!inWhiteRoom(me.pos[0], me.pos[1], me.pos[2])) return fail(reply, 'Si vota dalla Stanza Bianca');
+        const first = !ep.votes.has(me.p.id);
+        ep.votes.set(me.p.id, d.v ? 1 : 0);
+        let xp = 0;
+        if (first) { ep.voters.add(me.p.id); xp = grantXp(me.p, ONDA.voterXp); save(me.p); }
+        reply({ ok: true, xp });
+    });
+    // il telefono bianco: una missione segreta al giorno
+    on('phone:answer', (d, reply) => {
+        if (!me.phoneRing) return fail(reply, 'Il telefono tace');
+        if (!inWhiteRoom(me.pos[0], me.pos[1], me.pos[2]) || !near(PHONE_SPOT.x, PHONE_SPOT.z, 2.5)) return fail(reply, 'Il telefono è sul tavolino della Stanza Bianca');
+        me.phoneRing = false;
+        const p = me.p, B = ensureBounties(p);
+        p.phoneDay = today();
+        const ids = Object.keys(MISSIONS), mid = ids[crypto.randomInt(ids.length)], M = MISSIONS[mid];
+        B.mission = { mid, k: M.kind, kind: M.kind, n: M.n, have: 0, done: false, text: M.text, id: M.id };
+        save(p); sendMe(me);
+        reply({ ok: true, line: PHONE_LINES[crypto.randomInt(PHONE_LINES.length)], text: M.text });
+    });
+
+    // --- CASTONI E PAROLE DI RUNA (Mastro Brace) ---
+    const weaponOf = (u) => me.p.inventory.find(i => i.uid === u && i.kind === 'weapon');
+    on('forge:socket', (d, reply) => {
+        const it = weaponOf(d.uid);
+        if (!it) return fail(reply, 'Arma non trovata');
+        const n = (it.spec.sockets || []).length;
+        if (n >= SOCKETS.length) return fail(reply, 'Tre castoni sono il massimo');
+        const S = SOCKETS[n], p = me.p;
+        if (levelOf(p) < S.lv) return fail(reply, `Mastro Brace apre il castone numero ${n + 1} dal livello ${S.lv}`);
+        if ((p.mats.ossa || 0) < S.ossa) return fail(reply, `Servono ${S.ossa} Ossa Antiche`);
+        if (p.coins < S.coins) return fail(reply, `Servono ${S.coins} Sputnik Coin`);
+        p.coins -= S.coins; p.mats.ossa -= S.ossa;
+        it.spec.sockets = [...(it.spec.sockets || []), null];
+        save(p); sendMe(me);
+        reply({ ok: true, n: n + 1 });
+    });
+    on('forge:rune', (d, reply) => {
+        const it = weaponOf(d.uid);
+        if (!it) return fail(reply, 'Arma non trovata');
+        const p = me.p, rune = String(d.rune);
+        if (!rune.startsWith('runa_') || !(p.mats[rune] > 0)) return fail(reply, 'Non hai questa runa');
+        const i = (it.spec.sockets || []).indexOf(null);
+        if (i < 0) return fail(reply, 'Nessun castone libero');
+        p.mats[rune]--;
+        it.spec.sockets[i] = rune;
+        const word = runeWordOf(it.spec);
+        let discovered = false;
+        if (word && !p.recipes.includes(word)) { p.recipes.push(word); discovered = true; sysChat(me.room, `✦ ${p.name} ha scoperto una Parola di Runa: ${RUNEWORDS[word].name}!`); }
+        save(p); sendMe(me); lookChanged(it.uid);
+        reply({ ok: true, word, discovered });
+    });
+    on('forge:clear', (d, reply) => {
+        const it = weaponOf(d.uid);
+        if (!it || !(it.spec.sockets || []).some(Boolean)) return fail(reply, 'Non ci sono rune da togliere');
+        if (me.p.coins < SOCKET_CLEAR) return fail(reply, `Servono ${SOCKET_CLEAR} Sputnik Coin`);
+        me.p.coins -= SOCKET_CLEAR;
+        it.spec.sockets = it.spec.sockets.map(() => null);
+        save(me.p); sendMe(me); lookChanged(it.uid);
+        reply({ ok: true });
+    });
+
+    // --- LA VEGLIA DEI MORTI (sabato sera nel cimitero) ---
+    on('veglia:status', (d, reply) => {
+        const V = vegliaState(), p = me.p;
+        const mine = p.veglia?.key === V.key ? p.veglia : {};
+        reply({ ok: true, ...V, waves: mine.waves || 0, kingTries: KING.tries - (mine.kingTries || 0), kingBeaten: veglia.kings.has(p.id) });
+    });
+    on('veglia:start', (d, reply) => {
+        const V = vegliaState(), p = me.p;
+        if (!V.open) return fail(reply, 'La Veglia dei Morti è il sabato sera, dalle 20 a mezzanotte');
+        if (!needLv(reply, VEGLIA.level, 'La Veglia accoglie chi è')) return;
+        if (me.duelId) return fail(reply, 'Non durante un duello');
+        if (!near(-33, 40, 18)) return fail(reply, 'La Veglia si tiene nel Cimitero Sommerso');
+        if (!p.veglia || p.veglia.key !== V.key) p.veglia = { key: V.key, waves: 0 };
+        if (d.king) {
+            if (!V.kingUp) return fail(reply, 'Il Re Annegato dorme ancora: servono altre ondate');
+            if (!p.veglia.waves) return fail(reply, 'Il Re risponde solo a chi ha combattuto nella Veglia');
+            if (veglia.kings.has(p.id)) return fail(reply, 'Hai già sconfitto il Re stanotte');
+            if ((p.veglia.kingTries || 0) >= KING.tries) return fail(reply, `Il Re si concede solo ${KING.tries} volte a notte`);
+            p.veglia.kingTries = (p.veglia.kingTries || 0) + 1;
+            me.vfight = { king: true, at: Date.now() };
+            return reply({ ok: true, king: true, tries: KING.tries - p.veglia.kingTries });
+        }
+        if (p.veglia.waves >= VEGLIA.waveMax) return fail(reply, 'Per stanotte hai combattuto abbastanza');
+        me.vfight = { king: false, at: Date.now(), wave: p.veglia.waves + 1 };
+        reply({ ok: true, wave: me.vfight.wave });
+    });
+    on('veglia:end', (d, reply) => {
+        const F = me.vfight;
+        me.vfight = null;
+        if (!F) return fail(reply, 'Nessuno scontro in corso');
+        const p = me.p, out = { ok: true, won: !!d.won, king: F.king, loot: {}, xp: 0 };
+        if (!d.won) return reply(out);
+        if (Date.now() - F.at < VEGLIA.minMs) return fail(reply, 'Troppo in fretta: i morti non ci credono');
+        vegliaState();
+        if (F.king) {
+            veglia.kings.add(p.id);
+            out.xp = grantXp(p, 200);
+            if (p.kingWeek !== weekOf()) { p.kingWeek = weekOf(); out.loot.cuore = addMat(p, 'cuore', 1); }
+            out.loot.ossa = addMat(p, 'ossa', 3);
+            out.title = award(p, 'spezzacorona');
+            sysChat('pub', `👑 ${p.name} ha sconfitto il Re Annegato!`);
+        } else {
+            p.veglia.waves++; veglia.kills++; veglia.participants.add(p.id);
+            out.loot.ossa = addMat(p, 'ossa', 1);
+            if (Math.random() < 0.5) out.loot.ecto = addMat(p, 'ecto', 1);
+            out.xp = grantXp(p, 25);
+            progress(p, 'veglia');
+            const V = vegliaState();
+            if (!veglia.kingUp && V.kills >= V.goal) { veglia.kingUp = true; sysChat('pub', '🌊 La laguna ribolle: il Re Annegato si è alzato nel Cimitero Sommerso! Chi ha combattuto nella Veglia può sfidarlo.'); }
+            io.emit('veglia:state', vegliaState());
+        }
+        save(p); sendMe(me);
+        reply(out);
+    });
+
+    // --- RINASCITA (livello 30) E TITOLI ---
+    on('altar:rebirth', (d, reply) => {
+        if (!altarOk(reply)) return;
+        const p = me.p;
+        if (levelOf(p) < REBIRTH.level) return fail(reply, `La Rinascita si compie al livello ${REBIRTH.level}`);
+        if ((p.rebirths || 0) >= REBIRTH.max) return fail(reply, 'Sei già rinato tre volte: la nebbia non può cambiarti di più');
+        p.rebirths = (p.rebirths || 0) + 1; p.xp = 0; p.talents = { forza: 0, tempra: 0, maestria: 0 };
+        for (const it of p.inventory) it.legacy = true;
+        award(p, 'rinato');
+        save(p); sendMe(me);
+        io.to(me.room).emit('player:stats', statsOf(p));
+        sysChat(me.room, `★ ${p.name} è rinato: torna al livello 1, con una stella in più sulla carta.`);
+        reply({ ok: true, rebirths: p.rebirths });
+    });
+    on('title:set', (d, reply) => {
+        const id = d.id == null ? null : String(d.id);
+        if (id && !me.p.titles.includes(id)) return fail(reply, 'Non hai questo titolo');
+        me.p.titleOn = id;
+        save(me.p); sendMe(me);
+        io.to(me.room).emit('player:stats', statsOf(me.p));
+        reply({ ok: true });
     });
 
     // --- BAZAR (compravendita tra giocatori) ---
@@ -895,6 +1471,7 @@ io.on('connection', (socket) => {
             ok: true, profile: {
                 id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, card: { title: p.card.title, type: p.card.type },
                 rating: p.rating, wins: p.wins, losses: p.losses, level: levelOf(p), talents: p.talents, cardImage: p.cardImage, grade: p.grade || 0,
+                title: titleName(p), league: leagueOf(p.rating), peakLeague: p.peakLeague || 0, frames: p.frames || [], rebirths: p.rebirths || 0, titles: (p.titles || []).length,
                 online: sidByPid.has(p.id), friend: me.p.friends.includes(p.id), requested: p.requests.includes(me.p.id),
             },
         });

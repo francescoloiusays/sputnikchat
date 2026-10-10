@@ -517,6 +517,16 @@ export function computeStats(setup = {}) {
     if (seals.includes('cerchio')) g.sup += 0.05;
     const inf = w.inf ? { el: w.inf, k: OPPOSITE[el] === w.inf ? 2 : 1 } : null;
     if (inf?.k === 2) g.rep++;
+    // Forgia: rune nei castoni e Parole di Runa
+    let kbBonus = 0;
+    for (const r of (setup.weapon?.sockets || []).map(runeEl).filter(x => RUNE_BONUS[x])) {
+        const B = RUNE_BONUS[r];
+        for (const s of ['atk', 'def', 'hp', 'spd', 'sup', 'harmony']) if (B[s]) g[s] += B[s];
+        if (B.kb) kbBonus += B.kb;
+    }
+    const word = runeWordOf(setup.weapon);
+    if (word === 'vulcano') g.rep++;
+    if (word === 'radici') g.regen += 0.15;
     const cap = (10 + T.tempra * 0.5) * (el === 'pietra' ? 1.5 : 1);
     const over = Math.max(0, g.weight - cap);
     const atkBonus = Math.min(STAT_CAP, T.forza * 0.015 + g.atk);
@@ -531,7 +541,9 @@ export function computeStats(setup = {}) {
         regen: (el === 'palude' ? 0.8 * (tr.eco ? 1.5 : 1) : 0) + g.regen,
         meterGain: (1 + w.meter) * (1 + T.maestria * 0.03 + g.sup),
         effMul: 1 + T.maestria * 0.05,
-        reach: w.reach, aspd: w.speed, kbm: w.kb,
+        reach: w.reach, aspd: w.speed, kbm: w.kb * (1 + kbBonus),
+        word, echo: word === 'mietitrice' ? 0.5 : 0, lava: word === 'vulcano', mudThrow: word === 'lancio' ? 0.12 : 0,
+        kbRes: word === 'radici' ? 0.15 : 0, lightSlow: word === 'brina' ? 0.5 : 0, dashHit: word === 'tuono' ? 0.3 : 0,
         maxJumps: el === 'spettro' ? 3 : 2,
         dashMul: el === 'tempesta' ? (tr.eco ? 1.75 : 1.5) : 1,
         startMeter: tr.risonanza || sets.includes('peste') ? 25 : 0,
@@ -718,6 +730,166 @@ export function rollFish(night, rnd = Math.random) {
     for (const id of pool) { r -= w(id); if (r <= 0) return id; }
     return pool[0];
 }
+
+// =====================================================================
+//  I LUOGHI E LA CRONACA (Il Libro dei Sette Semi, fasi 3 e 4)
+// =====================================================================
+MATS.ossa = { name: 'Ossa Antiche', icon: 'skull', color: '#e9e2cf', where: 'Cimitero Sommerso: le tombe del Becchino e la Veglia dei Morti', desc: 'Mastro Brace le usa per aprire i castoni. Servono anche per le armi e le impugnature d\'osso.' };
+MATS.cuore = { name: 'Cuore del Re Annegato', icon: 'heart', color: '#7fd8ff', where: 'La Veglia dei Morti: sconfiggi il Re Annegato', desc: 'Batte ancora, piano. Serve per la carta Viva.' };
+MAT_IDS.push('ossa', 'cuore');
+export const BONE_COST = { material: 2, handle: 1 };   // Ossa Antiche per le armi d'osso della Forgia
+export const boneCost = (spec) => (spec?.material === 'osso' ? BONE_COST.material : 0) + (spec?.handle === 'osso' ? BONE_COST.handle : 0);
+
+// La carta Viva: dalla Veglia dei Morti e dalla lega Spettro
+Object.assign(CARD_GRADES[4], { coins: 3000, mats: { cuore: 1 }, trial: { kind: 'league', n: 3, text: 'Raggiungi la lega Spettro nell\'Arena classificata' }, locked: null });
+
+// --- ORA ITALIANA: giorni, settimane e stagioni ---
+export function romeTime(date = new Date()) {
+    try {
+        const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', weekday: 'short', hour: 'numeric', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date).map(x => [x.type, x.value]));
+        return { wd: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday), h: +p.hour % 24, day: `${p.year}-${p.month}-${p.day}` };
+    } catch { return { wd: date.getDay(), h: date.getHours(), day: date.toISOString().slice(0, 10) }; }
+}
+const EPOCH = Date.UTC(2026, 9, 5);   // lunedì 5 ottobre 2026: comincia la prima stagione
+export const weekOf = (date = new Date()) => Math.floor((Date.parse(romeTime(date).day) - EPOCH) / (7 * 864e5));
+export const SEASON_WEEKS = 6;
+export const seasonOf = (date = new Date()) => Math.floor(weekOf(date) / SEASON_WEEKS) + 1;
+export function seasonEnds(date = new Date()) { return new Date(EPOCH + seasonOf(date) * SEASON_WEEKS * 7 * 864e5); }
+
+// --- LEGHE DELL'ARENA CLASSIFICATA (dal livello 5) ---
+export const RANKED_LEVEL = 5;
+export const LEAGUES = [
+    { id: 'bronzo', name: 'Bronzo', min: 0, color: '#c8844a' },
+    { id: 'argento', name: 'Argento', min: 1100, color: '#cfd6de' },
+    { id: 'oro', name: 'Oro', min: 1300, color: '#ffc93b' },
+    { id: 'spettro', name: 'Spettro', min: 1500, color: '#b880ff' },
+];
+export const leagueOf = (rating) => { let i = 0; for (let k = 0; k < LEAGUES.length; k++) if ((rating || 0) >= LEAGUES[k].min) i = k; return i; };
+export const isFriday = (date = new Date()) => romeTime(date).wd === 5;
+
+// --- TITOLI (si mostrano sotto il nome al posto del titolo di livello) ---
+export const TITLES = {
+    lingua: { name: "Lingua d'Argento", how: 'Batti lo Spettro del Pedaggio a parole' },
+    cronista: { name: 'Cronista', how: 'Leggi tutte e sette le Tavolette della Cronaca' },
+    cantore: { name: 'Voce delle Pietre', how: 'Arriva a 15 note nel Canto delle Pietre' },
+    becchino: { name: 'Amico del Becchino', how: 'Ripulisci il Prato dei Morti senza farti battere' },
+    pescatore: { name: 'Pescatore di Nebbia', how: 'Pesca tutte le specie della laguna' },
+    conduttore: { name: 'Voce di In Onda', how: 'Conduci cinque puntate di In Onda!' },
+    spezzacorona: { name: 'Spezzacorona', how: 'Sconfiggi il Re Annegato nella Veglia dei Morti' },
+    venerdi: { name: 'Campione del Venerdì', how: 'Vinci più duelli classificati di tutti in un venerdì' },
+    campioni: { name: 'Campione dei Campioni', how: 'Vinci il Torneo dei Campioni del venerdì (dal livello 25)' },
+    rinato: { name: 'Rinato', how: 'Compi la Rinascita al livello 30' },
+    spettrale: { name: 'Spettro della Stagione', how: 'Chiudi una stagione in lega Spettro' },
+};
+
+// --- IL CANTO DELLE PIETRE (Simon con le sette rune) ---
+export const CANTO = { level: 3, daily: 3, notes: [262, 294, 330, 392, 440, 523, 587], runeEvery: 10, titleAt: 15 };
+export const CANTO_SEEDS = ['fuoco', 'ghiaccio', 'palude', 'pietra', 'tempesta', 'spettro', 'fango'];
+// tempo minimo per cantare n note (sequenze lette e ripetute), in millisecondi
+export const cantoMinMs = (n) => { let t = 0; for (let k = 1; k <= n; k++) t += k * 520; return t * 0.75; };
+// la sequenza nasce dal seme del server: chi canta e chi controlla ottengono la stessa
+export function cantoSeq(seed, n) { const r = srand(seed), out = []; for (let i = 0; i < n; i++) out.push(Math.floor(r() * 7)); return out; }
+function srand(seed) { return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// --- IL PRATO DEI MORTI (le tombe del cimitero diventano Prato fiorito) ---
+export const GRAVES_LEVEL = 3, GRAVES_CURSED = 4;
+// Le tombe esistono in una griglia 6×4: alcune mancano. Stessa disposizione per il mondo e per il server.
+export const GRAVES = (() => {
+    const r = srand(5), out = [];
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) {
+        if (r() < 0.15) continue;
+        out.push({ k: out.length, i, j, x: -33 - 7.5 + i * 3 + (r() - 0.5) * 0.6, z: 40 - 4.5 + j * 3 + (r() - 0.5) * 0.6, cross: r() < 0.35 });
+    }
+    return out;
+})();
+export const graveNeighbors = (k) => { const g = GRAVES[k]; return GRAVES.filter(o => o !== g && Math.abs(o.i - g.i) <= 1 && Math.abs(o.j - g.j) <= 1).map(o => o.k); };
+
+// --- LA BACHECA DELLE TAGLIE (tre al giorno e una alla settimana) ---
+export const BOUNTY_BOARD = { x: 7.4, z: 16.2, ry: -1.86, r: 3 };
+export const BOUNTIES = {
+    winSeed: { lv: 1, n: 1, text: (b) => `Vinci un duello nell'Arena contro un seme di ${ELEMENTS[b.el]?.name}` },
+    duel: { lv: 1, n: 2, text: (b) => `Combatti ${b.n} duelli nell'Arena` },
+    practice: { lv: 1, n: 2, text: (b) => `Vinci ${b.n} allenamenti col Fantasma, Guerriero o Campione` },
+    fish: { lv: 1, n: 3, text: (b) => `Pesca ${b.n} pesci al Molo` },
+    fishRar: { lv: 1, n: 1, text: () => 'Pesca un pesce raro o epico' },
+    frammento: { lv: 1, n: 4, text: (b) => `Raccogli ${b.n} Frammenti di Runa al Cerchio di Pietre` },
+    ecto: { lv: 1, n: 3, text: (b) => `Acchiappa ${b.n} fuochi fatui dorati` },
+    canto: { lv: 3, n: 6, max: true, text: (b) => `Arriva a ${b.n} note nel Canto delle Pietre` },
+    toll: { lv: 4, n: 1, text: () => 'Batti lo Spettro del Pedaggio a parole' },
+    dig: { lv: 3, n: 3, text: (b) => `Scava ${b.n} tombe nel Prato dei Morti` },
+    bet: { lv: 1, n: 1, text: () => 'Vinci una scommessa su un duello' },
+    enchant: { lv: 2, n: 1, text: () => "Incanta un pezzo all'Altare" },
+    onda: { lv: 6, n: 1, text: () => 'Partecipa a una puntata di In Onda!, in poltrona o fra il pubblico' },
+};
+export const WEEKLY = {
+    duelWin: { lv: 1, n: 8, text: (b) => `Vinci ${b.n} duelli nell'Arena` },
+    fish: { lv: 1, n: 20, text: (b) => `Pesca ${b.n} pesci` },
+    dig: { lv: 3, n: 12, text: (b) => `Scava ${b.n} tombe` },
+    canto: { lv: 3, n: 10, max: true, text: (b) => `Arriva a ${b.n} note nel Canto delle Pietre` },
+    veglia: { lv: 10, n: 4, text: (b) => `Vinci ${b.n} ondate nella Veglia dei Morti` },
+    gather: { lv: 1, n: 25, text: (b) => `Raccogli ${b.n} frammenti o fuochi fatui` },
+};
+export const BOUNTY_REWARD = { daily: { xp: 80, coins: 30 }, weekly: { xp: 300, coins: 150, pergamena: 1 }, mission: { xp: 150, pergamena: 1 } };
+export function rollBounties(seedStr, level, own) {
+    let h = 0; for (const c of seedStr) h = (h * 31 + c.charCodeAt(0)) | 0;
+    const r = srand(h);
+    const pick = (pool, n) => { const ids = Object.keys(pool).filter(k => pool[k].lv <= level); const out = []; while (out.length < n && ids.length) out.push(ids.splice(Math.floor(r() * ids.length), 1)[0]); return out; };
+    const make = (k, pool) => { const b = { k, n: pool[k].n, have: 0 }; if (k === 'winSeed') { const els = Object.keys(ELEMENTS).filter(e => e !== own); b.el = els[Math.floor(r() * els.length)]; } return b; };
+    return { daily: pick(BOUNTIES, 3).map(k => make(k, BOUNTIES)), weekly: make(pick(WEEKLY, 1)[0], WEEKLY) };
+}
+export const bountyText = (b, weekly) => (weekly ? WEEKLY : BOUNTIES)[b.k]?.text(b) || b.text || '';
+
+// --- LA FONTANA DEI DESIDERI (una moneta al giorno) ---
+export const FOUNTAIN = { x: 12.4, z: -115.6, r: 3.2, coins: 10, ms: 3600 * 1000 };
+export const WISHES = [
+    { id: 'xp', w: 34, text: "L'acqua si accende: per un'ora l'esperienza raddoppia." },
+    { id: 'perla', w: 28, text: 'Dal fondo risale una Perla della Laguna.' },
+    { id: 'frammenti', w: 18, text: "Due Frammenti di Runa luccicano sotto il pelo dell'acqua." },
+    { id: 'monete', w: 12, text: 'La fontana ti restituisce la moneta, con gli interessi: 30 Sputnik Coin.' },
+    { id: 'pergamena', w: 8, text: 'Una Pergamena Benedetta galleggia fino al bordo.' },
+];
+
+// --- IL PEDAGGIO DELLO SPETTRO ---
+export const TOLL = { level: 4, coins: 40, xp: 25, wins: 3, losses: 3, spot: { x: 2.7, z: -30.6, r: 4 } };
+
+// --- IN ONDA! (Stanza Bianca) ---
+export const WHITE_ROOM = { x: 0, z: -118.8, w: 10, d: 8, floor: 7.6 };
+export const inWhiteRoom = (x, y, z) => Math.abs(x - WHITE_ROOM.x) < WHITE_ROOM.w / 2 + 0.3 && Math.abs(z - WHITE_ROOM.z) < WHITE_ROOM.d / 2 + 0.3 && y > WHITE_ROOM.floor - 1;
+export const PHONE_SPOT = { x: 2.67, z: -117.65 };
+export const ONDA = { level: 6, questions: 3, voteMs: 14000, hostXp: 20, splitXp: 45, voterXp: 8, charisma: 0.005, charismaMax: 0.1 };
+
+// --- CASTONI E PAROLE DI RUNA (Mastro Brace) ---
+export const SOCKETS = [{ lv: 8, coins: 200, ossa: 2 }, { lv: 12, coins: 500, ossa: 4 }, { lv: 20, coins: 1200, ossa: 8 }];
+export const SOCKET_CLEAR = 100;
+// ogni runa incastonata dà un piccolo bonus del suo seme
+export const RUNE_BONUS = {
+    fuoco: { atk: 0.02, text: '+2% di danni' }, ghiaccio: { def: 0.02, text: '+2% di difesa' }, palude: { hp: 4, text: '+4 punti vita' },
+    pietra: { kb: 0.04, text: '+4% di contraccolpo' }, tempesta: { spd: 0.03, text: '+3% di velocità' }, spettro: { sup: 0.04, text: 'SUPER +4% più rapida' },
+    fango: { harmony: 2, text: 'Dissonanza −2' },
+};
+export const RUNEWORDS = {
+    mietitrice: { name: 'Mietitrice di Nebbie', runes: ['spettro', 'tempesta', 'spettro'], weapons: ['falce'], desc: 'La tua SUPER colpisce una seconda volta, per metà danno.' },
+    vulcano: { name: 'Cuore di Vulcano', runes: ['fuoco', 'pietra'], weapons: ['martello'], desc: 'Il colpo pesante lascia lava a terra per due secondi. Unisce due opposti: senza Seme Puro porta Dissonanza.' },
+    lancio: { name: 'Il Primo Lancio', runes: ['fango', 'fango', 'fango'], weapons: ['pugnale'], desc: 'Ogni tanto un colpo leggero lancia anche una palla di fango, come ai tempi del gioco originale.' },
+    radici: { name: 'Radici del Mondo', runes: ['palude', 'pietra', 'palude'], weapons: ['lancia', 'bastone'], desc: "Subisci il 15% di contraccolpo in meno e rigeneri un po' di vita in più." },
+    brina: { name: 'Brina Eterna', runes: ['ghiaccio', 'ghiaccio'], weapons: ['spada'], desc: 'I colpi leggeri rallentano per mezzo secondo.' },
+    tuono: { name: 'Tuono di Ritorno', runes: ['tempesta', 'fuoco', 'tempesta'], weapons: ['ascia'], desc: 'Dopo uno scatto, il colpo successivo fa il 30% di danni in più.' },
+};
+export const runeEl = (id) => (id || '').startsWith('runa_') ? id.slice(5) : null;
+export function runeWordOf(spec) {
+    const r = (spec?.sockets || []).map(runeEl);
+    if (!r.length || r.some(x => !x)) return null;
+    for (const [id, W] of Object.entries(RUNEWORDS)) if (W.weapons.includes(spec.type) && W.runes.length === r.length && W.runes.every((x, i) => x === r[i])) return id;
+    return null;
+}
+
+// --- LA VEGLIA DEI MORTI (sabato sera, dal livello 10) ---
+export const VEGLIA = { level: 10, wd: 6, from: 20, to: 24, goalBase: 4, goalPer: 5, goalMax: 60, waveMax: 10, minMs: 15000 };   // da soli bastano 9 ondate, in cinque circa 6 a testa
+export const vegliaOpen = (date = new Date()) => { const t = romeTime(date); return t.wd === VEGLIA.wd && t.h >= VEGLIA.from && t.h < VEGLIA.to; };
+export const KING = { name: 'Il Re Annegato', hp: 1.4, atk: 1, tries: 3 };
+
+// --- RINASCITA (livello 30) ---
+export const REBIRTH = { level: 30, max: 3, xp: 0.05 };
 
 export function cleanText(s, max) {
     if (typeof s !== 'string') return '';

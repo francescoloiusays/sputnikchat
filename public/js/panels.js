@@ -9,7 +9,9 @@ import {
     computeStats, dissonance, levelProgress, titleFor, TALENTS, TALENT_IDS, TALENT_CAP, XP, RESPEC_COST, RING, OPPOSITE,
     MATS, MAT_IDS, SEALS, CARD_GRADES, gradeOf, resolveMats, ENCHANT, ENCHANT_STEP, enchantCap, enchantCapNext, enchantMats, ALTAR_LEVEL,
     INFUSE, INFUSE_LEVEL, INFUSE_COST, FUSE, BLESSING, FISH, FISH_IDS, FISH_RARITY, FISH_DAILY, DIARY, GATHER, plusOf, ELEMENT_IDS, RUNE_NAMES,
+    TITLES, LEAGUES, BOUNTY_BOARD, BOUNTY_REWARD, bountyText, TOLL, GRAVES, GRAVES_LEVEL, GRAVES_CURSED, VEGLIA, SOCKETS, SOCKET_CLEAR, RUNE_BONUS, RUNEWORDS, runeWordOf, runeEl, boneCost, REBIRTH,
 } from './shared/catalog.js';
+import { NPCS, INSULTS, TOLL_LINES, TABLETS, TABLET_REWARD } from './shared/lore.js';
 import { cardEditor } from './creator.js';
 import { composeCard, printCard, downloadCard, CARD_W, holoTrack } from './cards.js';
 import { icon, iconSVG, elIcon, itemIconName, rarityOf, tierOf } from './icons.js';
@@ -80,7 +82,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'arena'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'arena', 'bacheca', 'pedaggio', 'tavoletta'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('ui');
@@ -194,7 +196,7 @@ export class Panels {
     matsView() {
         const me = this.app.me, mats = me.mats || {};
         const owned = MAT_IDS.filter(k => mats[k] > 0);
-        const base = ['frammento', 'perla', 'ecto', 'pergamena'];
+        const base = ['frammento', 'perla', 'ecto', 'ossa', 'pergamena', 'cuore'];
         const gl = me.gatherLeft || {};
         return [
             h('div', { class: 'bag-head' }, h('h3', { class: 'sect', style: { margin: 0, flex: 1 }, html: iconSVG('shard') }, 'Materiali'), this.purse()),
@@ -346,7 +348,15 @@ export class Panels {
             h('div', { class: 'paths' }, TALENT_IDS.map(path)),
             h('div', { class: 'split', style: { marginTop: '16px' } },
                 h('div', {}, sect('star', 'Le tue statistiche'), stats, sect('crystal', 'La Ruota dei Semi'), wheel),
-                h('div', {}, sect('shield', 'Corredi'), sets, sect('scroll', "Da dove arriva l'esperienza"), xpInfo, rite)));
+                h('div', {}, sect('shield', 'Corredi'), sets, sect('scroll', "Da dove arriva l'esperienza"), xpInfo, this.titlesView(L), rite)));
+    }
+    titlesView(L) {
+        const me = this.app.me, own = me.titles || [];
+        const chip = (id, label, how) => h('button', { class: 'chip' + ((me.titleOn || null) === id ? ' sel' : ''), title: how || '', disabled: me.offline, onclick: () => this.act('title:set', { id }) }, label);
+        return h('div', {}, sect('crown', 'Titoli'),
+            h('div', { class: 'chips' }, chip(null, titleFor(L), 'Il titolo del tuo livello'), own.map(id => chip(id, TITLES[id].name, TITLES[id].how))),
+            h('p', { class: 'muted small' }, 'Ancora da conquistare: ', Object.entries(TITLES).filter(([id]) => !own.includes(id)).map(([, t]) => `${t.name} (${t.how.toLowerCase()})`).join(' · ') || 'nessuno, li hai tutti.'),
+            me.charisma ? h('p', { class: 'muted small' }, `Carisma da In Onda!: +${Math.round(me.charisma * 1000) / 10}% sulle scommesse vinte.`) : null);
     }
 
     // --- ALTARE DEI SETTE SEMI (Cappella in Rovina): risveglio, incantamento, infusione, fusione, sigilli, offerta ---
@@ -383,7 +393,7 @@ export class Panels {
             else if (next.locked) nextBox = h('div', { class: 'detail' }, h('div', { class: 'd-name', style: { color: next.color } }, `Prossimo grado: ${next.name}`), h('div', { class: 'd-flavor' }, next.gives), h('p', { class: 'req' }, next.locked));
             else {
                 const n = needs(resolveMats(next.mats, el), next.coins);
-                const tr = next.trial, trialOk = tr.kind === 'wins' ? (me.cardWins || 0) >= tr.n : !!me.fishLog?.[tr.fish]?.n;
+                const tr = next.trial, trialOk = tr.kind === 'wins' ? (me.cardWins || 0) >= tr.n : tr.kind === 'league' ? (me.peakLeague || 0) >= tr.n : !!me.fishLog?.[tr.fish]?.n;
                 const lvOk = L >= next.lv;
                 nextBox = h('div', { class: 'detail' },
                     h('div', { class: 'd-name', style: { color: next.color } }, `Prossimo grado: ${next.name}`),
@@ -520,13 +530,221 @@ export class Panels {
                     }, { cls: 'btn-primary', ic: 'candle', disabled: off || active || me.blessedToday || (me.coins || 0) < BLESSING.coins }))),
                 sect('star', "Il Rito dell'Oblio"),
                 h('p', { class: 'muted' }, "Nel Libro della Maestria, qui all'altare, puoi ridistribuire i tuoi punti."),
-                h('div', { class: 'btn-row' }, maestria)];
+                h('div', { class: 'btn-row' }, maestria),
+                sect('star', 'La Rinascita'),
+                h('p', { class: 'muted' }, `Al livello ${REBIRTH.level} la Custode ti fa rinascere: torni al livello 1 e ridistribuisci la Maestria da capo, ma tieni oggetti, carta e materiali. Ogni Rinascita aggiunge una stella sulla carta e il ${Math.round(REBIRTH.xp * 100)}% di esperienza per sempre (fino a ${REBIRTH.max} volte).${me.rebirths ? ` Sei rinato ${me.rebirths} ${me.rebirths === 1 ? 'volta' : 'volte'}.` : ''}`),
+                h('div', { class: 'btn-row' }, btn('Rinasci', async () => {
+                    if (!confirm('Rinascere? Tornerai al livello 1, con una stella in più.')) return;
+                    const r = await request('altar:rebirth', {});
+                    if (r.ok) { app.audio.play('special'); toast('Sei rinato: una nuova stella brilla sulla tua carta', { kind: 'coin', icon: 'star', duration: 8000 }); }
+                }, { cls: 'btn-danger', ic: 'star', disabled: off || L < REBIRTH.level || (me.rebirths || 0) >= REBIRTH.max }))];
         }
         this.set('altar', T, off ? this.needOnline() : null, h('div', { class: 'bag-head' }, h('div', { style: { flex: 1 } }, bar), this.purse()), body);
     }
 
+    // =================================================================
+    //  FASI 3 E 4: GLI ABITANTI, LE TAGLIE, IL PEDAGGIO, IL CIMITERO,
+    //  LE TAVOLETTE, I CASTONI
+    // =================================================================
+    // --- DIALOGO CON UN ABITANTE ---
+    p_npc(arg) {
+        const app = this.app, id = arg?.id, N = NPCS[id];
+        if (!N) return this.close();
+        const line = N.lines[(this.npcLine = ((this.npcLine ?? -1) + 1)) % N.lines.length];
+        const go = { diario: () => { this.tabs.bag = 'diario'; this.open('inventario'); }, forgia: () => { this.tabs.forge = 'crea'; this.open('forgia'); }, castoni: () => { this.tabs.forge = 'castoni'; this.open('forgia'); },
+            sartoria: () => this.open('sartoria'), bazar: () => this.open('bazar'), bacheca: () => this.open('bacheca'), altare: () => this.open('altare'),
+            tombe: () => { this.tabs.tombe = 'prato'; this.open('tombe'); }, veglia: () => { this.tabs.tombe = 'veglia'; this.open('tombe'); }, pedaggio: () => this.open('pedaggio') };
+        const portrait = h('canvas', { class: 'npc-portrait', width: 220, height: 220 });
+        requestAnimationFrame(() => { try { portrait.getContext('2d').drawImage(app.studio.portrait(N.app, N.look || {}, 220, 'bust'), 0, 0); } catch { /* ok */ } });
+        this.set('talk', N.name,
+            h('div', { class: 'npc-box' },
+                h('div', { class: 'npc-left' }, portrait, h('div', { class: 'muted small center' }, N.where)),
+                h('div', { class: 'npc-right' },
+                    h('div', { class: 'npc-say' }, `«${line}»`),
+                    arg.learned != null ? h('div', { class: 'npc-learn', html: iconSVG('quill') }, h('b', {}, 'Ti ha insegnato una risposta per il Pedaggio dello Spettro: '), `«${INSULTS[arg.learned][1]}»`) : null,
+                    arg.first && arg.xp ? h('p', { class: 'muted small' }, `Prima chiacchierata: +${arg.xp} esperienza.`) : null,
+                    h('div', { class: 'btn-row' },
+                        N.actions.map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto' }[k] })),
+                        btn('Altro?', () => this.render(), { ic: 'talk' }),
+                        btn('Arrivederci', () => this.close(), { ic: 'close' })))));
+    }
+
+    // --- LA BACHECA DELLE TAGLIE ---
+    p_bacheca() {
+        const app = this.app, me = app.me, B = me.bounty;
+        const T = 'Bacheca delle Taglie';
+        if (!B || me.offline) return this.set('scroll', T, this.needOnline() || h('div', { class: 'empty' }, 'La bacheca è vuota.'));
+        const P = app.player?.pos, near = P && Math.hypot(P.x - BOUNTY_BOARD.x, P.z - BOUNTY_BOARD.z) <= BOUNTY_BOARD.r + 2;
+        const R = BOUNTY_REWARD;
+        const row = (b, weekly, i) => {
+            const pct = Math.min(1, b.have / b.n);
+            return h('div', { class: 'bounty' + (b.done ? ' done' : '') + (weekly ? ' weekly' : '') },
+                h('div', { class: 'b-txt' }, h('b', {}, bountyText(b, weekly)), h('div', { class: 'b-bar' }, h('i', { style: { width: `${pct * 100}%` } })),
+                    h('small', {}, `${b.have} / ${b.n} · premio: ${weekly ? `${R.weekly.xp} esperienza, ${R.weekly.coins} monete, una Pergamena Benedetta` : `${R.daily.xp} esperienza e ${R.daily.coins} monete`}`)),
+                b.claimed ? h('span', { class: 'b-ok' }, 'Riscossa') : btn('Riscuoti', async () => {
+                    const r = await this.act('bounty:claim', weekly ? { weekly: true } : { i }, null);
+                    if (r.ok) toast(`Taglia riscossa: +${r.xp} esperienza, +${r.coins} monete${r.pergamena ? ', una Pergamena Benedetta' : ''}`, { kind: 'coin', icon: 'scroll' });
+                }, { cls: 'btn-sm btn-primary', disabled: !b.done || !near }));
+        };
+        const M = B.mission;
+        this.set('scroll', T, this.needOnline(),
+            lore('«Tre lavori al giorno e uno alla settimana. Pago io, cioè il Mercante senza Ombra. Le ricompense si ritirano qui, davanti alla bacheca.»'),
+            near ? null : h('p', { class: 'req' }, 'Le taglie si riscuotono davanti alla Bacheca, in Piazza della Gloria.'),
+            sect('scroll', 'Le taglie di oggi'), B.daily.map((b, i) => row(b, false, i)),
+            sect('star', 'La taglia della settimana'), B.weekly ? row(B.weekly, true) : null,
+            M ? [sect('letter', 'La missione del telefono bianco'), h('div', { class: 'bounty mission' + (M.done ? ' done' : '') }, h('div', { class: 'b-txt' }, h('b', {}, M.text), h('small', {}, M.done ? 'Compiuta: premio già consegnato' : `${M.have} / ${M.n}`)))]
+                : h('p', { class: 'muted small' }, 'Ogni giorno, nella Stanza Bianca, il telefono bianco squilla una volta. Chi risponde riceve una missione segreta.'));
+    }
+
+    // --- IL PEDAGGIO DELLO SPETTRO (duello di parole) ---
+    async p_pedaggio() {
+        const app = this.app, me = app.me, T = 'Il Pedaggio dello Spettro';
+        const off = this.needOnline();
+        if (off) return this.set('ecto', T, off);
+        if ((me.level || 1) < TOLL.level) return this.set('ecto', T, lore(TOLL_LINES.hello), h('div', { class: 'empty' }, `Lo Spettro sfida solo chi è almeno al livello ${TOLL.level}.`));
+        const S = this.toll;
+        const pips = (n, cls) => h('span', { class: 'pips-inline' }, Array.from({ length: 3 }, (_, i) => h('i', { class: i < n ? cls : '' })));
+        const known = (me.comebacks || []).slice().sort(() => Math.random() - 0.5);
+        if (!S || S.end) {
+            const end = S?.end;
+            return this.set('ecto', T,
+                lore(end === 'win' ? TOLL_LINES.win : end === 'lose' ? TOLL_LINES.lose : TOLL_LINES.hello),
+                end === 'win' && S.coins ? h('p', { class: 'up' }, `+${S.coins} monete e +${S.xp} esperienza.`) : end === 'win' ? h('p', { class: 'muted' }, 'Oggi ti ha già pagato: questa era per la gloria.') : null,
+                h('p', { class: 'muted' }, `Conosci ${known.length} risposte su ${INSULTS.length}. Le altre le insegnano gli abitanti dell'isola, le puntate di In Onda! e gli errori: quando sbagli, lo Spettro ti dice quella giusta.`),
+                h('div', { class: 'btn-row mid' }, btn(end ? 'Un\'altra sfida' : 'Accetta la sfida', async () => {
+                    const r = await app.net.request('toll:start', {});
+                    if (!r.ok) return toast(r.msg, { kind: 'bad' });
+                    this.toll = { q: r.q, w: 0, l: 0, last: null };
+                    app.audio.play('ui'); this.render();
+                }, { cls: 'btn-primary', ic: 'ecto' }), btn('Lascia stare', () => { this.toll = null; this.close(); }, { ic: 'close' })));
+        }
+        const answer = async (c) => {
+            const r = await app.net.request('toll:answer', { c });
+            if (!r.ok) return toast(r.msg, { kind: 'bad' });
+            const say = r.correct ? TOLL_LINES.right[r.w % TOLL_LINES.right.length] : TOLL_LINES.wrong[r.l % TOLL_LINES.wrong.length];
+            Object.assign(S, { w: r.w, l: r.l, last: { correct: r.correct, right: r.right, learned: r.learned, say }, q: r.next, end: r.end, coins: r.coins, xp: r.xp });
+            app.audio.play(r.correct ? 'coin' : 'error');
+            if (r.learned != null) toast(h('div', {}, h('b', {}, 'Hai imparato una nuova risposta'), h('div', {}, `«${INSULTS[r.learned][1]}»`)), { icon: 'quill', duration: 6000 });
+            if (r.end === 'win') { app.audio.play('special'); if (r.title) toast("Ora sei Lingua d'Argento!", { kind: 'coin', icon: 'crown' }); }
+            this.render();
+        };
+        this.set('ecto', T,
+            h('div', { class: 'toll-score' }, h('span', {}, 'Tu ', pips(S.w, 'ok')), h('span', {}, 'Lo Spettro ', pips(S.l, 'bad'))),
+            S.last ? h('div', { class: 'toll-last ' + (S.last.correct ? 'ok' : 'bad') }, h('b', {}, S.last.say), S.last.correct ? null : h('div', {}, `La risposta giusta era: «${INSULTS[S.last.right][1]}»`)) : null,
+            S.q != null ? [h('div', { class: 'toll-insult' }, `«${INSULTS[S.q][0]}»`),
+                h('div', { class: 'toll-answers' }, known.map(c => h('button', { class: 'btn toll-ans', onclick: () => answer(c) }, INSULTS[c][1])),
+                    h('button', { class: 'btn btn-danger toll-ans', onclick: () => answer(-1) }, 'Ehm... aspetta, ce l\'avevo sulla punta della lingua.'))] : null);
+    }
+
+    // --- IL PRATO DEI MORTI E LA VEGLIA (Ossobuco il Becchino) ---
+    async p_tombe() {
+        const app = this.app, me = app.me, L = me.level || 1, G = me.graves || { dug: {} };
+        const [tab, bar] = this.tabBar('tombe', [['prato', 'Il Prato dei Morti', 'skull'], ['veglia', 'La Veglia dei Morti', 'moon']]);
+        const T = 'Ossobuco il Becchino';
+        const off = this.needOnline();
+        if (off) return this.set('skull', T, off);
+        if (tab === 'prato') {
+            const dug = Object.values(G.dug || {}), safe = GRAVES.length - GRAVES_CURSED;
+            const status = L < GRAVES_LEVEL ? h('p', { class: 'req' }, `Il Becchino presta la vanga dal livello ${GRAVES_LEVEL}.`)
+                : G.pending != null ? h('div', { class: 'detail' }, h('div', { class: 'd-name' }, 'Uno scheletro ti aspetta'), h('p', {}, 'Hai scavato una tomba maledetta e lo scheletro non è tornato a dormire.'),
+                    btn('Affronta lo scheletro', () => { this.close(); app.startSkeleton(); }, { cls: 'btn-primary', ic: 'skull' }))
+                : G.over ? h('p', { class: G.won ? 'up' : 'muted' }, G.won ? 'Oggi hai ripulito tutto il Prato dei Morti. Il Becchino ti saluta col cappello.' : 'Per oggi il Becchino ha ricoperto le tombe. Torna domani.')
+                : h('p', {}, `Oggi hai scavato ${dug.filter(v => v !== 'x').length} tombe su ${safe} sicure${dug.includes('x') ? ' e rimesso a dormire uno scheletro' : ''}.`);
+            return this.set('skull', T, bar,
+                lore('«Ogni epitaffio dice quante tombe maledette ci sono intorno. Leggi, poi scava. Oppure scava, poi corri.»'),
+                h('ul', { class: 'gear-lines' },
+                    h('li', {}, `Avvicinati a una tomba e premi E per scavare. La prima tomba del giorno non è mai maledetta.`),
+                    h('li', {}, `Sopra le tombe scavate compare un numero: quante delle tombe vicine (anche in diagonale) sono maledette. In tutto ce ne sono ${GRAVES_CURSED}.`),
+                    h('li', {}, 'Dalle tombe sicure escono Ossa Antiche, Ectoplasma, Frammenti o qualche moneta. Da quelle maledette esce uno scheletro: battilo e ti lascia le sue ossa, perdi e il Becchino chiude il prato fino a domani.'),
+                    h('li', {}, 'Scava tutte le tombe sicure per il premio del Becchino. Senza mai perdere, ti chiamerà Amico del Becchino.')),
+                status);
+        }
+        this.set('skull', T, bar, h('div', { class: 'empty' }, 'Il Becchino conta i morti...'));
+        const V = await app.net.request('veglia:status', {});
+        if (this.current !== 'tombe') return;
+        const when = 'Il sabato sera, dalle 20 a mezzanotte (ora italiana)';
+        const body = !V.ok ? h('div', { class: 'empty' }, V.msg) : [
+            h('div', { class: 'veglia-bar' }, h('i', { style: { width: `${Math.min(100, V.kills / V.goal * 100)}%` } }), h('span', {}, V.kingUp ? 'Il Re Annegato è sveglio!' : `${V.kills} / ${V.goal} morti rimessi a dormire`)),
+            h('p', { class: 'muted small' }, `${V.participants} ${V.participants === 1 ? 'viandante ha' : 'viandanti hanno'} combattuto stanotte. Più siete, più morti servono, ma prima finite.`),
+            !V.open ? h('p', { class: 'req' }, `${when}. Torna allora: la Veglia si combatte tutti insieme.`)
+                : L < VEGLIA.level ? h('p', { class: 'req' }, `La Veglia accoglie chi è almeno al livello ${VEGLIA.level}.`)
+                : h('div', { class: 'btn-row' },
+                    btn(`Affronta un'ondata (${V.waves}/${VEGLIA.waveMax})`, async () => { const r = await app.net.request('veglia:start', {}); if (!r.ok) return toast(r.msg, { kind: 'bad' }); this.close(); app.startVeglia(r.wave); }, { cls: 'btn-primary', ic: 'skull', disabled: V.waves >= VEGLIA.waveMax }),
+                    V.kingUp ? btn(`Sfida il Re Annegato (${V.kingTries ?? 3} tentativi)`, async () => { const r = await app.net.request('veglia:start', { king: true }); if (!r.ok) return toast(r.msg, { kind: 'bad' }); this.close(); app.startKing(); }, { cls: 'btn-danger', ic: 'crown', disabled: V.kingBeaten || !V.waves || V.kingTries <= 0 }) : null),
+        ];
+        this.set('skull', T, bar,
+            lore('«Il sabato sera i morti si alzano tutti insieme. Fermateli in tanti, prima che salga il Re.»'),
+            h('ul', { class: 'gear-lines' },
+                h('li', {}, `${when}, dal livello ${VEGLIA.level}. Ogni viandante può affrontare fino a ${VEGLIA.waveMax} ondate, sempre più forti.`),
+                h('li', {}, 'Ogni morto rimesso a dormire conta per tutta l\'isola. Quando ne avete battuti abbastanza, il Re Annegato sale dalla laguna.'),
+                h('li', {}, 'Chi ha combattuto nella Veglia può sfidarlo fino a tre volte a notte. Batterlo dà il Cuore del Re Annegato (uno a settimana), che serve per la carta Viva.')),
+            body);
+    }
+
+    // --- LE TAVOLETTE DELLA CRONACA ---
+    p_tavoletta(arg) {
+        const me = this.app.me, el = arg?.el, T = TABLETS[el];
+        if (!T) return this.close();
+        const read = new Set(me.tablets || []);
+        this.set('runestone', T.name,
+            h('div', { class: 'tablet', style: { '--c': ELEMENTS[el].color } }, h('div', { class: 'tablet-ic', html: iconSVG(el) }), h('p', {}, T.text)),
+            arg.first ? h('p', { class: 'up center' }, `+${arg.xp} esperienza`) : null,
+            h('div', { class: 'tablet-row' }, Object.keys(TABLETS).map(k => h('span', { class: 'tab-dot' + (read.has(k) ? ' on' : ''), title: read.has(k) ? TABLETS[k].name : 'Ancora da trovare', style: { color: ELEMENTS[k].color }, html: iconSVG(k) }))),
+            h('p', { class: 'muted small center' }, `Hai letto ${read.size} tavolette su ${Object.keys(TABLETS).length}. Sono nascoste fra i muretti dell'isola, vicino ai luoghi del loro seme.`),
+            arg.all ? h('div', { class: 'detail' }, h('div', { class: 'd-name' }, 'Ora sei Cronista'), h('p', {}, TABLET_REWARD), h('p', { class: 'muted small' }, 'La ricetta è finita nel Libro delle Parole di Runa, in Forgia.')) : null);
+    }
+
+    // --- CASTONI E PAROLE DI RUNA (scheda della Forgia) ---
+    castoniView(bar) {
+        const app = this.app, me = app.me, mats = me.mats || {}, L = me.level || 1, el = me.card?.element;
+        const weapons = (me.inventory || []).filter(e => e.kind === 'weapon');
+        const sel = weapons.find(e => e.uid === this.selSock) || weapons.find(e => e.uid === me.equipment?.weapon) || weapons[0];
+        this.selSock = sel?.uid;
+        const T = 'Forgia di Vulcano';
+        if (!sel) return this.set('anvil', T, bar, h('div', { class: 'empty' }, 'Non hai armi.'));
+        const socks = sel.spec.sockets || [], n = socks.length, next = SOCKETS[n], word = runeWordOf(sel.spec);
+        const runes = MAT_IDS.filter(k => k.startsWith('runa_') && mats[k] > 0);
+        const free = socks.indexOf(null) >= 0;
+        const known = new Set(me.recipes || []);
+        const sockEl = socks.map((r, i) => r ? h('div', { class: 'socket full', style: { '--c': ELEMENTS[runeEl(r)].color }, title: RUNE_BONUS[runeEl(r)].text, html: iconSVG('runestone') }, h('small', {}, RUNE_NAMES[runeEl(r)]))
+            : h('div', { class: 'socket', title: 'Castone vuoto' }, h('small', {}, `${i + 1}`)));
+        this.set('anvil', T, this.needOnline(), bar,
+            lore('«Le rune messe a caso sono sassi colorati. Messe in fila dentro l\'arma giusta, parlano.» Mastro Brace apre fino a tre castoni.'),
+            h('div', { class: 'split' },
+                h('div', {}, sect('swords', 'Arma'),
+                    h('div', { class: 'slot-grid' }, weapons.map(e => this.slot({ ic: e.spec.type, rar: tierOf(e).id, sel: e.uid === sel.uid, eq: me.equipment?.weapon === e.uid, title: itemInfo(e).name, plus: plusOf(e.spec), onclick: () => { this.selSock = e.uid; this.render(); } }))),
+                    h('div', { class: 'detail' },
+                        h('div', { class: 'd-name r-' + tierOf(sel).id }, itemInfo(sel).name),
+                        h('div', { class: 'sockets' }, sockEl, n < SOCKETS.length ? h('div', { class: 'socket closed', title: 'Castone chiuso' }, h('small', {}, '+')) : null),
+                        word ? h('div', { class: 'word-on', html: iconSVG('sparkles') }, h('b', {}, RUNEWORDS[word].name), ` · ${RUNEWORDS[word].desc}`) : null,
+                        socks.filter(Boolean).length ? h('ul', { class: 'gear-lines' }, socks.filter(Boolean).map(r => h('li', {}, `Runa ${RUNE_NAMES[runeEl(r)]}: ${RUNE_BONUS[runeEl(r)].text}`))) : null,
+                        next ? h('div', {}, h('div', { class: 'needs' },
+                            h('span', { class: 'need ' + ((mats.ossa || 0) >= next.ossa ? 'ok' : 'no'), html: iconSVG('skull') }, `Ossa Antiche ${mats.ossa || 0}/${next.ossa}`),
+                            h('span', { class: 'need ' + (me.coins >= next.coins ? 'ok' : 'no') }, coin(next.coins)),
+                            h('span', { class: 'need ' + (L >= next.lv ? 'ok' : 'no') }, `livello ${next.lv}`)),
+                            btn(`Apri il castone numero ${n + 1}`, () => this.act('forge:socket', { uid: sel.uid }, 'Mastro Brace apre un castone').then(r => r.ok && app.audio.play('heavy')), { cls: 'btn-primary', ic: 'hammer', disabled: L < next.lv || (mats.ossa || 0) < next.ossa || me.coins < next.coins }))
+                            : h('p', { class: 'muted small' }, 'Tre castoni: di più non ce ne stanno.'),
+                        socks.some(Boolean) ? btn(`Svuota i castoni · ${SOCKET_CLEAR}`, () => { if (confirm('Svuotare i castoni? Le rune si spezzano e non tornano indietro.')) this.act('forge:clear', { uid: sel.uid }, 'I castoni sono vuoti'); }, { cls: 'btn-danger btn-sm', ic: 'close' }) : null)),
+                h('div', {}, sect('runestone', 'Le tue rune'),
+                    runes.length ? h('div', { class: 'el-pick' }, runes.map(k => h('button', { class: 'chip', disabled: !free, title: free ? 'Incastona nel primo castone libero' : 'Nessun castone libero', onclick: async () => {
+                        const r = await app.net.request('forge:rune', { uid: sel.uid, rune: k });
+                        if (!r.ok) return toast(r.msg, { kind: 'bad' });
+                        app.audio.play('heavy');
+                        if (r.discovered) { app.audio.play('special'); toast(h('div', {}, h('b', {}, `Hai scoperto una Parola di Runa: ${RUNEWORDS[r.word].name}!`), h('div', {}, RUNEWORDS[r.word].desc)), { kind: 'coin', icon: 'sparkles', duration: 9000 }); }
+                        else if (r.word) toast(`La Parola di Runa ${RUNEWORDS[r.word].name} si accende`, { kind: 'ok', icon: 'sparkles' });
+                    } }, elIcon(runeEl(k)), MATS[k].name, h('small', {}, mats[k])))) : h('p', { class: 'muted' }, "Non hai rune. All'Altare 8 Frammenti e un'Essenza fanno la Runa di quel seme, e il Canto delle Pietre ne regala una ogni 10 note."),
+                    sect('openbook', 'Il Libro delle Parole di Runa'),
+                    h('div', { class: 'list' }, Object.entries(RUNEWORDS).map(([id, W]) => known.has(id)
+                        ? h('div', { class: 'row word' }, h('div', { class: 'grow' }, h('div', { class: 'nm' }, W.name, h('span', { class: 'muted small' }, ` · ${W.weapons.map(t => WEAPON_TYPES[t].name.toLowerCase()).join(' o ')}`)),
+                            h('div', { class: 'sub' }, W.runes.map(r => RUNE_NAMES[r]).join(' · ')), h('div', { class: 'mat-desc' }, W.desc)))
+                        : h('div', { class: 'row word unknown' }, h('div', { class: 'grow' }, h('div', { class: 'nm' }, '???'), h('div', { class: 'mat-desc' }, `${W.runes.length} rune in un'arma che non conosci ancora.`))))),
+                    h('p', { class: 'muted small' }, "Le ricette sono sparse nel Diario del Naufrago, nelle Tavolette della Cronaca e nelle puntate di In Onda!. Si possono anche scoprire per caso, mettendo le rune giuste nell'ordine giusto."))));
+    }
+
     // --- FORGIA ---
     p_forgia() {
+        const [ftab, fbar] = this.tabBar('forge', [['crea', "Crea un'arma", 'anvil'], ['castoni', 'Castoni e rune', 'runestone']]);
+        if (ftab === 'castoni') return this.castoniView(fbar);
         const me = this.app.me;
         const spec = this.forgeSpec ||= { type: 'spada', material: 'ferro', handle: 'cuoio', gem: 'nessuna', name: '' };
         const st = weaponStats(spec), cost = weaponCost(spec);
@@ -548,14 +766,14 @@ export class Panels {
             h('label', { class: 'field' }, "Nome dell'arma"),
             h('input', { type: 'text', maxlength: 28, value: spec.name, placeholder: `${WEAPON_TYPES[spec.type].name} di ${MATERIALS[spec.material].name}`, style: { width: '100%' }, oninput: (e) => { spec.name = e.target.value; } }),
             h('div', { class: 'btn-row', style: { marginTop: '16px', justifyContent: 'space-between' } },
-                h('span', { class: 'purse' }, 'Costo ', coin(cost)),
+                h('span', { class: 'purse' }, 'Costo ', coin(cost), boneCost(spec) ? h('span', { class: 'need ' + ((me.mats?.ossa || 0) >= boneCost(spec) ? 'ok' : 'no'), style: { marginLeft: '8px' } }, `Ossa Antiche ${me.mats?.ossa || 0}/${boneCost(spec)}`) : null),
                 btn('Forgia', async () => {
                     const r = await this.act('forge:craft', { spec: sanitizeWeaponSpec(spec) }, `Il fabbro ti consegna: ${spec.name || WEAPON_TYPES[spec.type].name}`);
                     if (r.ok) { this.app.audio.play('heavy'); this.act('equip', { slot: 'weapon', uid: r.uid }, 'Ora la impugni'); }
-                }, { cls: 'btn-primary', ic: 'hammer', disabled: me.coins < cost || tooLow })),
+                }, { cls: 'btn-primary', ic: 'hammer', disabled: me.coins < cost || tooLow || (me.mats?.ossa || 0) < boneCost(spec) })),
             tooLow ? h('p', { class: 'req', style: { margin: '8px 0 0', textAlign: 'right' } }, `Mastro Brace lavora questi pezzi solo dal livello ${req}.`) : null,
         ];
-        this.set('anvil', 'Forgia di Vulcano', this.needOnline(),
+        this.set('anvil', 'Forgia di Vulcano', this.needOnline(), fbar,
             h('div', { class: 'split' },
                 h('div', {},
                     this.studioBox(S => { S.setCharacter(me.appearance, { ...this.app.look(), weapon: { ...spec, name: spec.name || 'Anteprima' } }); if (view === 'arma') S.showWeapon(spec); }),
@@ -616,7 +834,7 @@ export class Panels {
 
     // --- ALBO DEI CAMPIONI ---
     async p_classifica() {
-        const [tab, bar] = this.tabBar('lb', [['rating', 'Campioni', 'swords'], ['coins', 'Ricchezze', 'coins']]);
+        const [tab, bar] = this.tabBar('lb', [['rating', 'Campioni', 'swords'], ['venerdi', 'Torneo del Venerdì', 'crown'], ['coins', 'Ricchezze', 'coins']]);
         const T = 'Albo dei Campioni';
         const off = this.needOnline();
         if (off) return this.set('trophy', T, off);
@@ -625,15 +843,20 @@ export class Panels {
         if (this.current !== 'classifica') return;
         if (!r.ok) return this.set('trophy', T, bar, h('div', { class: 'empty' }, r.msg));
         this.app.world?.setLeaderboard(r.rating);
-        const rows = r[tab] || [], me = this.app.me;
+        const me = this.app.me, fri = tab === 'venerdi';
+        const rows = (fri ? r.friday : r[tab]) || [];
+        const badge = (p) => p.league != null ? h('span', { class: 'league-badge', style: { color: LEAGUES[p.league].color, borderColor: LEAGUES[p.league].color } }, LEAGUES[p.league].name) : null;
+        const ends = r.seasonEnds ? new Date(r.seasonEnds).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' }) : '';
         this.set('trophy', T, bar, h('div', { class: 'parchment' },
-            lore(tab === 'rating' ? `I più valorosi tra i ${r.total} viandanti dell'isola. Tu occupi il ${r.myRank}° posto con ${me.rating} punti di gloria.` : 'Chi ha le tasche più piene di Sputnik Coin.'),
-            h('div', { class: 'ledger-head' }, h('span', { style: { width: '34px' } }, '#'), h('span', { style: { flex: 1 } }, 'Viandante'), h('span', { class: 'num' }, 'Gloria'), h('span', { class: 'num' }, 'V / S'), h('span', { class: 'num' }, 'Monete')),
+            lore(tab === 'rating' ? `Stagione ${r.season}, finisce il ${ends}. Tu occupi il ${r.myRank}° posto con ${me.rating} punti di gloria, in lega ${LEAGUES[me.league || 0].name}. Leghe: Argento da 1100, Oro da 1300, Spettro da 1500. La gloria conta solo nei duelli fra viandanti dal livello 5.`
+                : fri ? `Ogni venerdì si contano le vittorie classificate: il primo diventa Campione del Venerdì. Chi è almeno al livello 25 gareggia anche nel Torneo dei Campioni.${r.isFriday ? ' Oggi è venerdì: si combatte!' : ''}` : 'Chi ha le tasche più piene di Sputnik Coin.'),
+            rows.length ? null : h('div', { class: 'empty' }, fri ? 'Nessuna vittoria classificata questo venerdì, per ora.' : 'Nessuno, per ora.'),
+            h('div', { class: 'ledger-head' }, h('span', { style: { width: '34px' } }, '#'), h('span', { style: { flex: 1 } }, 'Viandante'), h('span', { class: 'num' }, fri ? 'Vittorie' : 'Gloria'), h('span', { class: 'num' }, fri ? 'Campioni' : 'V / S'), h('span', { class: 'num' }, 'Monete')),
             rows.map((p, i) => h('div', { class: 'ledger-row' + (p.id === me.id ? ' me' : '') },
                 h('span', { class: 'seal ' + (i < 3 ? 'g' + (i + 1) : 'plain') }, i + 1),
                 h('div', { class: 'grow', style: { flex: 1, minWidth: 0 } }, h('a', { href: '#', class: 'nm', style: { textDecoration: 'none' }, onclick: (e) => { e.preventDefault(); this.open('profilo', p.id); } },
-                    p.element ? elIcon(p.element) : null, p.name, p.online ? h('span', { class: 'gem-dot on', title: 'Sull\'isola ora' }) : null)),
-                h('span', { class: 'num' }, p.rating), h('span', { class: 'num' }, `${p.wins} / ${p.losses}`), h('span', { class: 'num' }, coin(p.coins))))));
+                    p.element ? elIcon(p.element) : null, p.name, p.online ? h('span', { class: 'gem-dot on', title: 'Sull\'isola ora' }) : null), badge(p), p.title ? h('div', { class: 'sub' }, p.title) : null),
+                h('span', { class: 'num' }, fri ? p.fri : p.rating), h('span', { class: 'num' }, fri ? p.friC || '—' : `${p.wins} / ${p.losses}`), h('span', { class: 'num' }, coin(p.coins))))));
     }
 
     // --- COMPAGNIA (amici e sessioni private) ---
@@ -706,7 +929,7 @@ export class Panels {
                 h('div', {},
                     h('div', { class: 'nm', style: { fontSize: '28px' } }, p.name, h('span', { class: 'gem-dot' + (p.online ? ' on' : ''), title: p.online ? 'Sull\'isola' : 'Lontano' })),
                     h('div', { class: 'sub', style: { display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '10px' } }, elIcon(p.element), `Elemento: ${el?.name}`),
-                    h('div', { class: 'detail' }, stat('Livello', `${p.level} · ${titleFor(p.level || 1)}`), stat('Gloria', p.rating), stat('Vittorie', p.wins), stat('Sconfitte', p.losses),
+                    h('div', { class: 'detail' }, stat('Livello', `${p.level} · ${p.title || titleFor(p.level || 1)}${p.rebirths ? ' ' + '★'.repeat(p.rebirths) : ''}`), stat('Gloria', `${p.rating} · lega ${LEAGUES[p.league || 0].name}`), stat('Vittorie', p.wins), stat('Sconfitte', p.losses),
                         h('div', { class: 'd-flavor' }, `${el?.passive.name}: ${el?.passive.desc}`)),
                     h('div', { class: 'btn-row', style: { marginTop: '14px' } },
                         p.id === me.id ? null : p.friend ? h('span', { class: 'sub' }, 'Siete amici') : p.requested ? h('span', { class: 'sub' }, 'Richiesta inviata') : btn('Stringi amicizia', () => this.act('friend:request', { id: p.id }).then(() => this.render()), { ic: 'handshake' }),
@@ -821,7 +1044,7 @@ export class Panels {
                 h('label', { class: 'field' }, 'Sensibilità del mouse'),
                 h('input', { type: 'range', class: 'range', min: 0.4, max: 2.5, step: 0.1, value: set.sens || 1, oninput: (e) => { set.sens = +e.target.value; app.saveLocal(); } }),
                 h('div', { class: 'keys', style: { justifyContent: 'flex-start', marginTop: '12px', fontSize: '15px' } },
-                    [['WASD', 'cammina'], ['Shift', 'corri'], ['Spazio', 'salta'], ['E', 'interagisci'], ['R', 'profilo vicino'], ['F', 'fango'], ['V', 'visuale'], ['1-4', 'gesti'], ['Invio', 'parla'], ['M', 'voce'], ['B', 'musica'], ['I', 'bisaccia'], ['C', 'card'], ['O', 'compagnia'], ['Tab', 'albo'], ['K', 'album'], ['N', 'mappa']]
+                    [['WASD', 'cammina'], ['Shift', 'corri'], ['Spazio', 'salta'], ['E', 'interagisci'], ['R', 'profilo vicino'], ['F', 'fango'], ['V', 'visuale'], ['1-4', 'gesti'], ['Invio', 'parla'], ['M', 'voce'], ['B', 'musica'], ['I', 'bisaccia'], ['C', 'card'], ['O', 'compagnia'], ['Tab', 'albo'], ['K', 'album'], ['L', 'maestria'], ['J', 'taglie'], ['N', 'mappa']]
                         .map(([k, t]) => h('span', {}, h('i', { class: 'kbd' }, k), ' ', t))),
                 h('h3', { class: 'sect', html: iconSVG('lock') }, 'Codice di recupero'),
                 h('p', { class: 'lore' }, 'Il tuo viandante vive in questo browser. Con il codice puoi ritrovarlo su un altro dispositivo: custodiscilo come una chiave, perché chi lo possiede comanda il tuo personaggio e le tue monete.'),
