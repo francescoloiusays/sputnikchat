@@ -68,6 +68,8 @@ Su telefono ci sono joystick e pulsanti a schermo.
 - **Suoni dell'isola** (tutti sintetizzati, nessun file): passi diversi su erba, sentiero, sabbia, pietra, legno, acqua e neve; il mare che si sente avvicinandosi alla riva, vento, pioggia, crepitio dei fuochi, la fontana; uccelli e gabbiani di giorno, grilli, rane e civette di notte; i rumori dei personaggi al lavoro (l'incudine di Mastro Brace, la vanga del Becchino, il lamento dello Spettro...); una voce diversa per ogni abitante quando parla; fendenti, colpi, gesti, pesca, scavi, tavolette, telefono e livelli; e ogni tanto, come nelle grotte di Minecraft, un **suono della nebbia** lontano (campane, catene, sussurri, una sirena da nebbia, il canto di una balena). Nelle Opzioni c'è un volume a parte per l'ambiente e, sotto, un cursore per ciascun suono (mare, vento, pioggia e tuoni, animali, fuochi e fontana, suoni della nebbia). Il vento arriva a raffiche e si fa sentire davvero solo col brutto tempo.
 - **I quadri delle puntate pagano**: nel cortile del castello, aprire con E una puntata di Sputnik Homies mai vista dà 10 Sputnik Coin; riaprirla ne dà 1 o 2 (dopo almeno un minuto, fino a 20 monete al giorno). Sulla scritta del tasto E compare "prima visione: +10 monete" finché la puntata non l'hai vista.
 
+- **La carta dell'isola** (tasto N o clic sulla minimappa): una mappa disegnata a mano su pergamena, con la costa a inchiostro e le linee del mare, colline, sentieri tratteggiati, il castello in pianta, alberi, tombe e il cartiglio del titolo. Si trascina, si ingrandisce con la rotella, il pizzico o i pulsanti (+, −, torna da te, tutta la carta; da tastiera +, −, 0, C e le frecce). I simboli dei luoghi, degli abitanti, delle tavolette lette e degli altri viandanti si cliccano: una scheda dice cos'è e a quanti passi si trova. I filtri in alto nascondono le categorie. E il cartografo ha lasciato qualche scarabocchio da cliccare.
+
 ## Struttura
 
 ```
@@ -77,6 +79,7 @@ public/index.html         pagina del gioco
 public/css/style.css
 public/js/main.js         avvio, mondo in terza persona, rete, HUD, minimappa, voice chat
 public/js/sky.js          ciclo giorno/notte, meteo, pioggia e neve
+public/js/atlas.js        la carta grande disegnata a mano (zoom, simboli, scarabocchi)
 public/js/audio.js        musica ed effetti, passi, ambienti, versi, voci dei personaggi
 public/js/world.js        isola, laguna, castello, arena, botteghe, collisioni
 public/js/character.js    personaggi 3D procedurali, vestiti, armi, animazioni

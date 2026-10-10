@@ -642,6 +642,7 @@ export class World {
             const a = r() * Math.PI * 2, x = WORLD.ISLET.x + Math.cos(a) * 27, z = WORLD.ISLET.z + Math.sin(a) * 27;
             if (this.terrainAt(x, z) > 0.5 && (Math.abs(x) > 24 || Math.abs(z - WORLD.ISLET.z) > 24)) per[i % 3].push([x, z, 0.9, a]);
         }
+        this.mapTrees = per.flat();   // per la carta grande
         const m4 = new THREE.Matrix4();
         variants.forEach((g, vi) => {
             const list = per[vi];
@@ -667,6 +668,7 @@ export class World {
             if (h > 0.6 && !okSpot(x, z, 0.6)) continue;
             rocks.push([x, h, z, 0.3 + r() * (h < 0.4 ? 1.3 : 0.8)]);
         }
+        this.mapRocks = rocks;
         const rim = new THREE.InstancedMesh(rockG, new THREE.MeshStandardMaterial({ color: '#4d4757', roughness: 0.95, flatShading: true }), rocks.length);
         rocks.forEach(([x, y, z, s], i) => {
             rim.setMatrixAt(i, m4.compose(new THREE.Vector3(x, y + s * 0.2, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(r() * 3, r() * 3, r() * 3)), new THREE.Vector3(s * (1 + r() * 0.5), s * 0.65, s)));

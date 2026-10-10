@@ -26,6 +26,7 @@ import { TITLES, KING, MATS as MAT_INFO, GRAVES_LEVEL } from './shared/catalog.j
 import { INSULTS, TABLETS, NPCS } from './shared/lore.js';
 import { VEGLIA, PHONE_SPOT, FOUNTAIN } from './shared/catalog.js';
 import { Environment, Precipitation, applySky, clockText } from './sky.js';
+import { Atlas } from './atlas.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
@@ -809,7 +810,7 @@ class Game {
                 return;
             }
             if (this.panels.isOpen) { if (e.key === 'Escape') this.panels.close(); return; }
-            if (!$('#bigmap').classList.contains('hidden')) { if (['Escape', 'KeyN'].includes(e.code) || e.key === 'Escape') this.toggleBigMap(false); return; }
+            if (!$('#bigmap').classList.contains('hidden')) { if (['Escape', 'KeyN'].includes(e.code) || e.key === 'Escape') this.toggleBigMap(false); else this.atlas?.key(e); return; }
             this.keys[e.code] = true;
             if (e.repeat) return;
             const P = { KeyI: 'inventario', KeyC: 'card', KeyO: 'amici', Tab: 'classifica', KeyK: 'collezione', KeyP: 'impostazioni', KeyL: 'maestria', KeyJ: 'bacheca' };
@@ -1070,8 +1071,10 @@ class Game {
         box.scrollTop = box.scrollHeight;
     }
     toggleBigMap(on) {
+        if (on && !this.world) return;
         $('#bigmap').classList.toggle('hidden', !on);
-        if (on) { document.exitPointerLock?.(); this.drawBigMap(); }
+        if (on) { document.exitPointerLock?.(); (this.atlas ||= new Atlas(this)).open(); this.audio.play('open'); }
+        else if (this.atlas?.on) { this.atlas.close(); this.audio.play('close'); }
     }
     showZoneBanner(zone) {
         if (zone === this.lastBanner || this.mode !== 'world') return;
@@ -1079,50 +1082,6 @@ class Game {
         const b = $('#zone-banner');
         $('#zone-banner-text').textContent = zone;
         b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
-    }
-    drawBigMap() {
-        const c = $('#bigmap-canvas'), g = c.getContext('2d'), S = c.width, W = this.world, M = 34, I = S - M * 2;
-        const at = (x, z) => { const [px, py] = W.mapToPx(x, z, I); return [M + px, M + py]; };
-        // pergamena
-        const pg = g.createRadialGradient(S / 2, S / 2, S * 0.2, S / 2, S / 2, S * 0.75);
-        pg.addColorStop(0, '#efe2c0'); pg.addColorStop(0.7, '#dcc595'); pg.addColorStop(1, '#a8874f');
-        g.fillStyle = pg; g.fillRect(0, 0, S, S);
-        g.save();
-        g.filter = 'sepia(0.85) saturate(0.75) contrast(1.15) brightness(1.08)';
-        g.globalAlpha = 0.88;
-        g.drawImage(W.mapImage, M, M, I, I);
-        g.restore();
-        const vg = g.createRadialGradient(S / 2, S / 2, S * 0.3, S / 2, S / 2, S * 0.72);
-        vg.addColorStop(0, 'rgba(120,80,30,0)'); vg.addColorStop(1, 'rgba(90,55,20,0.55)');
-        g.fillStyle = vg; g.fillRect(0, 0, S, S);
-        g.strokeStyle = '#3a2410'; g.lineWidth = 3; g.strokeRect(M - 10, M - 10, I + 20, I + 20);
-        g.lineWidth = 1; g.strokeRect(M - 4, M - 4, I + 8, I + 8);
-        // rosa dei venti
-        g.save(); g.translate(S - 92, 98); g.fillStyle = '#5a1a10'; g.strokeStyle = '#3a2410'; g.lineWidth = 1.5;
-        for (let i = 0; i < 4; i++) { g.rotate(Math.PI / 2); g.beginPath(); g.moveTo(0, -42); g.lineTo(8, 0); g.lineTo(-8, 0); g.closePath(); if (i % 2) g.stroke(); else g.fill(); }
-        g.restore();
-        g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#3a1a08';
-        g.font = '900 22px Cinzel, serif'; g.fillText('N', S - 92, 44);
-        g.font = '700 34px Almendra, serif'; g.fillText("L'Isola Fantasma", S / 2, 58);
-        g.font = 'italic 17px Alegreya, serif'; g.fillText('e la Laguna dei Sospiri', S / 2, 86);
-        for (const m of W.mapMarkers) {
-            const [x, y] = at(m.x, m.z);
-            g.fillStyle = 'rgba(240,226,190,0.92)'; g.beginPath(); g.arc(x, y, 17, 0, Math.PI * 2); g.fill();
-            g.strokeStyle = '#3a2410'; g.lineWidth = 1.5; g.stroke();
-            drawIcon(g, m.ic, x, y, 22, '#3a1a08');
-            g.font = 'italic 700 18px Almendra, serif'; g.fillStyle = '#2b1606';
-            g.fillText(m.label, x, y + 30);
-        }
-        for (const p of this.players.values()) {
-            const q = p.ch.root.position, [x, y] = at(q.x, q.z);
-            g.fillStyle = this.isFriend(p.info.id) ? '#2a6a1a' : '#7a3a08';
-            g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2); g.fill();
-        }
-        const [px, py] = at(this.player.pos.x, this.player.pos.z);
-        g.save(); g.translate(px, py); g.rotate(Math.PI - this.player.yaw);
-        g.fillStyle = '#a3271c'; g.strokeStyle = '#2a0a04'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(0, -13); g.lineTo(9, 10); g.lineTo(0, 5); g.lineTo(-9, 10); g.closePath(); g.fill(); g.stroke();
-        g.restore();
     }
     drawMinimap() {
         const g = this.mm, S = 360, W = this.world, P = this.player.pos;

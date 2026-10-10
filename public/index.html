@@ -130,9 +130,21 @@
 
     <!-- MAPPA GRANDE -->
     <div id="bigmap" class="overlay hidden">
-        <div class="bigmap-box">
-            <canvas id="bigmap-canvas" width="720" height="720"></canvas>
-            <button class="btn" id="bigmap-close">Arrotola la mappa</button>
+        <div class="atlas">
+            <canvas id="atlas-canvas" aria-label="Carta dell'Isola Fantasma"></canvas>
+            <div id="atlas-filters" class="atlas-filters"></div>
+            <div class="atlas-tools">
+                <button class="atlas-btn" id="atlas-in" title="Avvicina (+)">+</button>
+                <button class="atlas-btn" id="atlas-out" title="Allontana (−)">−</button>
+                <button class="atlas-btn" id="atlas-me" title="Torna da te (C)"></button>
+                <button class="atlas-btn" id="atlas-fit" title="Tutta la carta (0)"></button>
+            </div>
+            <div id="atlas-tip" class="atlas-tip hidden"></div>
+            <div id="atlas-card" class="atlas-card hidden"></div>
+            <div class="atlas-foot">
+                <span class="atlas-hint">Trascina per spostarti · rotella o pizzico per lo zoom · clicca i simboli (e gli scarabocchi)</span>
+                <button class="btn" id="bigmap-close">Arrotola la mappa</button>
+            </div>
         </div>
     </div>
 
