@@ -248,9 +248,11 @@ export const itemLevel = (id) => TIERS[itemTier(id)].lv;
 export const MATERIAL_LEVEL = { legno: 1, ferro: 1, osso: 3, ossidiana: 8, argento: 14, oro: 18 };
 export const HANDLE_LEVEL = { legno: 1, cuoio: 1, osso: 3, seta: 6, oro: 12 };
 export const GEM_LEVEL = 6;
+// alcune armi chiedono esperienza già da sole: la lancia, con la sua portata, dal livello 5
+export const TYPE_LEVEL = { lancia: 5 };
 export function weaponLevel(spec) {
     if (!spec) return 1;
-    return Math.max(MATERIAL_LEVEL[spec.material] || 1, HANDLE_LEVEL[spec.handle] || 1, spec.gem && spec.gem !== 'nessuna' ? GEM_LEVEL : 1);
+    return Math.max(TYPE_LEVEL[spec.type] || 1, MATERIAL_LEVEL[spec.material] || 1, HANDLE_LEVEL[spec.handle] || 1, spec.gem && spec.gem !== 'nessuna' ? GEM_LEVEL : 1);
 }
 // Come si comporta un capo con un seme: 'syn' in sintonia, 'rep' in ripulsa, null neutro
 export function gearAffinity(id, element) {

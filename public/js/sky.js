@@ -33,14 +33,24 @@ export const WEATHERS = {
     neve:      { name: 'Nevicata', icon: 'ghiaccio', cloud: 0.9, dim: 0.3, rain: 0, snow: 1, storm: 0, wind: 0.35 },
 };
 const WKEYS = ['cloud', 'dim', 'rain', 'snow', 'storm', 'wind'];
-export function slotWeather(slot) {
+const RAINY = ['pioggia', 'temporale'];
+const rawWeather = (slot) => {
     const r = hash(slot * 7919 + 13);
-    return r < 0.36 ? 'sereno' : r < 0.62 ? 'nuvoloso' : r < 0.78 ? 'pioggia' : r < 0.87 ? 'temporale' : 'neve';
+    return r < 0.42 ? 'sereno' : r < 0.72 ? 'nuvoloso' : r < 0.84 ? 'pioggia' : r < 0.9 ? 'temporale' : 'neve';
+};
+// mai due acquazzoni di fila
+export function slotWeather(slot) {
+    const w = rawWeather(slot);
+    return RAINY.includes(w) && RAINY.includes(rawWeather(slot - 1)) ? 'nuvoloso' : w;
 }
+// un acquazzone dura dai 2'30" ai 3'40", poi restano le nuvole
+const rainMs = (slot) => (150 + hash(slot * 31 + 7) * 70) * 1000;
 export function weatherAt(now) {
     const e = now - EPOCH, slot = Math.floor(e / WEATHER_MS), into = e - slot * WEATHER_MS;
-    const cur = slotWeather(slot), prev = slotWeather(slot - 1);
-    const k = smooth(0, 50000, into);   // 50 secondi per cambiare tempo
+    let cur = slotWeather(slot), prev = slotWeather(slot - 1);
+    let k = smooth(0, 50000, into);   // 50 secondi per cambiare tempo
+    if (RAINY.includes(prev)) prev = 'nuvoloso';   // l'acquazzone di prima era già finito
+    if (RAINY.includes(cur) && into > rainMs(slot)) { prev = cur; cur = 'nuvoloso'; k = smooth(rainMs(slot), rainMs(slot) + 50000, into); }
     const w = { id: cur, prev, k };
     for (const key of WKEYS) w[key] = lerp(WEATHERS[prev][key], WEATHERS[cur][key], k);
     // la neve si posa in un minuto e mezzo e si scioglie in due

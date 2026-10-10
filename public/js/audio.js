@@ -432,7 +432,7 @@ export class GameAudio {
         if (!this.loops) {
             this.loops = {
                 sea: this.loop('brown', 'lowpass', 420, 0.7), surf: this.loop('pink', 'bandpass', 1400, 0.6),
-                wind: this.loop('pink', 'bandpass', 420, 0.8), rain: this.loop('white', 'lowpass', 5200, 0.5),
+                wind: this.loop('pink', 'bandpass', 420, 0.8), rain: this.loop('pink', 'lowpass', 2600, 0.5),
                 fire: this.loop('brown', 'lowpass', 260, 0.7), brook: this.loop('white', 'bandpass', 2300, 0.9),
             };
         }
@@ -450,8 +450,9 @@ export class GameAudio {
             const gust = Math.max(0, Math.sin(now * 0.13) * Math.sin(now * 0.051 + 1.3) + 0.2);
             set('wind', (0.003 + (S.wind * 0.06 + Math.min(1, a.height || 0) * 0.015 + S.snow * 0.015) * gust) * M.wind * (ind ? 0.1 : duel ? 0.6 : 1), 1.5);
             L.wind.f.frequency.setTargetAtTime(300 + 260 * (0.5 + 0.5 * Math.sin(now * 0.21)) + S.wind * 200, now, 1.5);
-            set('rain', S.rain * (ind ? 0.14 : 0.3) * M.rain, 1);
-            L.rain.f.frequency.setTargetAtTime(ind ? 900 : 5200, now, 0.5);
+            // pioggia morbida: un fruscio basso, non un sibilo
+            set('rain', S.rain * (ind ? 0.06 : 0.13) * M.rain, 1.5);
+            L.rain.f.frequency.setTargetAtTime(ind ? 700 : 2600, now, 0.5);
             set('fire', (a.fire || 0) * 0.22 * M.fire, 0.4);
             set('brook', (a.fountain || 0) * 0.13 * rnd(0.8, 1.2) * M.fire, 0.15);
         }
@@ -461,7 +462,7 @@ export class GameAudio {
         if (out && night > 0.6 && S.rain < 0.2 && S.snow < 0.3 && a.sea < 0.75 && this.every('cricket', 0.5, 1.3)) this.cricket();
         if (out && night > 0.5 && (a.sea > 0.2 || /Cimitero/.test(a.zone || '')) && this.every('frog', 2, 6)) this.frog();
         if (out && night > 0.7 && this.every('owl', 25, 60)) this.owl();
-        if (S.rain > 0.3 && !duel && this.every('drip', 0.06, 0.3)) this.drip(S.rain, ind);
+        if (S.rain > 0.3 && !duel && this.every('drip', 0.15, 0.6)) this.drip(S.rain, ind);
         if (a.fire > 0.05 && this.every('crackle', 0.05 / a.fire, 0.35 / a.fire)) this.crackle(a.fire);
         if (ind && this.every('tick', 1, 1)) this.tick();
         if (!duel && this.every('mood', 70, 180)) this.mood(a, S);
@@ -505,7 +506,7 @@ export class GameAudio {
         [[0, 0.4], [0.62, 0.22], [0.9, 0.5]].forEach(([dl, du]) => this.osc(d, t + dl, { f0: 395, f1: 355, dur: du, vol: 0.06, a: 0.05, vib: 4, vibF: 5 }));
     }
     drip(r, ind) {
-        const d = this.dest({ amb: true, vol: rnd(0.2, 0.6) * r * (ind ? 0.4 : 1) * this.mix.rain, pan: rnd(-1, 1) }); if (!d) return;
+        const d = this.dest({ amb: true, vol: rnd(0.12, 0.35) * r * (ind ? 0.4 : 1) * this.mix.rain, pan: rnd(-1, 1) }); if (!d) return;
         this.osc(d, this.ctx.currentTime, { f0: rnd(1800, 4200), f1: rnd(900, 1800), dur: 0.03, vol: 0.05 });
     }
     crackle(k) {

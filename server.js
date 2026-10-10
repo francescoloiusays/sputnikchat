@@ -102,6 +102,14 @@ function migrate(p) {
         Object.assign(p, { titles: [], titleOn: null, comebacks: [...TOLL_START], tablets: [], recipes: [], npcs: [], episodes: 0, charisma: 0, rebirths: 0, frames: [], peakLeague: leagueOf(p.rating) });
         changed = true;
     }
+    // un'arma che ora chiede un livello più alto (la lancia dal 5) torna nella borsa
+    const wu = p.equipment?.weapon, w = wu && (p.inventory || []).find(i => i.uid === wu);
+    if (w && w.kind === 'weapon' && !w.legacy && weaponLevel(w.spec) > levelOf(p)) {
+        delete p.equipment.weapon;
+        const alt = p.inventory.find(i => i.kind === 'weapon' && (i.legacy || weaponLevel(i.spec) <= levelOf(p)));
+        if (alt) p.equipment.weapon = alt.uid;
+        changed = true;
+    }
     updateSeason(p);
     return changed;
 }
@@ -836,7 +844,7 @@ io.on('connection', (socket) => {
         const spec = sanitizeWeaponSpec(d.spec);
         if (!spec) return fail(reply, 'Progetto non valido');
         const need = weaponLevel(spec);
-        if (need > levelOf(me.p)) return fail(reply, `Mastro Brace lavora quei materiali solo dal livello ${need}`);
+        if (need > levelOf(me.p)) return fail(reply, `Mastro Brace forgia quest'arma solo dal livello ${need}`);
         if (me.p.inventory.length >= 80) return fail(reply, 'Inventario pieno');
         const cost = weaponCost(spec), bones = boneCost(spec);
         if (me.p.coins < cost) return fail(reply, 'Sputnik Coin insufficienti');

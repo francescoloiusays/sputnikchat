@@ -5,7 +5,7 @@ import { h, $, coin, fmt, toast, SOCKET_URL, loadImage, store } from './util.js'
 import {
     ITEMS, SLOTS, SLOT_NAMES, WEAPON_TYPES, MATERIALS, HANDLES, GEMS, ELEMENTS, ECONOMY,
     weaponStats, weaponCost, sanitizeWeaponSpec,
-    GEAR, SETS, gearAffinity, gearLines, itemLevel, weaponLevel, MATERIAL_LEVEL, HANDLE_LEVEL, GEM_LEVEL,
+    GEAR, SETS, gearAffinity, gearLines, itemLevel, weaponLevel, MATERIAL_LEVEL, HANDLE_LEVEL, GEM_LEVEL, TYPE_LEVEL,
     computeStats, dissonance, levelProgress, titleFor, TALENTS, TALENT_IDS, TALENT_CAP, XP, RESPEC_COST, RING, OPPOSITE,
     MATS, MAT_IDS, SEALS, CARD_GRADES, gradeOf, resolveMats, ENCHANT, ENCHANT_STEP, enchantCap, enchantCapNext, enchantMats, ALTAR_LEVEL,
     INFUSE, INFUSE_LEVEL, INFUSE_COST, FUSE, BLESSING, FISH, FISH_IDS, FISH_RARITY, FISH_DAILY, DIARY, GATHER, plusOf, ELEMENT_IDS, RUNE_NAMES,
@@ -760,7 +760,7 @@ export class Panels {
         const L = me.level || 1, req = weaponLevel(spec), tooLow = req > L;
         const parts = [
             sect('swords', "Tipo d'arma"),
-            h('div', { class: 'part-row' }, Object.entries(WEAPON_TYPES).filter(([k]) => k !== 'pugni').map(([k, v]) => this.slot({ ic: k, sel: spec.type === k, label: v.name, price: v.cost, title: v.name, onclick: choose('type', k) }))),
+            h('div', { class: 'part-row' }, Object.entries(WEAPON_TYPES).filter(([k]) => k !== 'pugni').map(([k, v]) => this.slot({ ic: k, sel: spec.type === k, label: v.name, price: v.cost, title: v.name, lock: lockLabel(TYPE_LEVEL[k] || 1, L), onclick: choose('type', k) }))),
             sect('anvil', 'Materiale'),
             h('div', { class: 'part-row' }, Object.entries(MATERIALS).map(([k, v]) => this.slot({ tint: v.color, sel: spec.material === k, label: v.name, price: v.cost || null, title: v.name, lock: lockLabel(MATERIAL_LEVEL[k] || 1, L), onclick: choose('material', k) }))),
             sect('fist', 'Impugnatura'),
