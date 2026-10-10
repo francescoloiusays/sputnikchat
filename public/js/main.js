@@ -103,6 +103,7 @@ class Game {
         if (this.local.settings.musicVol != null) this.audio.musicVol = this.local.settings.musicVol;
         if (this.local.settings.sfxVol != null) this.audio.sfxVol = this.local.settings.sfxVol;
         if (this.local.settings.ambVol != null) this.audio.ambVol = this.local.settings.ambVol;
+        Object.assign(this.audio.mix, this.local.settings.mix || {});
         this.net = new Net(SOCKET_URL);
         this.studio = new Studio();
         this.creator = new Creator(this.studio);
@@ -323,6 +324,7 @@ class Game {
         this.world?.setGather(p.gather);
         this.world?.setGraves(p.graves, p.level || 1);
         this.world?.setTablets(p.tablets || []);
+        if (this.world) this.world.watched = new Set(p.watched || []);
         this.setHolo(p.grade || 0);
         if ((p.grade || 0) >= 4 && !this.vivaFrames && this.local.cardSig === this.cardSignature()) this.buildViva();
         else if ((p.grade || 0) < 4 && this.vivaFrames) this.startViva(null);
@@ -616,6 +618,16 @@ class Game {
         const N = NPCS[id];
         if (N) this.audio.voice(id, N.lines[(this.panels.npcLine || 0) % N.lines.length]);
     }
+    // chi guarda una puntata dai quadri del cortile riceve qualche moneta
+    async watchEpisode(ep) {
+        if (!this.net.connected || !this.helloDone) return;
+        const r = await this.net.request('quadro:view', { video: ep.video });
+        if (r.ok && r.capped && !this.quadriCapped) { this.quadriCapped = true; toast('Per oggi i quadri ti hanno già dato tutte le monete: domani ricominciano', { icon: 'portrait', duration: 4000 }); }
+        if (!r.ok || !r.coins) return;
+        this.audio.play('coin');
+        if (r.first) toast(h('div', {}, h('b', {}, `Prima visione: +${r.coins} Sputnik Coin`), h('div', {}, `«${ep.title}» · hai visto ${r.seen} ${r.seen === 1 ? 'puntata' : 'puntate'} su ${r.total}`)), { kind: 'coin', icon: 'portrait', duration: 6000 });
+        else toast(`Rivedi «${ep.title}»: +${r.coins} Sputnik Coin`, { kind: 'coin', icon: 'portrait', duration: 3500 });
+    }
     async readTablet(el) {
         if (!this.net.connected || !this.helloDone) return this.openPanel('tavoletta', { el });
         const r = await this.net.request('tablet:read', { id: el });
@@ -854,7 +866,12 @@ class Game {
         const it = this.nearInteract;
         if (!it) { if (this.nearPlayer) this.openPanel('profilo', this.nearPlayer.info.id); return; }
         if (it.id === 'specchio') this.editAppearance();
-        else if (it.id === 'quadro') { document.exitPointerLock?.(); window.open('https://www.youtube.com/watch?v=' + this.world.gallery.current(it.painting).video, '_blank', 'noopener'); }
+        else if (it.id === 'quadro') {
+            document.exitPointerLock?.();
+            const ep = this.world.gallery.current(it.painting);
+            window.open('https://www.youtube.com/watch?v=' + ep.video, '_blank', 'noopener');
+            this.watchEpisode(ep);
+        }
         else if (it.id === 'canale') { document.exitPointerLock?.(); window.open('https://www.youtube.com/@SputnikHomies', '_blank', 'noopener'); }
         else if (it.id === 'altare') this.openPanel('altare');
         else if (it.id === 'pesca') this.fishing.start();

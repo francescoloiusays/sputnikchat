@@ -872,3 +872,6 @@ details summary { cursor: pointer; font-family: var(--label); font-weight: 700; 
     .toll-insult { font-size: 19px; }
 }
 .toll-ans { text-transform: none; font-family: var(--body); font-weight: 600; letter-spacing: 0; }
+/* Opzioni: volumi dei singoli suoni dell'ambiente */
+details.mix { margin-top: 10px; }
+details.mix .field { margin-top: 6px; }

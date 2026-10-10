@@ -1081,7 +1081,7 @@ export class World {
             this.scene.add(p);
             const P = p.userData.painting;
             const fx = x + Math.sin(ry) * 2.2, fz = z + Math.cos(ry) * 2.2;
-            this.interactables.push({ id: 'quadro', painting: P, x: fx, z: fz, r: 2.4, label: () => `Guarda su YouTube: ${this.gallery.current(P).title}` });
+            this.interactables.push({ id: 'quadro', painting: P, x: fx, z: fz, r: 2.4, label: () => { const ep = this.gallery.current(P); return `Guarda su YouTube: ${ep.title}${this.watched && !this.watched.has(ep.video) ? ' · prima visione: +10 monete' : ''}`; } });
         };
         for (const z of [C.z + 9.5, C.z - 1.5]) { painting(C.x - inX + 0.02, y0 + 3.1, z, Math.PI / 2); painting(C.x + inX - 0.02, y0 + 3.1, z, -Math.PI / 2); }
         for (const s of [-1, 1]) painting(C.x + s * 12.5, y0 + 3.1, inZn + 0.02, 0);

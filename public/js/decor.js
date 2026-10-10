@@ -6,25 +6,9 @@
 // =====================================================================
 import * as THREE from 'three';
 
-// Fotogrammi presi dai video del canale YouTube @SputnikHomies
-export const QUADRI = [
-    { file: 'q01.jpg', video: '5W3Q_vCkPvg', title: 'EP 10 — Inazuma Eleven, Nicknames e Acquedotti' },
-    { file: 'q02.jpg', video: 'D-pDWdZF99s', title: 'EP 13 — Preferiresti essere gay o Vannacci?' },
-    { file: 'q03.jpg', video: '08vo4JMP2D8', title: 'Ep. 11 — Complotti contro i supermercati' },
-    { file: 'q04.jpg', video: 'isfXnCLVDtw', title: 'EP 7 — Tanti fatti (con ospiti)' },
-    { file: 'q05.jpg', video: 'lRMVztSat5I', title: 'EP 12 — Fobie e giochi di parole' },
-    { file: 'q06.jpg', video: 'C991RgwapOQ', title: 'Ep. 8 — Parte 2' },
-    { file: 'q07.jpg', video: 'R0fcm0J_I6I', title: 'Ep. 9 — Il tempo di una lasagna' },
-    { file: 'q08.jpg', video: 'Tb3u5JmWzOw', title: 'EP 10 — Parte 2' },
-    { file: 'q09.jpg', video: 'LTYQOfOo6Ds', title: 'Ep. 11 — Complotti contro i superpoteri' },
-    { file: 'q10.jpg', video: 'ZheIILSYCWE', title: 'EP 12 — Fobie e giochi di parole, Parte 2' },
-    { file: 'q11.jpg', video: 'mw6FeyVxTCM', title: 'Ep. 8 — Parte 1' },
-    { file: 'q12.jpg', video: 'D-pDWdZF99s', title: 'EP 13 — Preferiresti essere gay o Vannacci?' },
-    { file: 'q13.jpg', video: 'isfXnCLVDtw', title: 'EP 7 — Tanti fatti (con ospiti)' },
-    { file: 'q14.jpg', video: '5W3Q_vCkPvg', title: 'EP 10 — Inazuma Eleven, Nicknames e Acquedotti' },
-    { file: 'q15.jpg', video: 'lRMVztSat5I', title: 'EP 12 — Fobie e giochi di parole' },
-    { file: 'q16.jpg', video: 'C991RgwapOQ', title: 'Ep. 8 — Parte 2' },
-];
+// l'elenco delle puntate è condiviso col server (le monete dei quadri)
+import { QUADRI } from './shared/lore.js';
+export { QUADRI };
 
 // --- FIAMMA PROCEDURALE ---
 const FIRE_VERT = `

@@ -1049,6 +1049,10 @@ export class Panels {
                 h('input', { type: 'range', class: 'range', min: 0, max: 1, step: 0.05, value: app.audio.sfxVol, oninput: (e) => { app.audio.setSfxVolume(+e.target.value); set.sfxVol = +e.target.value; app.saveLocal(); } }),
                 h('label', { class: 'field' }, 'Ambiente (mare, vento, pioggia, animali)'),
                 h('input', { type: 'range', class: 'range', min: 0, max: 1, step: 0.05, value: app.audio.ambVol, oninput: (e) => { app.audio.setAmbVolume(+e.target.value); set.ambVol = +e.target.value; app.saveLocal(); } }),
+                h('details', { class: 'mix' }, h('summary', {}, 'Regola i singoli suoni dell\'ambiente'),
+                    [['sea', 'Mare e onde'], ['wind', 'Vento'], ['rain', 'Pioggia e tuoni'], ['animals', 'Uccelli, grilli e altri animali'], ['fire', 'Fuochi e fontana'], ['mood', 'Suoni della nebbia (rumori lontani)']].map(([k, label]) => [
+                        h('label', { class: 'field' }, label),
+                        h('input', { type: 'range', class: 'range', min: 0, max: 1, step: 0.05, value: app.audio.mix[k], oninput: (e) => { app.audio.setMix(k, +e.target.value); (set.mix ||= {})[k] = +e.target.value; app.saveLocal(); } })])),
                 h('h3', { class: 'sect', html: iconSVG('eye') }, 'Controlli'),
                 h('label', { class: 'field' }, 'Sensibilità del mouse'),
                 h('input', { type: 'range', class: 'range', min: 0.4, max: 2.5, step: 0.1, value: set.sens || 1, oninput: (e) => { set.sens = +e.target.value; app.saveLocal(); } }),

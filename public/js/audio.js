@@ -182,6 +182,8 @@ export class GameAudio {
         this.sfxVol = 0.5;
         this.musicVol = 0.3;
         this.ambVol = 0.6;
+        // volumi dei singoli ambienti (Opzioni): 0..1, moltiplicano il volume dell'ambiente
+        this.mix = { sea: 1, wind: 1, rain: 1, animals: 1, fire: 1, mood: 1 };
         this.L = { x: 0, z: 0, yaw: 0 };   // chi ascolta (la camera)
         this.envS = null;
         this.next = {};
@@ -218,6 +220,7 @@ export class GameAudio {
     }
     setSfxVolume(v) { this.sfxVol = v; if (this.master) { this.master.gain.value = v; this.sfxVerb.gain.value = v; } }
     setAmbVolume(v) { this.ambVol = v; if (this.ambBus) { this.ambBus.gain.value = v; this.ambVerb.gain.value = v; } }
+    setMix(k, v) { if (k in this.mix) this.mix[k] = v; this.aT = 0; }
     setMusicVolume(v) {
         this.musicVol = v;
         for (const m of [this.music, this.battleMusic]) if (m && !m.fading) m.volume = v;
@@ -403,7 +406,7 @@ export class GameAudio {
     thunder(delay = 1) {
         if (!this.ctx) return;
         const near = Math.max(0, 1 - delay / 2.6);
-        const d = this.dest({ amb: true, vol: 0.55 + near * 0.6, pan: rnd(-0.6, 0.6), verb: 0.6 });
+        const d = this.dest({ amb: true, vol: (0.55 + near * 0.6) * this.mix.rain, pan: rnd(-0.6, 0.6), verb: 0.6 });
         if (!d) return;
         const t = this.ctx.currentTime + delay;
         if (near > 0.4) this.nz(d, t, { type: 'highpass', f0: 1800, dur: 0.3, vol: 0.5 * near });
@@ -429,26 +432,28 @@ export class GameAudio {
         if (!this.loops) {
             this.loops = {
                 sea: this.loop('brown', 'lowpass', 420, 0.7), surf: this.loop('pink', 'bandpass', 1400, 0.6),
-                wind: this.loop('pink', 'bandpass', 500, 1.4), rain: this.loop('white', 'lowpass', 5200, 0.5),
+                wind: this.loop('pink', 'bandpass', 420, 0.8), rain: this.loop('white', 'lowpass', 5200, 0.5),
                 fire: this.loop('brown', 'lowpass', 260, 0.7), brook: this.loop('white', 'bandpass', 2300, 0.9),
             };
         }
         const S = this.envS || { day: 0, rain: 0, snow: 0, wind: 0.2, storm: 0 };
-        const L = this.loops, now = this.ctx.currentTime;
+        const L = this.loops, now = this.ctx.currentTime, M = this.mix;
         const ind = !!a.indoor, duel = !!a.duel, muff = ind ? 0.25 : duel ? 0.4 : 1;
         this.aT = (this.aT || 0) - dt;
         if (this.aT <= 0) {
             this.aT = 0.2;
             const swell = 0.62 + 0.38 * Math.sin(now * 0.42) * Math.sin(now * 0.13 + 1.7);
             const set = (n, v, tc) => L[n].g.gain.setTargetAtTime(Math.max(0, v), now, tc);
-            set('sea', a.sea * 0.55 * swell * muff, 0.8);
-            set('surf', a.sea * a.sea * 0.22 * swell * swell * muff, 0.8);
-            set('wind', (0.05 + S.wind * 0.2 + Math.min(1, a.height || 0) * 0.05 + S.snow * 0.06) * (ind ? 0.1 : duel ? 0.6 : 1), 1.2);
-            L.wind.f.frequency.setTargetAtTime(380 + 420 * (0.5 + 0.5 * Math.sin(now * 0.21)) + S.wind * 300, now, 1.5);
-            set('rain', S.rain * (ind ? 0.14 : 0.3), 1);
+            set('sea', a.sea * 0.4 * swell * muff * M.sea, 0.8);
+            set('surf', a.sea * a.sea * 0.13 * swell * swell * muff * M.sea, 0.8);
+            // il vento arriva a raffiche e si sente davvero solo col brutto tempo o in alto
+            const gust = Math.max(0, Math.sin(now * 0.13) * Math.sin(now * 0.051 + 1.3) + 0.2);
+            set('wind', (0.003 + (S.wind * 0.06 + Math.min(1, a.height || 0) * 0.015 + S.snow * 0.015) * gust) * M.wind * (ind ? 0.1 : duel ? 0.6 : 1), 1.5);
+            L.wind.f.frequency.setTargetAtTime(300 + 260 * (0.5 + 0.5 * Math.sin(now * 0.21)) + S.wind * 200, now, 1.5);
+            set('rain', S.rain * (ind ? 0.14 : 0.3) * M.rain, 1);
             L.rain.f.frequency.setTargetAtTime(ind ? 900 : 5200, now, 0.5);
-            set('fire', (a.fire || 0) * 0.22, 0.4);
-            set('brook', (a.fountain || 0) * 0.13 * rnd(0.8, 1.2), 0.15);
+            set('fire', (a.fire || 0) * 0.22 * M.fire, 0.4);
+            set('brook', (a.fountain || 0) * 0.13 * rnd(0.8, 1.2) * M.fire, 0.15);
         }
         const out = !ind && !duel, night = 1 - S.day;
         if (out && S.day > 0.55 && S.rain < 0.2 && S.snow < 0.5 && a.sea < 0.85 && this.every('bird', 2.5, 7)) this.bird();
@@ -471,7 +476,7 @@ export class GameAudio {
         return true;
     }
     bird() {
-        const d = this.dest({ amb: true, vol: rnd(0.4, 0.9), pan: rnd(-0.9, 0.9), verb: 0.15 }); if (!d) return;
+        const d = this.dest({ amb: true, vol: rnd(0.4, 0.9) * this.mix.animals, pan: rnd(-0.9, 0.9), verb: 0.15 }); if (!d) return;
         const t = this.ctx.currentTime, base = rnd(2200, 4200), n = 2 + (Math.random() * 5 | 0), trill = Math.random() < 0.5;
         for (let i = 0; i < n; i++) {
             const tt = t + i * rnd(0.08, 0.16);
@@ -480,31 +485,31 @@ export class GameAudio {
         }
     }
     gull(sea) {
-        const d = this.dest({ amb: true, vol: 0.6 * sea, pan: rnd(-0.9, 0.9), verb: 0.3 }); if (!d) return;
+        const d = this.dest({ amb: true, vol: 0.6 * sea * this.mix.animals, pan: rnd(-0.9, 0.9), verb: 0.3 }); if (!d) return;
         const t = this.ctx.currentTime;
         for (let i = 0, n = 2 + (Math.random() * 3 | 0); i < n; i++) this.osc(d, t + i * 0.28, { type: 'sawtooth', f0: rnd(1250, 1450), f1: rnd(850, 1000), dur: 0.24, vol: 0.05, filter: 'bandpass', ff: 1800, fq: 3, vib: 40, vibF: 18 });
     }
     cricket() {
-        const d = this.dest({ amb: true, vol: rnd(0.25, 0.6), pan: rnd(-1, 1) }); if (!d) return;
+        const d = this.dest({ amb: true, vol: rnd(0.25, 0.6) * this.mix.animals, pan: rnd(-1, 1) }); if (!d) return;
         const t = this.ctx.currentTime, f = rnd(4200, 5200);
         for (let i = 0; i < 3; i++) this.osc(d, t + i * 0.055, { f0: f, dur: 0.03, vol: 0.045, a: 0.004, trem: 90 });
     }
     frog() {
-        const d = this.dest({ amb: true, vol: rnd(0.4, 0.8), pan: rnd(-1, 1), verb: 0.1 }); if (!d) return;
+        const d = this.dest({ amb: true, vol: rnd(0.4, 0.8) * this.mix.animals, pan: rnd(-1, 1), verb: 0.1 }); if (!d) return;
         const t = this.ctx.currentTime;
         for (let i = 0, n = 1 + (Math.random() * 2 | 0); i < n; i++) this.osc(d, t + i * 0.32, { type: 'sawtooth', f0: rnd(110, 150), f1: rnd(85, 110), dur: 0.22, vol: 0.07, filter: 'bandpass', ff: 520, fq: 4, trem: 32 });
     }
     owl() {
-        const d = this.dest({ amb: true, vol: 0.7, pan: rnd(-1, 1), verb: 0.5 }); if (!d) return;
+        const d = this.dest({ amb: true, vol: 0.7 * this.mix.animals, pan: rnd(-1, 1), verb: 0.5 }); if (!d) return;
         const t = this.ctx.currentTime;
         [[0, 0.4], [0.62, 0.22], [0.9, 0.5]].forEach(([dl, du]) => this.osc(d, t + dl, { f0: 395, f1: 355, dur: du, vol: 0.06, a: 0.05, vib: 4, vibF: 5 }));
     }
     drip(r, ind) {
-        const d = this.dest({ amb: true, vol: rnd(0.2, 0.6) * r * (ind ? 0.4 : 1), pan: rnd(-1, 1) }); if (!d) return;
+        const d = this.dest({ amb: true, vol: rnd(0.2, 0.6) * r * (ind ? 0.4 : 1) * this.mix.rain, pan: rnd(-1, 1) }); if (!d) return;
         this.osc(d, this.ctx.currentTime, { f0: rnd(1800, 4200), f1: rnd(900, 1800), dur: 0.03, vol: 0.05 });
     }
     crackle(k) {
-        const d = this.dest({ amb: true, vol: Math.min(1, k * 1.3), pan: rnd(-0.4, 0.4) }); if (!d) return;
+        const d = this.dest({ amb: true, vol: Math.min(1, k * 1.3) * this.mix.fire, pan: rnd(-0.4, 0.4) }); if (!d) return;
         const t = this.ctx.currentTime;
         for (let i = 0, n = 1 + (Math.random() * 3 | 0); i < n; i++) this.nz(d, t + i * rnd(0.01, 0.04), { type: 'highpass', f0: rnd(1500, 4000), dur: rnd(0.008, 0.03), vol: rnd(0.05, 0.2) });
     }
@@ -540,7 +545,7 @@ export class GameAudio {
             : a.sea > 0.4 ? ['foghorn', 'whale', 'drone', 'bell']
             : night ? ['whisper', 'drone', 'howl', 'bell'] : ['drone', 'bell', 'howl'];
         const k = pick(opts);
-        const d = this.dest({ amb: true, vol: 0.9, pan: rnd(-0.8, 0.8), verb: 0.9 }); if (!d) return;
+        const d = this.dest({ amb: true, vol: 0.9 * this.mix.mood, pan: rnd(-0.8, 0.8), verb: 0.9 }); if (!d) return;
         const t = this.ctx.currentTime;
         switch (k) {
             case 'drone': for (const [f, v] of [[55, 0.06], [82.6, 0.04], [111, 0.035]]) this.osc(d, t, { type: 'sawtooth', f0: f, f1: f * rnd(0.97, 1.03), dur: 8, vol: v, a: 3, hold: 2, filter: 'lowpass', ff: 320, det: rnd(-10, 10) }); break;

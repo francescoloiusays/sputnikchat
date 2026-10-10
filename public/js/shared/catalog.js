@@ -856,6 +856,9 @@ export const TOLL = { level: 4, coins: 40, xp: 25, wins: 3, losses: 3, spot: { x
 export const WHITE_ROOM = { x: 0, z: -118.8, w: 10, d: 8, floor: 7.6 };
 export const inWhiteRoom = (x, y, z) => Math.abs(x - WHITE_ROOM.x) < WHITE_ROOM.w / 2 + 0.3 && Math.abs(z - WHITE_ROOM.z) < WHITE_ROOM.d / 2 + 0.3 && y > WHITE_ROOM.floor - 1;
 export const PHONE_SPOT = { x: 2.67, z: -117.65 };
+// I quadri delle puntate nel cortile del castello: la prima volta che apri una puntata 10 monete,
+// poi 1 o 2 ogni volta che la riapri (dopo almeno un minuto, fino a 20 monete al giorno)
+export const QUADRI_COINS = { first: 10, cooldown: 60 * 1000, daily: 20, castle: { x: 0, z: -104, half: 21 } };
 export const ONDA = { level: 6, questions: 3, voteMs: 14000, hostXp: 20, splitXp: 45, voterXp: 8, charisma: 0.005, charismaMax: 0.1 };
 
 // --- CASTONI E PAROLE DI RUNA (Mastro Brace) ---

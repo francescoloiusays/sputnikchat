@@ -21,9 +21,9 @@ import {
     FISH_IDS, STONES, boneCost, romeTime, weekOf, seasonOf, seasonEnds, LEAGUES, leagueOf, RANKED_LEVEL, isFriday, TITLES,
     CANTO, CANTO_SEEDS, cantoMinMs, cantoSeq, GRAVES, GRAVES_LEVEL, GRAVES_CURSED, graveNeighbors,
     BOUNTY_BOARD, BOUNTIES, WEEKLY, BOUNTY_REWARD, rollBounties, FOUNTAIN, WISHES, TOLL, ONDA, inWhiteRoom, PHONE_SPOT,
-    SOCKETS, SOCKET_CLEAR, RUNEWORDS, runeWordOf, VEGLIA, vegliaOpen, KING, REBIRTH,
+    SOCKETS, SOCKET_CLEAR, RUNEWORDS, runeWordOf, VEGLIA, vegliaOpen, KING, REBIRTH, QUADRI_COINS,
 } from './public/js/shared/catalog.js';
-import { INSULTS, TOLL_START, TOLL_LINES, NPCS, ONDA_Q, ONDA_PLOT, TABLETS, MISSIONS, PHONE_LINES } from './public/js/shared/lore.js';
+import { INSULTS, TOLL_START, TOLL_LINES, NPCS, ONDA_Q, ONDA_PLOT, TABLETS, MISSIONS, PHONE_LINES, QUADRI } from './public/js/shared/lore.js';
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -270,7 +270,7 @@ function privateView(p) {
         league: leagueOf(p.rating), season: p.season, bounty: ensureBounties(p), graves: gravesView(p),
         cantoLeft: Math.max(0, CANTO.daily - (dayc(p).canto || 0)), cantoBest: p.cantoBest || 0, wishedToday: p.wishDay === d,
         fountainUntil: p.fountain?.until || 0, tollToday: p.tollDay === d, ondaToday: p.ondaDay === d,
-        veglia: p.veglia || null, kingWeek: p.kingWeek || null,
+        veglia: p.veglia || null, kingWeek: p.kingWeek || null, watched: Object.keys(p.watched || {}),
         friends: p.friends.map(id => ({ id, name: byPid(id)?.name || '???', online: sidByPid.has(id) })),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
         collectionCount: p.collection.length,
@@ -1246,6 +1246,23 @@ io.on('connection', (socket) => {
         else if (W.id === 'pergamena') addMat(p, 'pergamena', 1);
         save(p); sendMe(me);
         reply({ ok: true, wish: W.id, text: W.text });
+    });
+
+    // --- I QUADRI DELLE PUNTATE (cortile del castello) ---
+    const EPISODES = new Set(QUADRI.map(q => q.video));
+    on('quadro:view', (d, reply) => {
+        const video = String(d.video || ''), C = QUADRI_COINS.castle;
+        if (!EPISODES.has(video)) return fail(reply, 'Questo quadro non mostra una puntata');
+        if (Math.abs(me.pos[0] - C.x) > C.half || Math.abs(me.pos[2] - C.z) > C.half) return fail(reply, 'I quadri sono nel cortile del castello');
+        const p = me.p, now = Date.now(), c = dayc(p);
+        p.watched ||= {};
+        const last = p.watched[video];
+        let coins = 0;
+        if (!last) coins = QUADRI_COINS.first;
+        else if (now - last >= QUADRI_COINS.cooldown) coins = Math.min(1 + crypto.randomInt(2), QUADRI_COINS.daily - (c.quadri || 0));
+        if (last && coins > 0) c.quadri = (c.quadri || 0) + coins;
+        if (coins > 0) { p.watched[video] = now; p.coins += coins; save(p); sendMe(me); }
+        reply({ ok: true, coins, first: !last, capped: !!last && (c.quadri || 0) >= QUADRI_COINS.daily, seen: Object.keys(p.watched).length, total: EPISODES.size });
     });
 
     // --- IL PEDAGGIO DELLO SPETTRO (Ponte dei Sospiri) ---
