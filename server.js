@@ -42,7 +42,7 @@ const server = http.createServer((req, res) => {
     try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400).end(); return; }
     if (p === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify({ ok: true, online: online.size, duels: duels.size }));
+        res.end(JSON.stringify({ ok: true, online: online.size, duels: duels.size, store: store.kind, save: SAVE_KEYS[0][0] }));
         return;
     }
     if (p === '/' || p.endsWith('/')) p += 'index.html';
@@ -203,7 +203,7 @@ function shortId() {
     return id;
 }
 const byPid = pid => { const t = pidIndex.get(pid); return t ? store.get(t) : null; };
-const save = p => store.put(p);
+const save = p => { p.savedAt = Date.now(); store.put(p); queueSave(p); };
 const int = (v, lo, hi) => { v = Math.floor(Number(v)); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; };
 
 function newProfile(d) {
@@ -278,6 +278,51 @@ function privateView(p) {
 }
 function sendMe(S) { if (S) S.socket.emit('me', privateView(S.p)); }
 const sessionOf = pid => { const sid = sidByPid.get(pid); return sid ? online.get(sid) : null; };
+
+// --- SALVATAGGIO NEL BROWSER ---
+// Sul piano gratuito di Render il disco si azzera a ogni riavvio: senza MONGODB_URI livello, monete e
+// inventario andrebbero persi. Ogni giocatore tiene nel browser una copia firmata del proprio profilo
+// (aggiornata a ogni salvataggio): se il server l'ha dimenticato, al rientro la ritrova lì.
+// La firma HMAC impedisce di ritoccarla; vale solo la copia più recente di quella del server.
+const SAVE_KEYS = (() => {
+    const keys = [];
+    if (process.env.SAVE_SECRET) keys.push(['env', process.env.SAVE_SECRET]);
+    if (process.env.RENDER_SERVICE_ID) keys.push(['render', 'sputnik-save:' + process.env.RENDER_SERVICE_ID]);
+    if (!keys.length) {   // in locale il disco resta: la chiave vive accanto a db.json
+        const f = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'save-key');
+        let k = '';
+        try { k = fs.readFileSync(f, 'utf8').trim(); } catch { /* prima volta */ }
+        if (!k) { k = crypto.randomBytes(32).toString('hex'); try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, k); } catch { /* ok */ } }
+        keys.push(['file', k]);
+    }
+    return keys;
+})();
+const signSave = (body, key) => crypto.createHmac('sha256', key).update(body).digest('base64url');
+function saveTicket(p) {
+    const { cardImage, ...data } = p;
+    const l = store.listings().filter(x => x.seller === p.id).map(x => ({ lid: x.lid, entry: x.entry }));
+    const body = Buffer.from(JSON.stringify({ t: p.savedAt || Date.now(), p: data, l })).toString('base64url');
+    return 'v1.' + body + '.' + signSave(body, SAVE_KEYS[0][1]);
+}
+function readSave(ticket, token) {
+    if (typeof ticket !== 'string' || ticket.length > 400000) return null;
+    const [v, body, sig] = ticket.split('.');
+    if (v !== 'v1' || !body || !sig) return null;
+    const got = Buffer.from(sig);
+    if (!SAVE_KEYS.some(([, k]) => { const want = Buffer.from(signSave(body, k)); return want.length === got.length && crypto.timingSafeEqual(want, got); })) return null;
+    try {
+        const s = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+        if (!s?.p?.token || !s.p.id || (token && s.p.token !== token)) return null;
+        return s;
+    } catch { return null; }
+}
+// la copia parte poco dopo l'ultimo salvataggio, solo per chi è collegato
+function queueSave(p) {
+    const S = sessionOf(p.id);
+    if (!S || S.p !== p || S.saveT) return;
+    S.saveT = setTimeout(() => { S.saveT = null; if (online.has(S.sid)) S.socket.emit('save', saveTicket(S.p)); }, 1200);
+}
+
 function notify(S, text, kind = 'info') { if (S) S.socket.emit('notify', { text, kind }); }
 function sysChat(room, text) { io.to(room).emit('chat', { id: null, name: '⚜', text, sys: true }); }
 
@@ -658,7 +703,24 @@ io.on('connection', (socket) => {
 
     on('hello', (d, reply) => {
         if (me) return reply({ ok: false, msg: 'Già connesso' });
-        let p = d.token ? store.get(String(d.token)) : null;
+        const kept = d.save ? readSave(d.save, d.token ? String(d.token) : null) : null;
+        const token = d.token ? String(d.token) : kept?.p.token;
+        let p = token ? store.get(token) : null;
+        // il server si è dimenticato di te (riavvio) o ha una copia più vecchia: vale quella del browser
+        let restored = false;
+        if (kept && (!p || (p.savedAt || 0) < kept.t)) {
+            const old = p;
+            p = kept.p;
+            if (!p.cardImage && old?.cardImage) p.cardImage = old.cardImage;
+            // gli annunci del Bazar persi nel riavvio tornano nella borsa
+            const live = new Set(store.listings().map(l => l.lid));
+            for (const l of kept.l || []) if (l?.entry && !live.has(l.lid)) p.inventory.push(l.entry);
+            if (pidIndex.has(p.id) && pidIndex.get(p.id) !== p.token) p.id = shortId();
+            pidIndex.set(p.id, p.token);
+            store.put(p);
+            restored = !old;
+            console.log(`[save] ${p.name} (${p.id}) recuperato dal browser`);
+        }
         const created = !p;
         let dropped = false;
         if (!p) p = newProfile(d);
@@ -692,7 +754,8 @@ io.on('connection', (socket) => {
         sidByPid.set(p.id, socket.id);
         const seasonMsg = p.seasonMsg || null;
         if (seasonMsg) { delete p.seasonMsg; save(p); }
-        reply({ ok: true, token: p.token, profile: privateView(p), daily, dailyXp: daily ? XP.DAILY : 0, created, dropped, seasonMsg });
+        reply({ ok: true, token: p.token, profile: privateView(p), daily, dailyXp: daily ? XP.DAILY : 0, created, dropped, seasonMsg,
+            restored, saveBad: !!d.save && !kept, save: saveTicket(p), now: Date.now() });
         joinRoom(me, 'pub');
         for (const fid of p.friends) { const F = sessionOf(fid); if (F) F.socket.emit('friend:status', { id: p.id, name: p.name, online: true }); }
         console.log(`+ ${p.name} (${p.id}) — online: ${online.size}`);
@@ -1679,6 +1742,7 @@ io.on('connection', (socket) => {
             for (const fid of p.friends) { const F = sessionOf(fid); if (F) F.socket.emit('friend:status', { id: p.id, name: p.name, online: false }); }
         }
         cleanupSession(me.room, me);
+        clearTimeout(me.saveT);
         p.lastSeen = Date.now();
         save(p);
         console.log(`- ${p.name} — online: ${online.size}`);

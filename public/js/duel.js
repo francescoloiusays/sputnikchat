@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { Character } from './character.js';
 import { makeSky, makeWaterMaterial, glowTexture } from './world.js';
 import { FireSet, makeSconce, Gallery } from './decor.js';
+import { applySky, Precipitation } from './sky.js';
 import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration } from './shared/fight.js';
 import { ELEMENTS, ECONOMY, weaponStats, seedRelation, MATS } from './shared/catalog.js';
 
@@ -24,7 +25,8 @@ import { h, $, coin, fmt, toast, IS_MOBILE } from './util.js';
 import { elIcon, iconSVG } from './icons.js';
 
 const ACTION_OF = { light: 'light', heavy: 'heavy', air: 'air', up: 'up', sp: 'special' };
-const SPECIAL_SFX = { fiammata: 'fire', gelo: 'ice', saetta: 'thunder', frana: 'heavy', fango: 'splash', miasma: 'special', passo: 'dash' };
+const SPECIAL_SFX = { fiammata: 'fire', gelo: 'ice', saetta: 'thunder', frana: 'rock', fango: 'mudhit', miasma: 'ghost', passo: 'dash' };
+const HEAVY_WEAPONS = ['martello', 'ascia', 'falce', 'bastone'];
 
 function textSprite(text, color = '#fff', size = 64) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 96;
@@ -94,9 +96,9 @@ export class DuelView {
     buildStage() {
         const s = this.scene;
         s.fog = new THREE.FogExp2('#2d0a45', 0.012);
-        s.add(makeSky());
-        s.add(new THREE.HemisphereLight('#7a5aaa', '#1a1022', 1.0));
-        const moon = new THREE.DirectionalLight('#c8c0ff', 1.3);
+        s.add(this.sky = makeSky());
+        s.add(this.hemi = new THREE.HemisphereLight('#7a5aaa', '#1a1022', 1.0));
+        const moon = this.moonL = new THREE.DirectionalLight('#c8c0ff', 1.3);
         moon.position.set(-6, 14, 10); moon.castShadow = !IS_MOBILE;
         moon.shadow.mapSize.set(1024, 1024);
         const sc = moon.shadow.camera; sc.left = -14; sc.right = 14; sc.top = 14; sc.bottom = -6;
@@ -158,6 +160,7 @@ export class DuelView {
         const water = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), makeWaterMaterial(null));
         water.rotation.x = -Math.PI / 2; water.position.y = -10;
         this.water = water; s.add(water);
+        this.precip = new Precipitation(s, { count: 700 });
         // braci che salgono
         const n = 160, pos = new Float32Array(n * 3);
         for (let i = 0; i < n; i++) pos.set([(Math.random() - 0.5) * 40, Math.random() * 16 - 4, (Math.random() - 0.5) * 10 - 3], i * 3);
@@ -351,8 +354,20 @@ export class DuelView {
     }
 
     // --- CICLO ---
+    // stessa ora e stesso tempo dell'isola, un po' più luminosi: l'Arena deve leggersi bene
+    applyEnv(S, boost = 0) {
+        applySky(this.sky, S, this.t);
+        this.hemi.color.copy(S.hemiS); this.hemi.groundColor.copy(S.hemiG); this.hemi.intensity = S.hemiI * 1.15 + boost;
+        this.moonL.color.copy(S.dir); this.moonL.intensity = S.dirI * 1.3;
+        this.scene.fog.color.copy(S.fog); this.scene.fog.density = S.fogD * 1.4;
+        const u = this.water.material.uniforms;
+        u.uDeep.value.copy(S.water[0]); u.uShallow.value.copy(S.water[1]); u.uSky.value.copy(S.water[2]); u.uHor.value.copy(S.water[3]);
+        this.embers.visible = S.rain < 0.5;
+        this.precip.update(this.envDt || 0, this.camera.position, S, false);
+    }
     update(dt) {
         this.t += dt;
+        this.envDt = dt;
         if (this.role !== 'spectator') this.readJoy();
         if (this.role === 'local' && !this.ended) {
             this.acc += Math.min(dt, 0.1);
@@ -415,6 +430,12 @@ export class DuelView {
             const targetRy = f.facing > 0 ? Math.PI / 2 - 0.35 : -Math.PI / 2 + 0.35;
             ch.root.rotation.y += (targetRy - ch.root.rotation.y) * Math.min(1, dt * 18);
             let st = f.st, action = null;
+            // fendente: un colpo d'aria quando parte un attacco (più cupo per le armi pesanti)
+            if (f.st === 'atk' && (F.pst !== 'atk' || F.pmv !== f.mv || f.mt < F.pmt - 0.05)) {
+                const wt = F.info.look?.weapon?.type;
+                this.app.audio.play('swing', { heavy: f.mv === 'heavy' || HEAVY_WEAPONS.includes(wt), blade: !HEAVY_WEAPONS.includes(wt), vol: 0.85 });
+            }
+            F.pst = f.st; F.pmv = f.mv; F.pmt = f.mt;
             if (st === 'atk') {
                 const dur = moveDuration({ aspd: F.aspd, special: F.special }, f.mv);
                 action = { name: ACTION_OF[f.mv] || 'light', p: f.mt / dur };

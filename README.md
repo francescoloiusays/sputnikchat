@@ -63,6 +63,10 @@ Client in HTML/JS con Three.js (GitHub Pages), server Node.js con socket.io (Ren
 
 Su telefono ci sono joystick e pulsanti a schermo.
 
+- **Salvataggi che non si perdono**: il browser di ogni giocatore custodisce una copia sigillata (firmata dal server) di livello, esperienza, monete, borsa e annunci al Bazar. Se il server si riavvia e si dimentica di te, al rientro riprende quella copia; una copia ritoccata a mano viene rifiutata. Il **codice di recupero** nelle Opzioni ora contiene tutto il profilo, quindi funziona anche su un altro dispositivo.
+- **Giorno, notte e meteo**: un giorno sull'isola dura 24 minuti (13 di giorno, 2 e mezzo di tramonto, 6 di notte, 2 e mezzo d'alba). Sole e luna si muovono, le ombre seguono la luce, il cielo passa dall'azzurro al viola della notte. Il tempo cambia ogni 7 minuti: soleggiato, nuvoloso, pioggia, temporale (con lampi e tuoni) e nevicata, con la neve che si posa su terreno e tetti. Ora e tempo sono uguali per tutti e compaiono sotto il nome della zona; durante la Veglia dei Morti è sempre notte. Nelle Opzioni c'è il cursore della **Luminosità**.
+- **Suoni dell'isola** (tutti sintetizzati, nessun file): passi diversi su erba, sentiero, sabbia, pietra, legno, acqua e neve; il mare che si sente avvicinandosi alla riva, vento, pioggia, crepitio dei fuochi, la fontana; uccelli e gabbiani di giorno, grilli, rane e civette di notte; i rumori dei personaggi al lavoro (l'incudine di Mastro Brace, la vanga del Becchino, il lamento dello Spettro...); una voce diversa per ogni abitante quando parla; fendenti, colpi, gesti, pesca, scavi, tavolette, telefono e livelli; e ogni tanto, come nelle grotte di Minecraft, un **suono della nebbia** lontano (campane, catene, sussurri, una sirena da nebbia, il canto di una balena). Nelle Opzioni c'è un volume a parte per l'ambiente.
+
 ## Struttura
 
 ```
@@ -71,6 +75,8 @@ server/store.js           salvataggi (MongoDB se c'è MONGODB_URI, altrimenti da
 public/index.html         pagina del gioco
 public/css/style.css
 public/js/main.js         avvio, mondo in terza persona, rete, HUD, minimappa, voice chat
+public/js/sky.js          ciclo giorno/notte, meteo, pioggia e neve
+public/js/audio.js        musica ed effetti, passi, ambienti, versi, voci dei personaggi
 public/js/world.js        isola, laguna, castello, arena, botteghe, collisioni
 public/js/character.js    personaggi 3D procedurali, vestiti, armi, animazioni
 public/js/duel.js         vista del duello 2.5D
@@ -96,6 +102,8 @@ public/js/shared/         regole condivise da client e server (catalogo e motore
 2. **Render**: build `npm install`, start `npm start`. Non serve più express: l'unica dipendenza è socket.io (`mongodb` è facoltativo).
 3. **Salvataggi permanenti (consigliato)**: sul piano gratuito di Render il disco si azzera a ogni riavvio, quindi monete, inventari e classifica andrebbero persi. Crea un database gratuito su MongoDB Atlas (piano M0) e aggiungi su Render la variabile d'ambiente `MONGODB_URI` con la stringa di connessione. Senza questa variabile il server salva in `data/db.json`.
 
+4. **Copia sigillata dei profili**: funziona da sola, senza configurare nulla. La firma usa la variabile `SAVE_SECRET` se c'è, altrimenti l'identificativo del servizio Render (`RENDER_SERVICE_ID`). In locale la chiave sta in `data/save-key`. L'indirizzo `/health` del server dice quale salvataggio è attivo. Con MongoDB restano salvati anche la classifica completa e gli annunci degli altri; senza, quelli si ricompongono man mano che i giocatori rientrano.
+
 Il server gratuito di Render si addormenta dopo 15 minuti: al primo accesso può impiegare fino a un minuto a svegliarsi. Nel frattempo il gioco si apre lo stesso e si collega appena il server è pronto.
 
 ## Provarlo in locale
@@ -107,7 +115,9 @@ npm start
 
 Apri `http://localhost:3000`. Per simulare un secondo giocatore nello stesso browser usa `http://localhost:3000/?p=2` (profilo separato).
 
-Il personaggio è legato al browser. In Impostazioni trovi il **codice di recupero** per riaprirlo su un altro dispositivo.
+Il personaggio è legato al browser. In Opzioni trovi il **codice di recupero** per riaprirlo su un altro dispositivo.
+
+Per provare il cielo senza aspettare: `?ora=13` fissa l'ora dell'isola e `?meteo=sereno|nuvoloso|pioggia|temporale|neve` fissa il tempo (solo per chi apre quell'indirizzo).
 
 ## Crediti
 

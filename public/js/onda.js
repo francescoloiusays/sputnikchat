@@ -21,12 +21,13 @@ export class Onda {
             this.ep = { ...e, mine: e.hosts.includes(app.me?.name) };
             if (!this.here()) toast(h('div', {}, h('b', {}, 'In Onda!'), h('div', {}, `${e.hosts.join(' e ')}${e.ratto ? ' e il Ratto' : ''} sono in diretta dalla Stanza Bianca: sali al mastio per votare.`)), { icon: 'mic', duration: 7000 });
             else this.show(h('div', { class: 'onda-title' }, 'IN ONDA!'), h('div', { class: 'onda-sub' }, `Conducono ${e.hosts.join(' e ')}${e.ratto ? ' con il Ratto' : ''}`));
-            app.audio.play('special');
+            app.audio.play(this.here() ? 'tv' : 'notify');
         });
         N.on('onda:q', (q) => {
             if (!this.ep) this.ep = { hosts: q.hosts || [], mine: (q.hosts || []).includes(app.me?.name) };
             this.q = { ...q, voted: null, ends: performance.now() + q.ms };
             this.renderQ();
+            if (this.here()) app.audio.voice('ratto', q.text);
         });
         N.on('onda:res', (r) => {
             if (!this.q || !this.here()) return;

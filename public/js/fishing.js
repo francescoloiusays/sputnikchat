@@ -157,7 +157,7 @@ export class Fishing {
         this.state = 'cast';
         this.setHint('Lancio...', '');
         app.myChar.play?.('throw', 0.5);
-        app.audio.play('throw');
+        app.audio.play('cast');
         const P = app.player.pos;
         this.target = new THREE.Vector3(P.x + (Math.random() - 0.5) * 1.6, 0.02, P.z + 5 + Math.random() * 2);
         this.castT = 0;
@@ -171,7 +171,7 @@ export class Fishing {
     }
     strike() {
         this.state = 'reel';
-        this.app.audio.play('swing');
+        this.app.audio.play('reel');
         this.bobGlow.material.opacity = 0;
         const d = this.diff;
         Object.assign(this, { zs: 0.3 - d * 0.08, zy: 0.3, zv: 0, fy: 0.45, fv: 0, ty: 0.5, tT: 0, prog: 0.3, reelT: 0 });
@@ -198,7 +198,8 @@ export class Fishing {
     }
     showCatch(r) {
         const app = this.app, f = FISH[r.fish], R = FISH_RARITY[f.rar];
-        app.audio.play(f.rar === 'epi' || r.page != null || r.seal ? 'special' : 'coin');
+        app.audio.play('catch');
+        app.audio.play(f.rar === 'epi' || r.page != null || r.seal ? 'special' : 'coin', { delay: 0.35 });
         const loot = [];
         if (r.xp) loot.push(`+${r.xp} esperienza`);
         if (r.coins) loot.push(`+${r.coins} monete`);
@@ -245,7 +246,7 @@ export class Fishing {
             this.setHint(this.night ? 'Notte sul molo: abboccano i pesci della nebbia' : 'Aspetta che il galleggiante affondi', 'Non ferrare troppo presto');
             if (this.waitT >= (this.bite || 3)) {
                 this.state = 'bite'; this.biteT = 0;
-                app.audio.play('splash');
+                app.audio.play('bite');
                 this.ripple(this.bob.position.x, this.bob.position.z, true);
                 this.setHint('ORA! Ferra!', IS_MOBILE ? 'Tocca lo schermo' : 'Spazio o clic');
             }

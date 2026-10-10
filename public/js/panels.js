@@ -1,7 +1,7 @@
 // =====================================================================
 //  FINESTRE DEL GIOCO: bisaccia, botteghe, Bazar, Albo, Compagnia...
 // =====================================================================
-import { h, $, coin, fmt, toast, SOCKET_URL, loadImage } from './util.js';
+import { h, $, coin, fmt, toast, SOCKET_URL, loadImage, store } from './util.js';
 import {
     ITEMS, SLOTS, SLOT_NAMES, WEAPON_TYPES, MATERIALS, HANDLES, GEMS, ELEMENTS, ECONOMY,
     weaponStats, weaponCost, sanitizeWeaponSpec,
@@ -85,7 +85,7 @@ export class Panels {
         this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'arena', 'bacheca', 'pedaggio', 'tavoletta'].includes(id));
         this.app.onPanelOpen();
         this.render();
-        this.app.audio.play('ui');
+        this.app.audio.play('open');
     }
     render() {
         if (!this.current) return;
@@ -104,6 +104,7 @@ export class Panels {
         this.current = null;
         this.root.classList.add('hidden');
         this.app.onPanelClose();
+        this.app.audio.play('close');
     }
     set(ic, title, ...content) {
         this.title.innerHTML = iconSVG(ic);
@@ -404,7 +405,7 @@ export class Panels {
                     h('div', { class: 'btn-row end' }, btn('Risveglia la carta', async () => {
                         const r = await request('altar:awaken', {});
                         if (!r.ok) return;
-                        app.audio.play('special');
+                        app.audio.play('awaken');
                         toast(h('div', {}, h('b', {}, `La tua carta è ${r.name}!`), h('div', {}, next.gives + '.')), { kind: 'coin', icon: 'sparkles', duration: 8000 });
                     }, { cls: 'btn-primary', ic: 'sparkles', disabled: off || !lvOk || !trialOk || !n.ok })));
             }
@@ -442,7 +443,8 @@ export class Panels {
                             const r = await request('altar:enchant', { uid: sel.uid, scroll });
                             if (!r.ok) return;
                             const base = inf.name.replace(/ \+\d+$/, '');
-                            if (r.success) { app.audio.play(r.plus >= 5 ? 'special' : 'coin'); toast(h('div', {}, h('b', {}, `Riuscito: ${base} +${r.plus}`), r.plus === 5 && isW ? h('div', {}, "Ora l'arma lascia una scia del colore del tuo seme.") : r.plus === 10 && !isW ? h('div', {}, "Il capo ora ha un'aura.") : null), { kind: 'ok', icon: 'sparkles' }); }
+                            app.audio.play('anvil');
+                            if (r.success) { app.audio.play(r.plus >= 5 ? 'special' : 'coin', { delay: 0.25 }); toast(h('div', {}, h('b', {}, `Riuscito: ${base} +${r.plus}`), r.plus === 5 && isW ? h('div', {}, "Ora l'arma lascia una scia del colore del tuo seme.") : r.plus === 10 && !isW ? h('div', {}, "Il capo ora ha un'aura.") : null), { kind: 'ok', icon: 'sparkles' }); }
                             else if (r.saved) { app.audio.play('block'); toast('Non è riuscito, ma la Pergamena Benedetta ha protetto il pezzo', { icon: 'scroll' }); }
                             else { app.audio.play('error'); toast(r.plus < r.from ? `Non è riuscito: il pezzo scende a +${r.plus}` : "Non è riuscito, ma il pezzo resta com'era", { kind: 'bad', icon: 'sparkles' }); }
                         }, { cls: 'btn-primary', ic: 'sparkles', disabled: off || !n.ok })),
@@ -565,7 +567,7 @@ export class Panels {
                     arg.first && arg.xp ? h('p', { class: 'muted small' }, `Prima chiacchierata: +${arg.xp} esperienza.`) : null,
                     h('div', { class: 'btn-row' },
                         N.actions.map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto' }[k] })),
-                        btn('Altro?', () => this.render(), { ic: 'talk' }),
+                        btn('Altro?', () => { this.render(); app.npcSay(id); }, { ic: 'talk' }),
                         btn('Arrivederci', () => this.close(), { ic: 'close' })))));
     }
 
@@ -615,7 +617,8 @@ export class Panels {
                     const r = await app.net.request('toll:start', {});
                     if (!r.ok) return toast(r.msg, { kind: 'bad' });
                     this.toll = { q: r.q, w: 0, l: 0, last: null };
-                    app.audio.play('ui'); this.render();
+                    this.render();
+                    app.audio.voice('spettro', INSULTS[r.q]?.[0] || '');
                 }, { cls: 'btn-primary', ic: 'ecto' }), btn('Lascia stare', () => { this.toll = null; this.close(); }, { ic: 'close' })));
         }
         const answer = async (c) => {
@@ -627,6 +630,7 @@ export class Panels {
             if (r.learned != null) toast(h('div', {}, h('b', {}, 'Hai imparato una nuova risposta'), h('div', {}, `«${INSULTS[r.learned][1]}»`)), { icon: 'quill', duration: 6000 });
             if (r.end === 'win') { app.audio.play('special'); if (r.title) toast("Ora sei Lingua d'Argento!", { kind: 'coin', icon: 'crown' }); }
             this.render();
+            app.audio.voice('spettro', say + (r.next != null && !r.end ? ' ' + (INSULTS[r.next]?.[0] || '') : ''));
         };
         this.set('ecto', T,
             h('div', { class: 'toll-score' }, h('span', {}, 'Tu ', pips(S.w, 'ok')), h('span', {}, 'Lo Spettro ', pips(S.l, 'bad'))),
@@ -769,7 +773,7 @@ export class Panels {
                 h('span', { class: 'purse' }, 'Costo ', coin(cost), boneCost(spec) ? h('span', { class: 'need ' + ((me.mats?.ossa || 0) >= boneCost(spec) ? 'ok' : 'no'), style: { marginLeft: '8px' } }, `Ossa Antiche ${me.mats?.ossa || 0}/${boneCost(spec)}`) : null),
                 btn('Forgia', async () => {
                     const r = await this.act('forge:craft', { spec: sanitizeWeaponSpec(spec) }, `Il fabbro ti consegna: ${spec.name || WEAPON_TYPES[spec.type].name}`);
-                    if (r.ok) { this.app.audio.play('heavy'); this.act('equip', { slot: 'weapon', uid: r.uid }, 'Ora la impugni'); }
+                    if (r.ok) { this.app.audio.play('anvil'); this.act('equip', { slot: 'weapon', uid: r.uid }, 'Ora la impugni'); }
                 }, { cls: 'btn-primary', ic: 'hammer', disabled: me.coins < cost || tooLow || (me.mats?.ossa || 0) < boneCost(spec) })),
             tooLow ? h('p', { class: 'req', style: { margin: '8px 0 0', textAlign: 'right' } }, `Mastro Brace lavora questi pezzi solo dal livello ${req}.`) : null,
         ];
@@ -1022,7 +1026,7 @@ export class Panels {
     p_impostazioni() {
         const app = this.app;
         const set = app.local.settings ||= {};
-        const token = app.local.token;
+        const token = app.local.token, ticket = store.loadTicket();
         const code = h('input', { type: 'text', placeholder: 'Incolla qui un codice di recupero', style: { flex: 1 } });
         this.set('cog', 'Opzioni',
             h('div', { class: 'parchment' },
@@ -1035,11 +1039,16 @@ export class Panels {
                     class: 'chip' + ((set.quality || app.defaultQuality) === k ? ' sel' : ''),
                     onclick: () => { set.quality = k; app.saveLocal(); if (confirm('Ricaricare il gioco ora per applicare?')) location.reload(); else this.render(); },
                 }, l, h('small', {}, s)))),
+                h('label', { class: 'field' }, 'Luminosità'),
+                h('input', { type: 'range', class: 'range', min: 0.6, max: 2, step: 0.05, value: set.bright ?? 1, oninput: (e) => { set.bright = +e.target.value; app.saveLocal(); } }),
+                h('p', { class: 'muted small', style: { margin: '2px 0 0' } }, 'Sull\'isola il giorno dura 13 minuti e la notte 6; il tempo cambia ogni 7 minuti.'),
                 h('h3', { class: 'sect', html: iconSVG('music') }, 'Suoni'),
                 h('label', { class: 'field' }, 'Musica'),
                 h('input', { type: 'range', class: 'range', min: 0, max: 1, step: 0.05, value: app.audio.musicVol, oninput: (e) => { app.audio.setMusicVolume(+e.target.value); set.musicVol = +e.target.value; app.saveLocal(); } }),
-                h('label', { class: 'field' }, 'Effetti'),
+                h('label', { class: 'field' }, 'Effetti e voci'),
                 h('input', { type: 'range', class: 'range', min: 0, max: 1, step: 0.05, value: app.audio.sfxVol, oninput: (e) => { app.audio.setSfxVolume(+e.target.value); set.sfxVol = +e.target.value; app.saveLocal(); } }),
+                h('label', { class: 'field' }, 'Ambiente (mare, vento, pioggia, animali)'),
+                h('input', { type: 'range', class: 'range', min: 0, max: 1, step: 0.05, value: app.audio.ambVol, oninput: (e) => { app.audio.setAmbVolume(+e.target.value); set.ambVol = +e.target.value; app.saveLocal(); } }),
                 h('h3', { class: 'sect', html: iconSVG('eye') }, 'Controlli'),
                 h('label', { class: 'field' }, 'Sensibilità del mouse'),
                 h('input', { type: 'range', class: 'range', min: 0.4, max: 2.5, step: 0.1, value: set.sens || 1, oninput: (e) => { set.sens = +e.target.value; app.saveLocal(); } }),
@@ -1047,13 +1056,26 @@ export class Panels {
                     [['WASD', 'cammina'], ['Shift', 'corri'], ['Spazio', 'salta'], ['E', 'interagisci'], ['R', 'profilo vicino'], ['F', 'fango'], ['V', 'visuale'], ['1-4', 'gesti'], ['Invio', 'parla'], ['M', 'voce'], ['B', 'musica'], ['I', 'bisaccia'], ['C', 'card'], ['O', 'compagnia'], ['Tab', 'albo'], ['K', 'album'], ['L', 'maestria'], ['J', 'taglie'], ['N', 'mappa']]
                         .map(([k, t]) => h('span', {}, h('i', { class: 'kbd' }, k), ' ', t))),
                 h('h3', { class: 'sect', html: iconSVG('lock') }, 'Codice di recupero'),
-                h('p', { class: 'lore' }, 'Il tuo viandante vive in questo browser. Con il codice puoi ritrovarlo su un altro dispositivo: custodiscilo come una chiave, perché chi lo possiede comanda il tuo personaggio e le tue monete.'),
-                token ? h('details', {}, h('summary', {}, 'Mostra il codice'), h('div', { class: 'code', style: { marginTop: '8px' } }, token)) : h('p', { class: 'muted' }, 'Il codice comparirà quando il portale sarà aperto.'),
+                h('p', { class: 'lore' }, 'Il tuo viandante vive in questo browser, che ne custodisce una copia sigillata: livello, monete e borsa sopravvivono anche quando il server si addormenta. Con il codice lo ritrovi su un altro dispositivo: custodiscilo come una chiave, perché chi lo possiede comanda il tuo personaggio e le tue monete.'),
+                ticket || token ? h('div', { class: 'btn-row' },
+                    btn('Copia il codice', async () => {
+                        const v = store.loadTicket() || token;
+                        try { await navigator.clipboard.writeText(v); toast('Codice copiato: incollalo nelle Opzioni dell\'altro dispositivo', { kind: 'ok', icon: 'scroll' }); }
+                        catch { prompt('Copia questo codice:', v); }
+                    }, { ic: 'scroll' }),
+                    ticket ? h('span', { class: 'muted small' }, `Copia sigillata: ${new Date(store.peekTicket(ticket)?.t || Date.now()).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}`) : null)
+                    : h('p', { class: 'muted' }, 'Il codice comparirà quando il portale sarà aperto.'),
                 h('div', { class: 'btn-row', style: { marginTop: '10px', flexWrap: 'nowrap' } }, code, btn('Recupera', () => {
-                    const v = code.value.trim();
-                    if (!/^[0-9a-f-]{36}$/i.test(v)) return toast('Questo codice non sembra valido', { kind: 'bad' });
-                    if (!confirm('Caricare il viandante di questo codice? Quello attuale resta sul server, ma conserva il suo codice per non perderlo.')) return;
-                    app.local.token = v; app.saveLocal(); location.reload();
+                    const v = code.value.trim(), s = store.peekTicket(v);
+                    if (!s && !/^[0-9a-f-]{36}$/i.test(v)) return toast('Questo codice non sembra valido', { kind: 'bad' });
+                    if (!confirm(`Caricare ${s ? s.p.name : 'il viandante di questo codice'}? Quello attuale resta sul server, ma conserva il suo codice per non perderlo.`)) return;
+                    if (s) {
+                        // il codice nuovo contiene tutto il profilo: funziona anche se il server l'ha dimenticato
+                        Object.assign(app.local, { token: s.p.token, name: s.p.name, appearance: s.p.appearance, card: s.p.card, importing: true });
+                        delete app.local.cardImage; delete app.local.cardSig;
+                        store.keepTicket(v);
+                    } else app.local.token = v;
+                    app.saveLocal(); location.reload();
                 }, { ic: 'lock' })),
                 h('div', { class: 'divider' }),
                 h('p', { class: 'muted small center', style: { margin: 0 } },

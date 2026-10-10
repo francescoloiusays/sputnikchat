@@ -33,8 +33,8 @@ export class Canto {
     }
     note(i, dur = 0.38) {
         const A = this.app.audio, f = CANTO.notes[i];
-        A.tone(f, f, dur, { type: 'triangle', vol: 0.32 });
-        A.tone(f * 2, f * 2, dur * 0.6, { type: 'sine', vol: 0.08 });
+        A.tone(f, f, dur, { type: 'triangle', vol: 0.32, verb: 0.35 });
+        A.tone(f * 2, f * 2, dur * 0.6, { type: 'sine', vol: 0.08, verb: 0.35 });
         this.app.world.cantoGlow(i, dur + 0.15);
         const b = this.stones[i];
         b.classList.remove('lit'); void b.offsetWidth; b.classList.add('lit');

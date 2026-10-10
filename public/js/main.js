@@ -23,11 +23,21 @@ import { Npcs } from './npcs.js';
 import { Canto } from './canto.js';
 import { Onda } from './onda.js';
 import { TITLES, KING, MATS as MAT_INFO, GRAVES_LEVEL } from './shared/catalog.js';
-import { INSULTS, TABLETS } from './shared/lore.js';
+import { INSULTS, TABLETS, NPCS } from './shared/lore.js';
+import { VEGLIA, PHONE_SPOT, FOUNTAIN } from './shared/catalog.js';
+import { Environment, Precipitation, applySky, clockText } from './sky.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
 const EMOTE_DUR = { saluta: 2, balla: 4, inchino: 1.8, ride: 2 };
+// la Veglia dei Morti (sabato sera, ora di Roma) è sempre notte
+function vegliaTime(now) {
+    try {
+        const p = {};
+        for (const x of new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', weekday: 'short', hour: 'numeric', hourCycle: 'h23' }).formatToParts(new Date(now))) p[x.type] = x.value;
+        return p.weekday === 'Sat' && +p.hour >= VEGLIA.from && +p.hour < VEGLIA.to;
+    } catch { return false; }
+}
 const lerpAngle = (a, b, t) => { let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * t; };
 
 // --- GIOCATORE REMOTO ---
@@ -68,6 +78,11 @@ class RemotePlayer {
         this.ch.state = a === 'air' || a === 'sit' ? a : this.speed > 6 ? 'run' : this.speed > 0.4 ? 'walk' : 'idle';
         this.ch.speed = this.speed;
         const d = camPos.distanceTo(r.position);
+        // passi degli altri viandanti, sentiti da vicino
+        if (d < 18 && this.speed > 0.6 && a !== 'air' && a !== 'sit') {
+            this.stepT = (this.stepT ?? Math.random() * 2) - dt * this.speed;
+            if (this.stepT <= 0) { this.stepT = 2.2; this.app.audio.step(this.app.world.surfaceAt(r.position.x, r.position.z, r.position.y), { x: r.position.x, z: r.position.z, vol: 0.7, run: this.speed > 6 }); }
+        }
         if (this.ch.tag) this.ch.tag.visible = d < 40;
         if (d < 120) this.ch.update(dt);
     }
@@ -83,8 +98,11 @@ class Game {
         this.defaultQuality = IS_MOBILE ? 'bassa' : 'alta';
         this.quality = this.local.settings.quality || this.defaultQuality;
         this.audio = new GameAudio();
+        this.env = new Environment();
+        this.env.onThunder = (delay) => this.audio.thunder?.(delay);
         if (this.local.settings.musicVol != null) this.audio.musicVol = this.local.settings.musicVol;
         if (this.local.settings.sfxVol != null) this.audio.sfxVol = this.local.settings.sfxVol;
+        if (this.local.settings.ambVol != null) this.audio.ambVol = this.local.settings.ambVol;
         this.net = new Net(SOCKET_URL);
         this.studio = new Studio();
         this.creator = new Creator(this.studio);
@@ -140,6 +158,7 @@ class Game {
         await new Promise(r => setTimeout(r, 30));
         this.setupRenderer();
         this.world = new World(this.scene, { quality: this.quality });
+        this.precip = new Precipitation(this.scene, { count: this.quality === 'alta' ? 1600 : 700 });
         if (!this.me) this.me = this.offlineMe();
         const S = WORLD.SPAWN;
         this.player = {
@@ -189,7 +208,7 @@ class Game {
         if (alta) {
             this.composer = new EffectComposer(r);
             this.composer.addPass(new RenderPass(this.scene, this.camera));
-            this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.55, 0.86));
+            this.composer.addPass(this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.55, 0.86));
             this.composer.addPass(new OutputPass());
         }
         this.raycaster = new THREE.Raycaster();
@@ -326,9 +345,16 @@ class Game {
             token: this.local.token,
             name: hasLocal ? this.local.name : undefined, appearance: hasLocal ? this.local.appearance : undefined,
             card: hasLocal ? this.local.card : undefined, cardImage: hasLocal ? this.local.cardImage : undefined,
+            save: store.loadTicket() || undefined,
         }, 15000).then(r => {
             if (!r.ok) { this.helloDone = false; console.warn('hello fallito', r.msg); return; }
             this.local.token = r.token;
+            if (r.save) store.keepTicket(r.save);
+            if (r.now) this.clockOffset = r.now - Date.now();
+            const importing = this.local.importing; delete this.local.importing;
+            if (r.restored) toast(h('div', {}, h('b', {}, 'Progressi ritrovati'), h('div', {}, 'Il server si era addormentato e aveva perso la memoria: il tuo livello, le monete e la borsa erano al sicuro nel tuo browser.')), { kind: 'ok', icon: 'scroll', duration: 9000 });
+            else if (importing && !r.saveBad) toast('Codice di salvataggio caricato: bentornato!', { kind: 'ok', icon: 'scroll' });
+            if (importing && r.saveBad) toast('Il codice di salvataggio non è valido per questo server.', { kind: 'bad', duration: 9000 });
             if (!hasLocal) {
                 Object.assign(this.local, { name: r.profile.name, appearance: r.profile.appearance, card: r.profile.card });
             }
@@ -358,6 +384,7 @@ class Game {
         });
         N.on('kicked', () => { toast('Sei entrato da un\'altra finestra: questa resta fuori dal portale.', { kind: 'bad', duration: 20000 }); this.net.socket.io.opts.reconnection = false; });
         N.on('me', (p) => this.applyMe(p));
+        N.on('save', (t) => store.keepTicket(t));
         N.on('notify', (n) => { toast(n.text, { kind: n.kind === 'coin' ? 'coin' : n.kind === 'friend' ? 'ok' : 'info' }); this.audio.play('notify'); });
         N.on('room:state', (s) => {
             for (const p of this.players.values()) p.dispose();
@@ -391,7 +418,7 @@ class Game {
             this.players.get(d.id)?.setLook(d);
         });
         N.on('levelup', (u) => {
-            this.audio.play('special');
+            this.audio.play('levelup');
             toast(h('div', {}, h('b', {}, `Livello ${u.level}: ${u.title}`), h('div', {}, u.points > 0 ? `Hai ${u.points} ${u.points === 1 ? 'punto' : 'punti'} Maestria da spendere nel Libro della Maestria (L).` : 'Nuovi capi e materiali ti aspettano nelle botteghe.')),
                 { kind: 'coin', icon: 'star', duration: 9000, actions: u.points > 0 ? [{ label: 'Apri il Libro', primary: true, fn: () => this.openPanel('maestria') }] : null });
         });
@@ -399,23 +426,33 @@ class Game {
             this.audio.play('special');
             toast(h('div', {}, h('b', {}, `Nuovo titolo: ${t.name}`), h('div', {}, 'Lo puoi scegliere nel Libro della Maestria (L).')), { kind: 'coin', icon: 'crown', duration: 9000 });
         });
-        N.on('bounty:done', (b) => { this.audio.play('coin'); toast(h('div', {}, h('b', {}, b.weekly ? 'Taglia della settimana compiuta!' : 'Taglia compiuta!'), h('div', {}, `${b.text}. Riscuotila alla Bacheca in piazza.`)), { kind: 'coin', icon: 'scroll', duration: 7000 }); });
-        N.on('mission:done', (m) => { this.audio.play('special'); toast(h('div', {}, h('b', {}, 'Missione segreta compiuta'), h('div', {}, `${m.text} +${m.xp} esperienza e una Pergamena Benedetta.`)), { kind: 'coin', icon: 'letter', duration: 9000 }); });
+        N.on('bounty:done', (b) => { this.audio.play('quest'); toast(h('div', {}, h('b', {}, b.weekly ? 'Taglia della settimana compiuta!' : 'Taglia compiuta!'), h('div', {}, `${b.text}. Riscuotila alla Bacheca in piazza.`)), { kind: 'coin', icon: 'scroll', duration: 7000 }); });
+        N.on('mission:done', (m) => { this.audio.play('quest'); toast(h('div', {}, h('b', {}, 'Missione segreta compiuta'), h('div', {}, `${m.text} +${m.xp} esperienza e una Pergamena Benedetta.`)), { kind: 'coin', icon: 'letter', duration: 9000 }); });
         N.on('phone:ring', () => this.phoneRing());
         N.on('veglia:state', (v) => { this.vegliaState = v; this.panels.refresh(['tombe', 'npc']); });
         N.on('player:stats', (s) => {
             const p = this.players.get(s.id);
             if (p) { Object.assign(p.info, s); p.updateTag(); }
         });
-        N.on('chat', (m) => this.addChat(m.name, m.text, m.sys ? 'sys' : this.isFriend(m.id) ? 'fr' : ''));
-        N.on('emote', ({ i, e }) => this.players.get(i)?.ch.play(e, EMOTE_DUR[e] || 2));
+        N.on('chat', (m) => {
+            this.addChat(m.name, m.text, m.sys ? 'sys' : this.isFriend(m.id) ? 'fr' : '');
+            if (!m.sys && m.id !== this.me?.id) this.audio.play('chat');
+        });
+        N.on('emote', ({ i, e }) => {
+            const p = this.players.get(i);
+            if (!p) return;
+            p.ch.play(e, EMOTE_DUR[e] || 2);
+            const at = p.ch.root.position;
+            this.audio.play(e, { x: at.x, z: at.z, pitch: 1 / (p.info.appearance?.height || 1) });
+        });
         N.on('mud', ({ i, o, v }) => this.spawnMud(new THREE.Vector3(...o), new THREE.Vector3(...v), i));
         N.on('mud:splat', ({ i, by }) => {
             const p = this.players.get(i);
             if (p) {
                 p.ch.setTint('#5a3a1a');
                 clearTimeout(p.tintT); p.tintT = setTimeout(() => p.ch.setTint(null), 3000);
-                if (by === this.me?.id) { toast(`Centro! Hai infangato ${p.info.name}`, { duration: 2500, icon: 'fango' }); this.audio.play('splash'); }
+                if (by === this.me?.id) toast(`Centro! Hai infangato ${p.info.name}`, { duration: 2500, icon: 'fango' });
+                this.audio.play('mudhit', { x: p.ch.root.position.x, z: p.ch.root.position.z });
             }
         });
         N.on('friend:request', (f) => {
@@ -572,11 +609,18 @@ class Game {
         const r = await this.net.request('npc:talk', { id });
         this.npcs?.greet(id);
         this.openPanel('npc', { id, ...(r.ok ? r : {}) });
+        this.npcSay(id);
+    }
+    // il personaggio dice la battuta che il pannello sta mostrando, con la sua voce
+    npcSay(id) {
+        const N = NPCS[id];
+        if (N) this.audio.voice(id, N.lines[(this.panels.npcLine || 0) % N.lines.length]);
     }
     async readTablet(el) {
         if (!this.net.connected || !this.helloDone) return this.openPanel('tavoletta', { el });
         const r = await this.net.request('tablet:read', { id: el });
-        if (r.ok && r.first) this.audio.play(r.all ? 'special' : 'coin');
+        this.audio.play('tablet');
+        if (r.ok && r.first) this.audio.play(r.all ? 'special' : 'coin', { delay: 0.9 });
         this.openPanel('tavoletta', { el, ...(r.ok ? r : {}) });
     }
     async digGrave(k) {
@@ -585,12 +629,13 @@ class Game {
         if (this.digging) return;
         this.digging = true;
         this.myChar.play('heavy', 0.6);
+        this.audio.play('dig');
         const r = await this.net.request('graves:dig', { k });
         this.digging = false;
         if (!r.ok) return toast(r.msg, { kind: 'bad', duration: 3000 });
-        this.audio.play('step');
+        this.audio.play('dig', { delay: 0.25 });
         if (r.cursed) {
-            this.audio.play('gong');
+            this.audio.play('bones', { delay: 0.3 });
             toast(h('div', {}, h('b', {}, 'Tomba maledetta!'), h('div', {}, 'Uno scheletro salta fuori dalla terra e ti sfida.')), { kind: 'bad', icon: 'skull', duration: 4000 });
             setTimeout(() => { if (this.mode === 'world') this.startSkeleton(); }, 1400);
             return;
@@ -605,7 +650,7 @@ class Game {
         const r = await this.net.request('fountain:wish', {});
         if (!r.ok) return toast(r.msg, { kind: 'bad' });
         this.myChar.play('throw', 0.5);
-        this.audio.play('splash');
+        this.audio.play('wish');
         setTimeout(() => { this.audio.play(r.wish === 'xp' || r.wish === 'pergamena' ? 'special' : 'coin'); toast(h('div', {}, h('b', {}, 'La Fontana dei Desideri'), h('div', {}, r.text)), { kind: 'coin', icon: 'wave', duration: 7000 }); }, 700);
     }
     phoneRing() {
@@ -613,7 +658,8 @@ class Game {
         toast(h('div', {}, h('b', {}, 'Squilla il telefono bianco!'), h('div', {}, 'È sul tavolino della Stanza Bianca: rispondi con E.')), { icon: 'letter', duration: 7000 });
         clearInterval(this.ringT);
         let n = 0;
-        const ring = () => { this.audio.tone(880, 880, 0.12, { vol: 0.18 }); this.audio.tone(1100, 1100, 0.12, { vol: 0.18, delay: 0.16 }); if (++n > 12) clearInterval(this.ringT); };
+        // il telefono squilla dal tavolino: lo senti più forte man mano che ti avvicini
+        const ring = () => { this.audio.play('phone', { x: PHONE_SPOT.x, z: PHONE_SPOT.z, range: 45 }); this.audio.play('phone', { vol: 0.25 }); if (++n > 12) clearInterval(this.ringT); };
         ring(); this.ringT = setInterval(ring, 1800);
     }
     async answerPhone() {
@@ -621,7 +667,7 @@ class Game {
         clearInterval(this.ringT);
         this.world?.setPhoneRing(false);
         if (!r.ok) return toast(r.msg, { kind: 'bad' });
-        this.audio.play('notify');
+        this.audio.voice('telefono', r.line);
         toast(h('div', {}, h('b', {}, r.line), h('div', {}, `Missione segreta: ${r.text}`)), { kind: 'ok', icon: 'letter', duration: 12000 });
     }
     // avversari del cimitero: lo scheletro di una tomba maledetta, le ondate della Veglia e il Re Annegato
@@ -637,6 +683,7 @@ class Game {
     }
     startSkeleton() {
         const L = this.me.level || 1, els = ELEMENT_IDS;
+        this.audio.play('bones');
         this.startFoe({ kind: 'skeleton', name: 'Scheletro Inquieto', botLevel: 0.8 + Math.min(1, L / 25) * 0.6, level: L, element: els[Math.floor(Math.random() * els.length)],
             look: { weapon: { type: Math.random() < 0.5 ? 'falce' : 'spada', material: 'osso', handle: 'osso', gem: 'nessuna', name: 'Lama d\'Osso' } },
             texts: ['Lo scheletro torna a dormire nella sua tomba.', 'Lo scheletro ti rincorre fino al cancello: il Becchino ricopre le tombe.'] });
@@ -648,6 +695,8 @@ class Game {
             texts: [`L'ondata ${wave} torna sotto terra.`, 'I morti ti respingono fuori dal cimitero.'] });
     }
     startKing() {
+        this.audio.play('roar');
+        setTimeout(() => this.audio.voice('re', 'Chi osa svegliare il Re della laguna?'), 900);
         this.startFoe({ kind: 'king', name: KING.name, botLevel: 1.1, level: 18, element: 'ghiaccio', boss: { hp: KING.hp, atk: KING.atk }, height: 1.15,
             look: { head: 'corona', cape: 'mantello_regale', weapon: { type: 'lancia', material: 'argento', handle: 'oro', gem: 'zaffiro', name: 'Tridente del Re' } },
             texts: ['Il Re Annegato si sbriciola in acqua salata. Il suo cuore smette di battere... quasi.', 'Il Re Annegato torna nella laguna, ridendo.'] });
@@ -672,7 +721,8 @@ class Game {
         if (!r.ok) { toast(r.msg, { kind: 'bad', duration: 2500 }); return; }
         this.world.gatherFx(it.node);
         this.myChar.play('light', 0.4);
-        this.audio.play(r.got ? 'coin' : 'ui');
+        this.audio.play('pick');
+        if (r.got) this.audio.play('coin', { delay: 0.1 });
         const M = MATS[r.kind];
         toast(r.got ? `+${r.got} ${M.name}${r.xp ? ` · +${r.xp} esperienza` : ''}` : r.kind === 'ecto' ? 'Il fuoco fatuo ti si scioglie tra le dita: per oggi ne hai presi tanti' : 'Il frammento si sbriciola: per oggi ne hai raccolti tanti',
             { kind: r.got ? 'ok' : 'info', icon: M.icon, duration: 2600 });
@@ -834,6 +884,7 @@ class Game {
     }
     emote(name) {
         this.myChar.play(name, EMOTE_DUR[name]);
+        this.audio.play(name, { pitch: 1 / (this.me?.appearance?.height || 1) });
         this.net.send('emote', { e: name });
     }
 
@@ -876,7 +927,7 @@ class Game {
                     const el = $('#mud-splat');
                     el.classList.add('hidden'); void el.offsetWidth; el.classList.remove('hidden');
                     clearTimeout(this.splatT); this.splatT = setTimeout(() => el.classList.add('hidden'), 2500);
-                    this.audio.play('splash');
+                    this.audio.play('mudhit');
                 }
             } else {
                 for (const rp of this.players.values()) {
@@ -1094,6 +1145,7 @@ class Game {
     loop() {
         requestAnimationFrame(() => this.loop());
         const dt = Math.min(0.05, this.clock.getDelta());
+        this.updateEnv(dt);
         if (this.mode === 'duel' && this.duel) { this.duel.update(dt); return; }
         if (!this.world) return;
         if (this.mode === 'world') this.updatePlayer(dt);
@@ -1117,6 +1169,62 @@ class Game {
             this.updatePrompt();
         }
         if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    }
+
+    // --- CIELO: ora dell'isola e meteo, uguali per tutti (vedi sky.js) ---
+    updateEnv(dt) {
+        const now = Date.now() + (this.clockOffset || 0);
+        if (!(this.vegliaCheck > now)) { this.vegliaCheck = now + 10000; this.vegliaNight = vegliaTime(now); }
+        this.env.forceNight = !!this.vegliaState?.open || this.vegliaNight;
+        const S = this.env.update(dt, now);
+        // Luminosità (Opzioni): esposizione più alta e ombre meno profonde
+        const b = this.local.settings.bright ?? 1, boost = Math.max(0, b - 1) * 0.35;
+        this.renderer.toneMappingExposure = 1.05 * b;
+        if (this.bloom) this.bloom.strength = 0.5 - 0.2 * S.day;
+        if (this.mode === 'duel' && this.duel) this.duel.applyEnv?.(S, boost);
+        else if (this.world) {
+            this.world.applyEnv(S, boost);
+            applySky(this.sky, S, this.world.t);
+            this.precip?.update(dt, this.camera.position, S, this.world.indoor);
+            if (!this.fillInRoom) this.fillLight.intensity = 9 - 4.5 * S.day;
+        }
+        this.audio.setEnv(S);
+        this.updateSoundscape(dt);
+        this.clockT = (this.clockT || 0) - dt;
+        if (this.clockT <= 0) {
+            this.clockT = 0.5;
+            const txt = `${clockText(S.hour)} · ${S.weatherName}`, el = $('#sky-clock');
+            if (el && el.dataset.txt !== txt + S.icon) { el.dataset.txt = txt + S.icon; el.innerHTML = iconSVG(S.icon) + `<span>${txt}</span>`; }
+        }
+        return S;
+    }
+
+    // --- PAESAGGIO SONORO: mare vicino, fuochi, fontana, personaggi al lavoro ---
+    updateSoundscape(dt) {
+        const W = this.world, P = this.player?.pos;
+        if (!W || !P) return;
+        if (this.mode !== 'duel') this.audio.setListener(this.camera.position.x, this.camera.position.z, this.cam.yaw);
+        this.scapeT = (this.scapeT || 0) - dt;
+        if (this.scapeT <= 0 || !this.scape) {
+            this.scapeT = 0.25;
+            // quanta laguna c'è intorno: dodici sguardi a 8 e 20 metri
+            let sea = 0;
+            for (let i = 0; i < 12; i++) {
+                const a = i / 12 * Math.PI * 2, r = i % 2 ? 8 : 20;
+                if (W.terrainAt(P.x + Math.cos(a) * r, P.z + Math.sin(a) * r) < -0.02) sea += i % 2 ? 1.4 : 0.6;
+            }
+            let fd = Infinity;
+            for (const f of W.fireSpots()) fd = Math.min(fd, Math.hypot(f.x - P.x, f.z - P.z, (f.y - P.y) * 0.5));
+            const near = (x, z, r) => Math.max(0, 1 - Math.hypot(x - P.x, z - P.z) / r);
+            this.scape = {
+                sea: Math.min(1, sea / 8), height: Math.max(0, P.y - 3) / 5, fire: Math.pow(Math.max(0, 1 - fd / 7), 2),
+                fountain: near(FOUNTAIN.x, FOUNTAIN.z, 12), zone: this.zone,
+                npcs: Object.entries(NPCS).map(([id, n]) => ({ id, x: n.x, z: n.z, d: Math.hypot(n.x - P.x, n.z - P.z) })),
+            };
+        }
+        this.scape.indoor = W.indoor;
+        this.scape.duel = this.mode === 'duel';
+        this.audio.ambient(dt, this.scape);
     }
 
     updatePlayer(dt) {
@@ -1162,7 +1270,7 @@ class Game {
         const ground = W.groundAt(next.x, next.z, P.pos.y);
         if (next.y <= ground + 0.02 || (P.grounded && P.vel.y <= 0 && next.y - ground < 0.45)) {
             next.y = ground;
-            if (!P.grounded && P.vel.y < -6) this.audio.play('step');
+            if (!P.grounded && P.vel.y < -6) this.audio.step(W.surfaceAt(next.x, next.z, next.y), { land: true });
             P.vel.y = 0; P.grounded = true;
         } else P.grounded = false;
         P.pos.copy(next);
@@ -1179,7 +1287,7 @@ class Game {
         ch.speed = hs;
         ch.root.visible = !this.cam.first;
         this.updateFill(P);
-        if (P.grounded && hs > 0.5) { P.stepT -= dt * hs; if (P.stepT <= 0) { P.stepT = 2.2; this.audio.play('step'); } }
+        if (P.grounded && hs > 0.5) { P.stepT -= dt * hs; if (P.stepT <= 0) { P.stepT = 2.2; this.audio.step(W.surfaceAt(P.pos.x, P.pos.z, P.pos.y), { run: hs > 6 }); } }
         this.sendPos(dt, !P.grounded ? 3 : hs > 6 ? 2 : hs > 0.4 ? 1 : 0);
     }
     // luce di riempimento: lilla all'aperto, bianca e calda nella Stanza Bianca

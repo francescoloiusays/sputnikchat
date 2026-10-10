@@ -14,6 +14,18 @@ export const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Ope
 export const store = {
     load() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; } },
     save(data) { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { console.warn('Salvataggio locale fallito', e); } },
+    // copia firmata dal server di tutto il profilo (livello, monete, borsa...): torna al server se si riavvia
+    loadTicket() { try { return localStorage.getItem(STORE_KEY + ':save') || null; } catch { return null; } },
+    keepTicket(t) { try { if (typeof t === 'string') localStorage.setItem(STORE_KEY + ':save', t); } catch (e) { console.warn('Copia del profilo non salvata', e); } },
+    // legge il profilo dentro un codice di salvataggio (la firma la controlla il server)
+    peekTicket(t) {
+        try {
+            const [v, body, sig] = String(t || '').trim().split('.');
+            if (v !== 'v1' || !sig) return null;
+            const s = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(body.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))));
+            return s?.p?.token ? s : null;
+        } catch { return null; }
+    },
 };
 
 // --- RETE (socket.io) ---

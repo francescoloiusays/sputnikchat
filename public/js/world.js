@@ -9,6 +9,7 @@ import { ELEMENTS, GATHER, FISH_SPOT, STONES, GRAVES, GRAVES_LEVEL, BOUNTY_BOARD
 import { TABLETS } from './shared/lore.js';
 import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.js';
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
+import { addSkyExtras, addSnowCover, SNOW_COVER } from './sky.js';
 
 // --- LAYOUT (metri) ---
 export const WORLD = {
@@ -148,7 +149,8 @@ export function makeSky() {
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    g.add(new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true, fog: false, transparent: true, opacity: 0.9, depthWrite: false })));
+    const stars = new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true, fog: false, transparent: true, opacity: 0.9, depthWrite: false }));
+    g.add(stars);
     // luna
     const moonTex = canvasTex(256, 256, (c) => {
         const gr = c.createRadialGradient(128, 128, 30, 128, 128, 128);
@@ -162,7 +164,8 @@ export function makeSky() {
     moon.scale.set(170, 170, 1);
     moon.position.copy(MOON_DIR).multiplyScalar(800);
     g.add(moon);
-    g.userData.moon = moon;
+    Object.assign(g.userData, { moon, mat, stars });
+    addSkyExtras(g);
     return g;
 }
 export const MOON_DIR = new THREE.Vector3(-0.32, 0.42, -1).normalize();
@@ -254,6 +257,9 @@ export class World {
         this.matWood = new THREE.MeshStandardMaterial({ color: '#3d2a1c', roughness: 0.9 });
         this.matDark = new THREE.MeshStandardMaterial({ color: '#0d0a10', roughness: 1 });
         this.matRoof = new THREE.MeshStandardMaterial({ color: '#2a2036', roughness: 0.85, flatShading: true });
+        addSnowCover(this.matRoof);
+        this.indoor = false;
+        this.lightDir = MOON_DIR.clone();
         this.glowTex = glowTexture();
         this.fires = new FireSet();
         this.gallery = new Gallery();
@@ -462,6 +468,7 @@ export class World {
         });
         detail.wrapS = detail.wrapT = THREE.RepeatWrapping;
         const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97, map: detail }));
+        addSnowCover(mesh.material, 0.25);
         mesh.receiveShadow = true;
         this.scene.add(mesh);
         this.terrain = mesh;
@@ -490,12 +497,13 @@ export class World {
         const r = rng(7);
         this.mist = [];
         for (let i = 0; i < 46; i++) {
-            const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: 0.12 + r() * 0.1, depthWrite: false }));
+            const op = 0.12 + r() * 0.1;
+            const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: op, depthWrite: false }));
             const a = r() * Math.PI * 2, d = 50 + r() * 110;
             s.position.set(Math.cos(a) * d, 0.8 + r() * 1.5, -20 + Math.sin(a) * d);
             s.scale.set(26 + r() * 30, 7 + r() * 5, 1);
             this.scene.add(s);
-            this.mist.push({ s, a, d, sp: (r() - 0.5) * 0.01 });
+            this.mist.push({ s, a, d, op, sp: (r() - 0.5) * 0.01 });
         }
     }
 
@@ -1410,16 +1418,51 @@ export class World {
         return 'Isola Fantasma';
     }
 
-    // al chiuso la luna e la luce lilla del cielo si attenuano (senza ombre passerebbero i muri)
-    setIndoor(on) {
-        this.moonLight.intensity = on ? 0.2 : 0.9;
-        this.hemiLight.intensity = on ? 0.3 : 0.85;
-        this.ambLight.intensity = on ? 0.3 : 0.5;
+    // al chiuso sole, luna e luce del cielo si attenuano (senza ombre passerebbero i muri)
+    setIndoor(on) { this.indoor = on; }
+    // ora del giorno e meteo (vedi sky.js); boost = luce in più scelta nelle Opzioni
+    applyEnv(S, boost = 0) {
+        const ind = this.indoor;
+        this.hemiLight.color.copy(S.hemiS); this.hemiLight.groundColor.copy(S.hemiG);
+        this.hemiLight.intensity = S.hemiI * (ind ? 0.35 : 1);
+        this.ambLight.color.copy(S.amb); this.ambLight.intensity = (S.ambI + boost) * (ind ? 0.6 : 1);
+        this.moonLight.color.copy(S.dir); this.moonLight.intensity = S.dirI * (ind ? 0.22 : 1);
+        this.lightDir.copy(S.dirVec);
+        if (this.scene.fog) { this.scene.fog.color.copy(S.fog); this.scene.fog.density = S.fogD; }
+        const u = this.waterMat.uniforms;
+        u.uDeep.value.copy(S.water[0]); u.uShallow.value.copy(S.water[1]); u.uSky.value.copy(S.water[2]); u.uHor.value.copy(S.water[3]); u.uMoon.value.copy(S.dirVec);
+        for (const m of this.mist) { m.s.material.color.copy(S.mist); m.s.material.opacity = m.op * S.mistI; }
+        this.wispDim = 0.3 + 0.7 * (1 - S.day);
+        SNOW_COVER.value = S.cover;
+        // i colori del terreno sono nati per la notte: di giorno si schiariscono un poco
+        this.terrain.material.color.setScalar(1 + 0.35 * S.day);
     }
     // dentro la Stanza Bianca la luce è calda e bianca
     inRoom(p) {
         const R = WORLD.ROOM;
         return Math.abs(p.x - R.x) < R.w / 2 + 0.3 && Math.abs(p.z - R.z) < R.d / 2 + 0.3 && p.y > R.floor - 1;
+    }
+    // che cosa c'è sotto i piedi (per il suono dei passi)
+    surfaceAt(x, z, y) {
+        const t = this.terrainAt(x, z);
+        if (z > 85.5 && z < 100.5 && Math.abs(x) < 1.5 && y > 0.5) return 'wood';   // il molo
+        if (y > t + 0.15) {   // su una piattaforma: il ponte è di legno, il resto è pietra
+            if (this.onBridge(x, z)) return 'wood';
+            return 'stone';
+        }
+        if (t < -0.05) return 'water';
+        const C = WORLD.CASTLE, P = WORLD.PLAZA;
+        if (Math.abs(x - C.x) < C.half && Math.abs(z - C.z) < C.half) return 'stone';
+        if (Math.hypot(x - P.x, z - P.z) < P.r) return 'stone';
+        const snow = SNOW_COVER.value > 0.45;
+        if (t < 0.6) return snow && t > 0.3 ? 'snow' : 'sand';
+        if (snow) return 'snow';
+        return pathDist(x, z) < 2 ? 'path' : 'grass';
+    }
+    // posizioni dei fuochi (per il crepitio)
+    fireSpots() {
+        if (!this._fires) this._fires = this.flames.map(f => f.glow.getWorldPosition(new THREE.Vector3()));
+        return this._fires;
     }
     nearestInteractable(x, z, y) {
         let best = null, bd = Infinity;
@@ -1439,7 +1482,7 @@ export class World {
         for (const f of this.flames) f.glow.material.opacity = 0.38 + Math.sin(t * f.sp) * 0.06 + Math.random() * 0.04;
         for (const w of this.wisps) {
             w.s.position.set(w.x + Math.cos(t * w.sp + w.a) * w.rad, w.y + Math.sin(t * w.sp * 1.7 + w.a) * 0.4, w.z + Math.sin(t * w.sp + w.a) * w.rad);
-            w.s.material.opacity = 0.55 + Math.sin(t * 2 + w.a) * 0.35;
+            w.s.material.opacity = (0.55 + Math.sin(t * 2 + w.a) * 0.35) * (this.wispDim ?? 1);
         }
         for (const m of this.mist) { m.a += m.sp * dt; m.s.position.x = Math.cos(m.a) * m.d; m.s.position.z = -20 + Math.sin(m.a) * m.d; }
         for (const fn of [...this.animated]) fn(dt, t);
@@ -1448,7 +1491,7 @@ export class World {
         this.gallery.update(dt);
         if (focus && this.moonLight.castShadow) {
             this.moonLight.target.position.copy(focus);
-            this.moonLight.position.copy(focus).addScaledVector(MOON_DIR, 60);
+            this.moonLight.position.copy(focus).addScaledVector(this.lightDir, 60);
         }
     }
 }
