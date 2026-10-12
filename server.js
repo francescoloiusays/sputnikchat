@@ -925,11 +925,12 @@ io.on('connection', (socket) => {
         socket.volatile.to(me.room).emit('mv', { i: me.p.id, s: me.pos });
         // il telefono bianco squilla una volta al giorno, poco dopo che sei entrato nella Stanza Bianca
         if (!me.phoneT && !me.phoneRing && me.p.phoneDay !== today() && levelOf(me.p) >= 2 && inWhiteRoom(me.pos[0], me.pos[1], me.pos[2])) {
-            me.phoneT = setTimeout(() => {
-                me.phoneT = null;
-                if (!me || !online.has(me.sid) || me.p.phoneDay === today() || !inWhiteRoom(me.pos[0], me.pos[1], me.pos[2])) return;
-                me.phoneRing = true;
-                me.socket.emit('phone:ring');
+            const S = me;
+            S.phoneT = setTimeout(() => {
+                S.phoneT = null;
+                if (me !== S || !online.has(S.sid) || S.p.phoneDay === today() || !inWhiteRoom(S.pos[0], S.pos[1], S.pos[2])) return;
+                S.phoneRing = true;
+                S.socket.emit('phone:ring');
             }, 15000 + Math.random() * 30000);
         }
     });
@@ -1905,12 +1906,17 @@ io.on('connection', (socket) => {
         }
         cleanupSession(me.room, me);
         clearTimeout(me.saveT);
+        clearTimeout(me.phoneT);
         p.lastSeen = Date.now();
         save(p);
         console.log(`- ${p.name} — online: ${online.size}`);
         me = null;
     });
 });
+
+// un errore imprevisto finisce nei log invece di spegnere l'isola per tutti
+process.on('uncaughtException', (e) => console.error('[errore non gestito]', e));
+process.on('unhandledRejection', (e) => console.error('[promessa rifiutata]', e));
 
 // prima di spegnersi (riavvio o nuova versione) il server consegna a tutti una copia fresca
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => {
