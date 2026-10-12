@@ -1022,6 +1022,55 @@ export class Panels {
             h('div', { class: 'btn-row' }, [['Novizio', 0.6, 1], ['Guerriero', 1, 2], ['Campione', 1.6, 3]].map(([l, v, n]) => h('button', { class: 'btn', onclick: () => { this.close(); app.startPractice(v); } }, skulls(n), l))));
     }
 
+    // --- ACCOUNT E SALVATAGGI (in cima alle Opzioni) ---
+    accountSection() {
+        const app = this.app, acc = app.local.account;
+        const when = app.savedAt ? new Date(app.savedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
+        const saveRow = h('div', { class: 'btn-row', style: { marginTop: '10px' } },
+            btn('Salva ora', async () => { await app.saveNow(true); this.render(); }, { ic: 'save', cls: acc ? 'btn-primary' : '' }),
+            h('span', { class: 'muted small' }, (when ? `Ultimo salvataggio alle ${when}. ` : '') + 'Il gioco salva anche da solo, a ogni azione e ogni minuto.'));
+        const head = h('h3', { class: 'sect', style: { marginTop: 0 }, html: iconSVG('lock') }, 'Account e salvataggi');
+        if (acc) {
+            const old = h('input', { type: 'password', placeholder: 'Password attuale', autocomplete: 'current-password', maxlength: 72 });
+            const nw = h('input', { type: 'password', placeholder: 'Nuova password (almeno 6 caratteri)', autocomplete: 'new-password', maxlength: 72 });
+            return [head,
+                h('p', { class: 'lore' }, 'Sei entrato come ', h('b', {}, acc), '. Con nome utente e password ritrovi livello, monete e borsa da qualsiasi dispositivo.'),
+                saveRow,
+                h('details', { class: 'mix' }, h('summary', {}, 'Cambia password'),
+                    h('form', { class: 'acc-form two', onsubmit: async (e) => {
+                        e.preventDefault();
+                        if (nw.value.length < 6) return toast('La nuova password deve avere almeno 6 caratteri', { kind: 'bad' });
+                        const r = await app.net.request('auth:password', { old: old.value, pass: nw.value });
+                        toast(r.ok ? 'Password cambiata' : r.msg || 'Non è stato possibile cambiarla', { kind: r.ok ? 'ok' : 'bad', icon: 'lock' });
+                        if (r.ok) old.value = nw.value = '';
+                    } }, old, nw, h('button', { type: 'submit', class: 'btn btn-sm' }, 'Cambia'))),
+                h('div', { class: 'btn-row', style: { marginTop: '10px' } }, btn('Esci dall\'account', () => app.logout(), { cls: 'btn-sm btn-danger', ic: 'door' }))];
+        }
+        const user = h('input', { type: 'text', placeholder: 'Nome utente', autocomplete: 'username', maxlength: 16, autocapitalize: 'none', spellcheck: 'false' });
+        const pass = h('input', { type: 'password', placeholder: 'Password (min. 6 caratteri)', autocomplete: 'new-password', maxlength: 72 });
+        const again = h('input', { type: 'password', placeholder: 'Ripeti la password', autocomplete: 'new-password', maxlength: 72 });
+        const msg = h('p', { class: 'auth-msg' });
+        const say = (t, bad = true) => { msg.textContent = t; msg.className = 'auth-msg' + (bad ? ' bad' : ''); };
+        const form = h('form', { class: 'acc-form', onsubmit: async (e) => {
+            e.preventDefault();
+            const u = user.value.trim().toLowerCase();
+            if (!/^[a-z0-9._-]{3,16}$/.test(u)) return say('Il nome utente va da 3 a 16 caratteri: lettere, numeri, punto, trattino o trattino basso.');
+            if (pass.value.length < 6) return say('La password deve avere almeno 6 caratteri.');
+            if (pass.value !== again.value) return say('Le due password non coincidono.');
+            if (!app.net.connected) return say('Il portale è chiuso: riprova appena il server si sveglia.');
+            say('Incido il tuo nome nell\'Albo...', false);
+            const r = await app.net.request('auth:link', { user: u, pass: pass.value }, 20000);
+            if (!r.ok) return say(r.msg || 'Qualcosa è andato storto: riprova.');
+            app.local.account = r.user; app.saveLocal();
+            app.audio.play('saved');
+            toast(h('div', {}, h('b', {}, 'Account creato'), h('div', {}, `D'ora in poi entri come ${r.user} da qualsiasi dispositivo: tutto ciò che hai è rimasto tuo.`)), { kind: 'ok', icon: 'lock', duration: 9000 });
+            this.render();
+        } }, user, pass, again, h('button', { type: 'submit', class: 'btn btn-primary' }, 'Crea l\'account'));
+        return [head,
+            h('p', { class: 'lore' }, 'Il tuo viandante non ha ancora un account e vive solo in questo browser. Scegli un nome utente e una password: lo ritroverai da qualsiasi dispositivo, con tutto ciò che hai.'),
+            form, msg, saveRow];
+    }
+
     // --- OPZIONI ---
     p_impostazioni() {
         const app = this.app;
@@ -1030,7 +1079,8 @@ export class Panels {
         const code = h('input', { type: 'text', placeholder: 'Incolla qui un codice di recupero', style: { flex: 1 } });
         this.set('cog', 'Opzioni',
             h('div', { class: 'parchment' },
-                h('h3', { class: 'sect', style: { marginTop: 0 }, html: iconSVG('mirror') }, 'Il tuo viandante'),
+                this.accountSection(),
+                h('h3', { class: 'sect', html: iconSVG('mirror') }, 'Il tuo viandante'),
                 h('div', { class: 'btn-row' },
                     btn('Cambia aspetto e nome', () => { this.close(); app.editAppearance(); }, { ic: 'mirror' }),
                     btn('Modifica la card', () => this.open('card'), { ic: 'card' })),
@@ -1059,8 +1109,8 @@ export class Panels {
                 h('div', { class: 'keys', style: { justifyContent: 'flex-start', marginTop: '12px', fontSize: '15px' } },
                     [['WASD', 'cammina'], ['Shift', 'corri'], ['Spazio', 'salta'], ['E', 'interagisci'], ['R', 'profilo vicino'], ['F', 'fango'], ['V', 'visuale'], ['1-4', 'gesti'], ['Invio', 'parla'], ['M', 'voce'], ['B', 'musica'], ['I', 'bisaccia'], ['C', 'card'], ['O', 'compagnia'], ['Tab', 'albo'], ['K', 'album'], ['L', 'maestria'], ['J', 'taglie'], ['N', 'mappa']]
                         .map(([k, t]) => h('span', {}, h('i', { class: 'kbd' }, k), ' ', t))),
-                h('h3', { class: 'sect', html: iconSVG('lock') }, 'Codice di recupero'),
-                h('p', { class: 'lore' }, 'Il tuo viandante vive in questo browser, che ne custodisce una copia sigillata: livello, monete e borsa sopravvivono anche quando il server si addormenta. Con il codice lo ritrovi su un altro dispositivo: custodiscilo come una chiave, perché chi lo possiede comanda il tuo personaggio e le tue monete.'),
+                h('details', { class: 'mix' }, h('summary', {}, 'Codice di recupero (avanzato)'),
+                h('p', { class: 'lore', style: { marginTop: '8px' } }, 'Questo browser custodisce anche una copia sigillata del tuo viandante, che il server usa se si è dimenticato di te. Il codice è quella copia: incollato su un altro dispositivo, ti riporta lì il viandante. Custodiscilo come una chiave, perché chi lo possiede comanda il tuo personaggio e le tue monete.'),
                 ticket || token ? h('div', { class: 'btn-row' },
                     btn('Copia il codice', async () => {
                         const v = store.loadTicket() || token;
@@ -1080,7 +1130,7 @@ export class Panels {
                         store.keepTicket(v);
                     } else app.local.token = v;
                     app.saveLocal(); location.reload();
-                }, { ic: 'lock' })),
+                }, { ic: 'lock' }))),
                 h('div', { class: 'divider' }),
                 h('p', { class: 'muted small center', style: { margin: 0 } },
                     app.net.connected ? 'Il portale è aperto' : 'Il portale è chiuso: si riapre da solo appena il server si sveglia', ' · ', h('span', { title: SOCKET_URL }, 'server'), h('br'),

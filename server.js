@@ -42,7 +42,7 @@ const server = http.createServer((req, res) => {
     try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400).end(); return; }
     if (p === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        res.end(JSON.stringify({ ok: true, online: online.size, duels: duels.size, store: store.kind, save: SAVE_KEYS[0][0] }));
+        res.end(JSON.stringify({ ok: true, online: online.size, duels: duels.size, store: store.kind, save: SAVE_KEYS[0][0], accounts: accIndex.size }));
         return;
     }
     if (p === '/' || p.endsWith('/')) p += 'index.html';
@@ -278,7 +278,7 @@ function privateView(p) {
         league: leagueOf(p.rating), season: p.season, bounty: ensureBounties(p), graves: gravesView(p),
         cantoLeft: Math.max(0, CANTO.daily - (dayc(p).canto || 0)), cantoBest: p.cantoBest || 0, wishedToday: p.wishDay === d,
         fountainUntil: p.fountain?.until || 0, tollToday: p.tollDay === d, ondaToday: p.ondaDay === d,
-        veglia: p.veglia || null, kingWeek: p.kingWeek || null, watched: Object.keys(p.watched || {}),
+        veglia: p.veglia || null, kingWeek: p.kingWeek || null, watched: Object.keys(p.watched || {}), account: p.account?.user || null,
         friends: p.friends.map(id => ({ id, name: byPid(id)?.name || '???', online: sidByPid.has(id) })),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
         collectionCount: p.collection.length,
@@ -306,10 +306,24 @@ const SAVE_KEYS = (() => {
     return keys;
 })();
 const signSave = (body, key) => crypto.createHmac('sha256', key).update(body).digest('base64url');
+const accKey = k => crypto.createHash('sha256').update('sputnik-acc:' + k).digest();
+function sealAcc(a) {
+    const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', accKey(SAVE_KEYS[0][1]), iv);
+    const enc = Buffer.concat([c.update(JSON.stringify(a), 'utf8'), c.final()]);
+    return [iv, c.getAuthTag(), enc].map(b => b.toString('base64url')).join('~');
+}
+function openAcc(s, k) {
+    try {
+        const [iv, tag, enc] = String(s).split('~').map(x => Buffer.from(x, 'base64url'));
+        const d = crypto.createDecipheriv('aes-256-gcm', accKey(k), iv);
+        d.setAuthTag(tag);
+        return JSON.parse(Buffer.concat([d.update(enc), d.final()]).toString('utf8'));
+    } catch { return null; }
+}
 function saveTicket(p) {
-    const { cardImage, ...data } = p;
+    const { cardImage, account, fresh, ...data } = p;
     const l = store.listings().filter(x => x.seller === p.id).map(x => ({ lid: x.lid, entry: x.entry }));
-    const body = Buffer.from(JSON.stringify({ t: p.savedAt || Date.now(), p: data, l })).toString('base64url');
+    const body = Buffer.from(JSON.stringify({ t: p.savedAt || Date.now(), p: data, l, a: account ? sealAcc(account) : undefined })).toString('base64url');
     return 'v1.' + body + '.' + signSave(body, SAVE_KEYS[0][1]);
 }
 function readSave(ticket, token) {
@@ -317,10 +331,12 @@ function readSave(ticket, token) {
     const [v, body, sig] = ticket.split('.');
     if (v !== 'v1' || !body || !sig) return null;
     const got = Buffer.from(sig);
-    if (!SAVE_KEYS.some(([, k]) => { const want = Buffer.from(signSave(body, k)); return want.length === got.length && crypto.timingSafeEqual(want, got); })) return null;
+    const key = SAVE_KEYS.find(([, k]) => { const want = Buffer.from(signSave(body, k)); return want.length === got.length && crypto.timingSafeEqual(want, got); });
+    if (!key) return null;
     try {
         const s = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
         if (!s?.p?.token || !s.p.id || (token && s.p.token !== token)) return null;
+        if (s.a) { const a = openAcc(s.a, key[1]); if (a?.user) s.p.account = a; }
         return s;
     } catch { return null; }
 }
@@ -329,6 +345,42 @@ function queueSave(p) {
     const S = sessionOf(p.id);
     if (!S || S.p !== p || S.saveT) return;
     S.saveT = setTimeout(() => { S.saveT = null; if (online.has(S.sid)) S.socket.emit('save', saveTicket(S.p)); }, 1200);
+}
+
+// --- ACCOUNT: NOME UTENTE E PASSWORD ---
+// Il profilo resta legato al suo token: l'account è la serratura per ritrovarlo da qualsiasi dispositivo.
+// La password non si salva mai, solo il suo hash scrypt con un sale casuale.
+const accIndex = new Map();   // nome utente (minuscolo) → token del profilo
+const normUser = u => String(u || '').trim().toLowerCase();
+const userProblem = u => /^[a-z0-9._-]{3,16}$/.test(u) ? null : 'Il nome utente va da 3 a 16 caratteri: lettere, numeri, punto, trattino o trattino basso';
+function passProblem(pw) {
+    pw = String(pw ?? '');
+    if (pw.length < 6) return 'La password deve avere almeno 6 caratteri';
+    if (pw.length > 72) return 'La password è troppo lunga';
+    return null;
+}
+const scryptP = (pw, salt) => new Promise((res, rej) => crypto.scrypt(String(pw ?? ''), salt, 32, { N: 16384, r: 8, p: 1 }, (e, k) => e ? rej(e) : res(k)));
+async function hashPass(pw) { const salt = crypto.randomBytes(16).toString('base64url'); return { salt, hash: (await scryptP(pw, salt)).toString('base64url') }; }
+async function checkPass(acc, pw) {
+    if (!acc?.salt || !acc.hash) return false;
+    const got = await scryptP(pw, acc.salt), want = Buffer.from(acc.hash, 'base64url');
+    return got.length === want.length && crypto.timingSafeEqual(got, want);
+}
+const userTaken = (u, token) => { const t = accIndex.get(u); return !!t && t !== token && !!store.get(t); };
+// un nome già preso da un altro profilo non si ruba: l'account arrivato dopo resta senza
+function linkAccount(p) {
+    const u = p.account?.user;
+    if (!u) return;
+    if (userTaken(u, p.token)) { delete p.account; return; }
+    accIndex.set(u, p.token);
+}
+// sei tentativi sbagliati su un nome e si aspettano due minuti
+const authFails = new Map();
+function authLocked(u) { const f = authFails.get(u); return f && f.until > Date.now() ? Math.ceil((f.until - Date.now()) / 1000) : 0; }
+function authFail(u) {
+    const f = authFails.get(u) || { n: 0, until: 0 };
+    if (++f.n >= 6) { f.n = 0; f.until = Date.now() + 120000; }
+    authFails.set(u, f);
 }
 
 function notify(S, text, kind = 'info') { if (S) S.socket.emit('notify', { text, kind }); }
@@ -698,14 +750,17 @@ function awardFriday() {
 setInterval(awardFriday, 10 * 60 * 1000);
 
 // profili di prima: si aggiornano all'avvio (qui sotto tutti gli aiuti sono già pronti)
-for (const p of store.all()) { pidIndex.set(p.id, p.token); if (migrate(p)) store.put(p); }
+for (const p of store.all()) { pidIndex.set(p.id, p.token); linkAccount(p); if (migrate(p)) store.put(p); }
 
 io.on('connection', (socket) => {
     let me = null;
+    // prima di entrare si può solo salutare, accedere o registrarsi
+    const PRE = new Set(['hello', 'auth:login', 'auth:register']);
     const on = (ev, fn) => socket.on(ev, (d, ack) => {
         const reply = typeof ack === 'function' ? ack : () => {};
-        if (!me && ev !== 'hello') return reply({ ok: false, msg: 'Non autenticato' });
-        try { fn(d || {}, reply); } catch (e) { console.error(`[${ev}]`, e); reply({ ok: false, msg: 'Errore del server' }); }
+        if (!me && !PRE.has(ev)) return reply({ ok: false, msg: 'Non autenticato' });
+        const oops = e => { console.error(`[${ev}]`, e); reply({ ok: false, msg: 'Errore del server' }); };
+        try { const r = fn(d || {}, reply); if (r?.catch) r.catch(oops); } catch (e) { oops(e); }
     });
     const fail = (reply, msg) => reply({ ok: false, msg });
 
@@ -725,14 +780,17 @@ io.on('connection', (socket) => {
             for (const l of kept.l || []) if (l?.entry && !live.has(l.lid)) p.inventory.push(l.entry);
             if (pidIndex.has(p.id) && pidIndex.get(p.id) !== p.token) p.id = shortId();
             pidIndex.set(p.id, p.token);
+            linkAccount(p);
             store.put(p);
             restored = !old;
             console.log(`[save] ${p.name} (${p.id}) recuperato dal browser`);
         }
-        const created = !p;
+        // appena registrato: il profilo c'è già, ma il viandante entra per la prima volta
+        const created = !p || !!p.fresh;
         let dropped = false;
         if (!p) p = newProfile(d);
         else {
+            delete p.fresh;
             migrate(p);
             if (cleanText(d.name, 16).length >= 2) p.name = cleanText(d.name, 16);
             if (d.appearance) p.appearance = sanitizeAppearance(d.appearance);
@@ -767,6 +825,85 @@ io.on('connection', (socket) => {
         joinRoom(me, 'pub');
         for (const fid of p.friends) { const F = sessionOf(fid); if (F) F.socket.emit('friend:status', { id: p.id, name: p.name, online: true }); }
         console.log(`+ ${p.name} (${p.id}) — online: ${online.size}`);
+    });
+
+    // --- ACCOUNT ---
+    let authTries = 0;
+    const tooMany = (reply) => (++authTries > 30 ? (fail(reply, 'Troppi tentativi: ricarica la pagina e riprova'), true) : false);
+    on('auth:register', async (d, reply) => {
+        if (me) return fail(reply, 'Sei già sull\'isola: crea l\'account dalle Opzioni');
+        if (tooMany(reply)) return;
+        const user = normUser(d.user);
+        const bad = userProblem(user) || passProblem(d.pass);
+        if (bad) return fail(reply, bad);
+        if (userTaken(user)) return fail(reply, 'Questo nome utente è già preso');
+        const acc = await hashPass(d.pass);
+        if (userTaken(user)) return fail(reply, 'Questo nome utente è già preso');
+        const p = newProfile({ name: user });
+        p.account = { user, ...acc, at: Date.now() };
+        p.fresh = true;
+        accIndex.set(user, p.token);
+        save(p);
+        console.log(`[account] nuovo: ${user} (${p.id})`);
+        reply({ ok: true, token: p.token, user, save: saveTicket(p) });
+    });
+    on('auth:login', async (d, reply) => {
+        if (me) return fail(reply, 'Sei già sull\'isola');
+        if (tooMany(reply)) return;
+        const user = normUser(d.user);
+        const wait = authLocked(user);
+        if (wait) return fail(reply, `Troppi tentativi sbagliati: riprova tra ${wait} secondi`);
+        const p = accIndex.has(user) ? store.get(accIndex.get(user)) : null;
+        if (!p?.account) {
+            return fail(reply, store.kind === 'file'
+                ? 'Non trovo questo account. Se il server si è appena svegliato, entra prima dal dispositivo dove giochi di solito: il suo browser gli ricorderà chi sei.'
+                : 'Non esiste un account con questo nome');
+        }
+        if (!(await checkPass(p.account, d.pass))) { authFail(user); return fail(reply, 'Password sbagliata'); }
+        authFails.delete(user);
+        console.log(`[account] accesso: ${user} (${p.id})`);
+        reply({ ok: true, token: p.token, user, save: saveTicket(p), profile: { name: p.name, appearance: p.appearance, card: p.card, level: levelOf(p) } });
+    });
+    // un viandante senza account se ne crea uno: tutto ciò che ha resta suo
+    on('auth:link', async (d, reply) => {
+        const S = me, p = S.p;
+        if (p.account) return fail(reply, 'Questo viandante ha già un account');
+        if (tooMany(reply)) return;
+        const user = normUser(d.user);
+        const bad = userProblem(user) || passProblem(d.pass);
+        if (bad) return fail(reply, bad);
+        if (userTaken(user, p.token)) return fail(reply, 'Questo nome utente è già preso');
+        const acc = await hashPass(d.pass);
+        if (userTaken(user, p.token) || p.account) return fail(reply, 'Questo nome utente è già preso');
+        p.account = { user, ...acc, at: Date.now() };
+        accIndex.set(user, p.token);
+        save(p);
+        if (me === S) sendMe(S);
+        console.log(`[account] ${p.name} (${p.id}) ora è ${user}`);
+        reply({ ok: true, user });
+    });
+    on('auth:password', async (d, reply) => {
+        const p = me.p, A = p.account;
+        if (!A) return fail(reply, 'Prima crea un account');
+        const bad = passProblem(d.pass);
+        if (bad) return fail(reply, bad);
+        const wait = authLocked(A.user);
+        if (wait) return fail(reply, `Troppi tentativi sbagliati: riprova tra ${wait} secondi`);
+        if (!(await checkPass(A, d.old))) { authFail(A.user); return fail(reply, 'La password attuale è sbagliata'); }
+        Object.assign(A, await hashPass(d.pass));
+        save(p);
+        reply({ ok: true });
+    });
+    // il tasto Salva e il salvataggio automatico: scrive subito e rinnova la copia nel browser
+    on('save:now', async (d, reply) => {
+        const S = me, p = S.p;
+        if (Date.now() - (S.lastSaveNow || 0) > 2500) {
+            S.lastSaveNow = Date.now();
+            p.lastSeen = p.savedAt = Date.now();
+            store.put(p);
+            await store.flush();
+        }
+        reply({ ok: true, save: saveTicket(p), at: p.savedAt, lasting: store.kind !== 'file' });
     });
 
     on('profile:update', (d, reply) => {
@@ -1775,6 +1912,11 @@ io.on('connection', (socket) => {
     });
 });
 
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { await store.flush(); process.exit(0); });
+// prima di spegnersi (riavvio o nuova versione) il server consegna a tutti una copia fresca
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => {
+    for (const S of online.values()) { try { S.socket.emit('save', saveTicket(S.p)); } catch { /* ok */ } }
+    await store.flush();
+    setTimeout(() => process.exit(0), 400);
+});
 
 server.listen(PORT, () => console.log(`SputnikChat 3D attivo su http://localhost:${PORT} (${store.kind})`));

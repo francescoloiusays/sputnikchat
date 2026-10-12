@@ -17,6 +17,7 @@ export const store = {
     // copia firmata dal server di tutto il profilo (livello, monete, borsa...): torna al server se si riavvia
     loadTicket() { try { return localStorage.getItem(STORE_KEY + ':save') || null; } catch { return null; } },
     keepTicket(t) { try { if (typeof t === 'string') localStorage.setItem(STORE_KEY + ':save', t); } catch (e) { console.warn('Copia del profilo non salvata', e); } },
+    dropTicket() { try { localStorage.removeItem(STORE_KEY + ':save'); } catch { /* ok */ } },
     // legge il profilo dentro un codice di salvataggio (la firma la controlla il server)
     peekTicket(t) {
         try {

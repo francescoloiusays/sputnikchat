@@ -134,7 +134,11 @@ class Game {
     async titleScreen() {
         const status = $('#title-status'), btn = $('#play-btn');
         try { await Promise.all(['40px Planewalker', '700 30px Almendra', '30px Almendra', '700 20px Cinzel', '900 20px Cinzel', '18px Alegreya', 'italic 18px Alegreya', '900 40px "Cinzel Decorative"'].map(f => document.fonts.load(f))); } catch { /* ok */ }
-        const upd = () => { if (this.mode === 'title') status.textContent = this.net.connected ? 'Il portale è aperto: gli altri viandanti ti aspettano' : 'Il traghettatore attraversa la nebbia... puoi già entrare'; };
+        const upd = () => {
+            if (this.mode !== 'title') return;
+            status.textContent = this.net.connected ? 'Il portale è aperto: gli altri viandanti ti aspettano'
+                : this.authOpen ? 'Il server si sta svegliando: per accedere può volerci fino a un minuto...' : 'Il traghettatore attraversa la nebbia... puoi già entrare';
+        };
         upd(); this.titleTimer = setInterval(upd, 1000);
         const go = async () => {
             if (this.mode !== 'title') return;
@@ -142,15 +146,139 @@ class Game {
             clearInterval(this.titleTimer);
             this.audio.unlock();
             $('#title-screen').classList.add('hidden');
-            if (!this.local.appearance && !this.local.token) {
-                const res = await this.creator.open({ mode: 'new', name: '', appearance: randomAppearance() });
+            if ((!this.local.appearance && !this.local.token) || this.local.needsLook) {
+                const res = await this.creator.open({ mode: 'new', name: this.local.nameHint || this.local.account || '', appearance: randomAppearance() });
                 Object.assign(this.local, { name: res.name, appearance: res.appearance, card: res.card, cardImage: res.cardImage, look: { weapon: STARTER_WEAPON } });
+                delete this.local.needsLook; delete this.local.nameHint;
                 this.saveLocal();
             }
             this.enterWorld();
         };
         btn.onclick = go;
-        addEventListener('keydown', (e) => { if (e.key === 'Enter' && this.mode === 'title') go(); });
+        addEventListener('keydown', (e) => { if (e.key === 'Enter' && this.mode === 'title' && !this.authOpen) go(); });
+        this.setupAuth(go);
+    }
+    // chi arriva senza viandante sceglie: accedere, registrarsi o giocare da ospite
+    setupAuth(go) {
+        const box = $('#auth'), play = $('#play-btn'), line = $('#title-account');
+        const user = $('#auth-user'), pass = $('#auth-pass'), again = $('#auth-again'), msg = $('#auth-msg'), send = $('#auth-go');
+        let tab = 'login';
+        const setTab = (t) => {
+            tab = t;
+            box.querySelectorAll('.auth-tab').forEach(b => { const on = b.dataset.tab === t; b.classList.toggle('sel', on); b.setAttribute('aria-selected', on); });
+            $('#auth-again-wrap').classList.toggle('hidden', t !== 'register');
+            pass.autocomplete = t === 'register' ? 'new-password' : 'current-password';
+            send.textContent = t === 'register' ? 'Crea l\'account ed entra' : 'Entra';
+            $('#auth-lead').textContent = t === 'register'
+                ? 'Scegli un nome utente e una password: ritroverai il tuo viandante da qualsiasi dispositivo.'
+                : 'Bentornato, viandante: dimmi chi sei.';
+            msg.textContent = ''; msg.className = 'auth-msg';
+        };
+        const show = (on, t = 'login') => {
+            this.authOpen = on;
+            box.classList.toggle('hidden', !on);
+            play.classList.toggle('hidden', on);
+            line.classList.toggle('hidden', on || !this.local.token);
+            if (!on) return;
+            setTab(t);
+            const guest = !!this.local.token && !this.local.account;
+            $('#auth-guest').textContent = this.local.token ? 'Torna indietro' : 'Gioca senza account';
+            $('#auth-note').textContent = guest ? 'Il viandante senza account di questo browser verrà sostituito: se vuoi tenerlo, torna indietro, entra e creagli un account dalle Opzioni.'
+                : this.local.token ? '' : 'Senza account il viandante vive solo in questo browser: potrai crearne uno più tardi dalle Opzioni.';
+            setTimeout(() => user.focus(), 60);
+        };
+        const fillLine = () => {
+            line.replaceChildren();
+            if (!this.local.token) return;
+            line.append(this.local.account ? h('span', {}, 'Sei ', h('b', {}, this.local.account)) : h('span', {}, 'Viandante senza account'), ' · ',
+                h('button', { type: 'button', class: 'auth-link', onclick: () => show(true, 'login') }, this.local.account ? 'Cambia account' : 'Accedi a un account'));
+        };
+        box.querySelectorAll('.auth-tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+        $('#auth-eye').onclick = () => {
+            const vis = pass.type === 'password';
+            pass.type = again.type = vis ? 'text' : 'password';
+            $('#auth-eye').classList.toggle('on', vis);
+            $('#auth-eye').title = vis ? 'Nascondi la password' : 'Mostra la password';
+        };
+        $('#auth-guest').onclick = () => { if (this.local.token) show(false); else { show(false); go(); } };
+        box.onsubmit = async (e) => {
+            e.preventDefault();
+            if (this.authBusy) return;
+            const u = user.value.trim().toLowerCase(), pw = pass.value;
+            const err = (t) => { msg.textContent = t; msg.className = 'auth-msg bad'; };
+            if (!/^[a-z0-9._-]{3,16}$/.test(u)) return err('Il nome utente va da 3 a 16 caratteri: lettere, numeri, punto, trattino o trattino basso.');
+            if (pw.length < 6) return err('La password deve avere almeno 6 caratteri.');
+            if (tab === 'register' && pw !== again.value) return err('Le due password non coincidono.');
+            if (!this.net.connected) return err('Il server si sta ancora svegliando: riprova tra qualche secondo.');
+            this.authBusy = true; send.disabled = true;
+            msg.className = 'auth-msg'; msg.textContent = tab === 'register' ? 'Incido il tuo nome nell\'Albo...' : 'Cerco il tuo nome nell\'Albo...';
+            const r = await this.net.request(tab === 'register' ? 'auth:register' : 'auth:login', { user: u, pass: pw }, 20000);
+            this.authBusy = false; send.disabled = false;
+            if (!r.ok) return err(r.msg || 'Qualcosa è andato storto: riprova.');
+            // il viandante di prima, se c'era, lascia il posto a quello dell'account
+            for (const k of ['token', 'account', 'name', 'appearance', 'card', 'cardImage', 'cardSig', 'look', 'needsLook', 'nameHint', 'importing']) delete this.local[k];
+            store.dropTicket();
+            Object.assign(this.local, { token: r.token, account: r.user });
+            if (r.save) store.keepTicket(r.save);
+            if (r.profile) Object.assign(this.local, { name: r.profile.name, appearance: r.profile.appearance, card: r.profile.card });
+            else Object.assign(this.local, { needsLook: true, nameHint: user.value.trim() });
+            this.saveLocal();
+            pass.value = again.value = '';
+            show(false);
+            go();
+        };
+        fillLine();
+        if (!this.local.token) show(true, 'login');
+        else line.classList.remove('hidden');
+    }
+    // esce dall'account: il viandante resta al sicuro sul server
+    async logout() {
+        if (!confirm(`Uscire dall'account ${this.local.account}? Il tuo viandante resta al sicuro: rientri con nome utente e password.`)) return;
+        await this.saveNow(false);
+        for (const k of ['token', 'account', 'name', 'appearance', 'card', 'cardImage', 'cardSig', 'look', 'needsLook', 'nameHint', 'importing']) delete this.local[k];
+        store.dropTicket();
+        this.saveLocal();
+        this.net.socket?.disconnect();
+        location.reload();
+    }
+
+    // --- SALVATAGGIO ---
+    // il server salva già a ogni azione: il tasto e il giro automatico scrivono subito e lo dicono
+    async saveNow(manual) {
+        if (!this.net.connected || !this.helloOk) {
+            this.setSaveState('off');
+            if (manual) toast('Il portale è chiuso: appena il server si sveglia il gioco salva da solo.', { kind: 'bad', icon: 'save' });
+            return false;
+        }
+        if (this.saving) return false;
+        this.saving = true;
+        if (manual) this.setSaveState('busy');
+        const r = await this.net.request('save:now', {}, 15000);
+        this.saving = false;
+        if (!r.ok) { this.setSaveState('off'); if (manual) toast(r.msg || 'Salvataggio non riuscito: riprova tra poco.', { kind: 'bad' }); return false; }
+        if (r.save) store.keepTicket(r.save);
+        this.setSaveState('ok', r.at);
+        if (manual) {
+            this.audio.play('saved');
+            toast(h('div', {}, h('b', {}, 'Partita salvata'), h('div', {}, this.local.account
+                ? `Livello, monete e borsa sono al sicuro: entra come ${this.local.account} da qualsiasi dispositivo.`
+                : 'Salvata sul server e in questo browser. Crea un account dalle Opzioni per ritrovarla ovunque.')), { kind: 'ok', icon: 'save' });
+        }
+        return true;
+    }
+    setSaveState(s, at) {
+        const el = $('#save-state');
+        if (s === 'ok') this.savedAt = at || Date.now();
+        $('#btn-save')?.classList.toggle('busy', s === 'busy');
+        if (!el) return;
+        el.dataset.s = s;
+        el.textContent = s === 'busy' ? 'Salvataggio...' : s === 'off' ? 'Non connesso'
+            : this.savedAt ? `Salvato alle ${new Date(this.savedAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : '';
+    }
+    accountNudge() {
+        if (this.local.account || !this.helloOk) return;
+        toast(h('div', {}, h('b', {}, 'Proteggi il tuo viandante'), h('div', {}, 'Senza account vive solo in questo browser. Con nome utente e password lo ritrovi da qualsiasi dispositivo.')),
+            { icon: 'lock', duration: 16000, actions: [{ label: 'Crea un account', primary: true, fn: () => this.openPanel('impostazioni') }, { label: 'Più tardi' }] });
     }
     saveLocal() { store.save(this.local); }
 
@@ -352,7 +480,10 @@ class Game {
         }, 15000).then(r => {
             if (!r.ok) { this.helloDone = false; console.warn('hello fallito', r.msg); return; }
             this.local.token = r.token;
+            this.local.account = r.profile.account || null;
+            this.helloOk = true;
             if (r.save) store.keepTicket(r.save);
+            this.setSaveState('ok', Date.now());
             if (r.now) this.clockOffset = r.now - Date.now();
             const importing = this.local.importing; delete this.local.importing;
             if (r.restored) toast(h('div', {}, h('b', {}, 'Progressi ritrovati'), h('div', {}, 'Il server si era addormentato e aveva perso la memoria: il tuo livello, le monete e la borsa erano al sicuro nel tuo browser.')), { kind: 'ok', icon: 'scroll', duration: 9000 });
@@ -372,6 +503,7 @@ class Game {
             if (r.seasonMsg) toast(h('div', {}, h('b', {}, `Fine della stagione ${r.seasonMsg.season}`), h('div', {}, `Hai chiuso in lega ${r.seasonMsg.league}: la sua cornice ora decora la tua carta. La gloria riparte da metà strada.`)), { kind: 'coin', icon: 'trophy', duration: 12000 });
             if (r.created) toast(h('div', {}, h('b', {}, 'Il tuo nome è inciso nell\'Albo'), h('div', {}, 'Ricevi 150 Sputnik Coin e una Spada di Legno. La Sartoria e la Forgia ti aspettano.')), { kind: 'coin', duration: 9000 });
             if (!this.local.cardImage || !hasLocal) this.regenerateCard(true);
+            if (!this.local.account && !this.nudged) { this.nudged = true; setTimeout(() => this.accountNudge(), r.created ? 90000 : 12000); }
             this.net.request('lb:get').then(lb => { if (lb.ok) this.world.setLeaderboard(lb.rating); });
         });
     }
@@ -379,15 +511,15 @@ class Game {
         const N = this.net;
         N.on('_connect', () => { this.setNet(true); this.tryHello(); });
         N.on('_disconnect', () => {
-            this.setNet(false); this.helloDone = false;
+            this.setNet(false); this.helloDone = false; this.helloOk = false; this.setSaveState('off');
             for (const p of this.players.values()) p.dispose();
             this.players.clear(); this.duels.clear(); this.renderTicker();
             this.destroyPeers();
             if (this.duel && this.duel.role !== 'local') { toast('Il portale si è chiuso nel mezzo del duello', { kind: 'bad' }); this.exitDuel(); }
         });
-        N.on('kicked', () => { toast('Sei entrato da un\'altra finestra: questa resta fuori dal portale.', { kind: 'bad', duration: 20000 }); this.net.socket.io.opts.reconnection = false; });
+        N.on('kicked', () => { toast('Sei entrato da un\'altra finestra o da un altro dispositivo: questa resta fuori dal portale.', { kind: 'bad', duration: 20000 }); this.net.socket.io.opts.reconnection = false; });
         N.on('me', (p) => this.applyMe(p));
-        N.on('save', (t) => store.keepTicket(t));
+        N.on('save', (t) => { store.keepTicket(t); this.setSaveState('ok'); });
         N.on('notify', (n) => { toast(n.text, { kind: n.kind === 'coin' ? 'coin' : n.kind === 'friend' ? 'ok' : 'info' }); this.audio.play('notify'); });
         N.on('room:state', (s) => {
             for (const p of this.players.values()) p.dispose();
@@ -805,6 +937,7 @@ class Game {
         });
         addEventListener('keydown', (e) => {
             if (this.mode !== 'world') return;
+            if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') { e.preventDefault(); this.saveNow(true); return; }
             if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) {
                 if (e.key === 'Escape') document.activeElement.blur();
                 return;
@@ -1001,6 +1134,10 @@ class Game {
         document.querySelectorAll('#profile-card [data-panel]').forEach(b => b.addEventListener('click', () => this.openPanel(b.dataset.panel)));
         $('#btn-mic').onclick = () => this.toggleMic();
         $('#btn-music').onclick = () => this.audio.toggleMusic().then(on => { this.setMusicBtn(on); this.local.settings.musicOn = on; this.saveLocal(); });
+        $('#btn-save').onclick = () => this.saveNow(true);
+        this.autoSaveT = setInterval(() => this.saveNow(false), 60000);
+        document.addEventListener('visibilitychange', () => { if (document.hidden) this.saveNow(false); });
+        this.setSaveState(this.net.connected ? 'ok' : 'off');
         $('#power-card').onclick = () => this.openPanel('card');
         holoTrack($('#power-card'));
         $('#minimap-wrap').onclick = () => this.toggleBigMap(true);

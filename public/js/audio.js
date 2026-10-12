@@ -33,6 +33,12 @@ const SFX = {
     dash(d, t) { this.nz(d, t, { buf: 'pink', f0: 300, f1: 3200, q: 1.3, dur: 0.24, vol: 0.42, a: 0.02 }); },
     coin(d, t) { this.osc(d, t, { type: 'square', f0: 988, dur: 0.09, vol: 0.09, a: 0.002, hold: 0.05 }); this.osc(d, t + 0.08, { type: 'square', f0: 1319, dur: 0.34, vol: 0.09, a: 0.002, hold: 0.08 }); },
     ui(d, t) { this.osc(d, t, { type: 'triangle', f0: 620, f1: 820, dur: 0.06, vol: 0.1 }); },
+    // la ceralacca premuta sul foglio: un tonfo morbido e due note
+    saved(d, t) {
+        this.nz(d, t, { buf: 'brown', type: 'lowpass', f0: 700, f1: 200, dur: 0.12, vol: 0.4 });
+        this.osc(d, t + 0.06, { type: 'triangle', f0: 740, dur: 0.18, vol: 0.08 });
+        this.osc(d, t + 0.15, { type: 'triangle', f0: 1108, dur: 0.3, vol: 0.07 });
+    },
     open(d, t) { this.nz(d, t, { f0: 2600, q: 0.6, dur: 0.09, vol: 0.13 }); this.nz(d, t + 0.07, { f0: 1800, q: 0.6, dur: 0.13, vol: 0.09 }); },
     close(d, t) { this.nz(d, t, { f0: 1500, q: 0.6, dur: 0.1, vol: 0.1 }); this.osc(d, t + 0.04, { type: 'triangle', f0: 420, f1: 300, dur: 0.08, vol: 0.06 }); },
     notify(d, t) { this.osc(d, t, { f0: 660, dur: 0.14, vol: 0.15, hold: 0.06 }); this.osc(d, t + 0.12, { f0: 880, dur: 0.24, vol: 0.15, hold: 0.06 }); },

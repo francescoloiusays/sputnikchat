@@ -28,6 +28,30 @@
             <h1 class="title-name">SputnikChat</h1>
             <div class="title-sub"><span class="flourish"></span>L'Isola Fantasma<span class="flourish r"></span></div>
             <button id="play-btn" class="play-btn"><span>Entra</span></button>
+            <p id="title-account" class="title-account hidden"></p>
+            <form id="auth" class="auth hidden" novalidate>
+                <div class="auth-tabs" role="tablist">
+                    <button type="button" class="auth-tab sel" data-tab="login" role="tab" aria-selected="true">Accedi</button>
+                    <button type="button" class="auth-tab" data-tab="register" role="tab" aria-selected="false">Crea un account</button>
+                </div>
+                <p id="auth-lead" class="auth-lead"></p>
+                <label class="field" for="auth-user">Nome utente</label>
+                <input id="auth-user" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="16">
+                <label class="field" for="auth-pass">Password</label>
+                <div class="auth-pass">
+                    <input id="auth-pass" name="password" type="password" autocomplete="current-password" maxlength="72">
+                    <button type="button" id="auth-eye" class="auth-eye" title="Mostra la password" aria-label="Mostra la password" data-icon="eye"></button>
+                </div>
+                <div id="auth-again-wrap" class="hidden">
+                    <label class="field" for="auth-again">Ripeti la password</label>
+                    <input id="auth-again" name="password-again" type="password" autocomplete="new-password" maxlength="72">
+                </div>
+                <p id="auth-msg" class="auth-msg" role="alert"></p>
+                <button id="auth-go" type="submit" class="btn btn-primary auth-go">Entra</button>
+                <div class="auth-or"><span>oppure</span></div>
+                <button type="button" id="auth-guest" class="auth-link">Gioca senza account</button>
+                <p id="auth-note" class="auth-note"></p>
+            </form>
             <p id="title-status" class="title-status">Le lanterne si accendono...</p>
         </div>
     </div>
@@ -70,6 +94,7 @@
                     <div id="pc-meta" class="pc-meta">Gloria 1000</div>
                     <div id="pc-xp" class="pc-xp" title="Esperienza"><i id="pc-xp-fill"></i></div>
                     <div class="pc-coins"><span class="sc-coin" data-icon="satellite"></span><span id="pc-coins">0</span></div>
+                    <div id="save-state" class="save-state" title="Il gioco salva da solo a ogni azione e ogni minuto"></div>
                 </div>
             </div>
             <div class="actionbar">
@@ -81,6 +106,7 @@
                 <button class="slot-btn" data-panel="amici" title="Compagnia (O)" data-icon="friends"><span class="kbd-mini">O</span><span id="req-badge" class="badge hidden">0</span></button>
                 <button class="slot-btn" data-panel="classifica" title="Albo dei Campioni (Tab)" data-icon="trophy"><span class="kbd-mini">Tab</span></button>
                 <button class="slot-btn" data-panel="collezione" title="Album delle Card (K)" data-icon="album"><span class="kbd-mini">K</span></button>
+                <button class="slot-btn" id="btn-save" title="Salva la partita (Ctrl+S)" data-icon="save"></button>
                 <button class="slot-btn" data-panel="impostazioni" title="Opzioni (P)" data-icon="cog"><span class="kbd-mini">P</span></button>
             </div>
         </div>
