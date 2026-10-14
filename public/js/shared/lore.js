@@ -34,7 +34,7 @@ export const TOLL_LINES = {
 // pos: dove stanno; look/app: come si vestono; teach: la risposta del Pedaggio che insegnano la prima volta
 export const NPCS = {
     traghettatore: {
-        name: 'Il Traghettatore', where: 'Il Molo', x: -0.9, z: 92.6, ry: Math.PI / 2, teach: 4,
+        name: 'Il Traghettatore', where: 'Il Molo', x: 2.55, z: 96.9, y: 0.3, ry: -Math.PI / 2, teach: 4,
         app: { species: 'umano', build: 'snello', height: 1.1, skin: '#b9a48e', eyes: 'assonnati', eyeColor: '#7fd8ff', mouth: 'neutro', hair: 'lunghi', hairColor: '#c8c8c8', beard: 'folta', topStyle: 'veste', top: '#1d1b26', bottom: '#14121a', shoes: '#0e0c10' },
         look: { head: 'cappuccio', cape: 'mantello_nero' },
         lines: ['Tutti arrivano dal molo. Pochi ripartono. Nessuno, finora, ha chiesto il biglietto di ritorno.',
@@ -43,7 +43,7 @@ export const NPCS = {
         actions: [['diario', 'Il Diario del Naufrago']],
     },
     brace: {
-        name: 'Mastro Brace', where: 'Forgia di Vulcano', x: -16.2, z: 12.6, ry: Math.PI / 2, teach: 2,
+        name: 'Mastro Brace', where: 'Forgia di Vulcano', x: -22.5, z: 9.2, ry: Math.PI / 2, teach: 2,
         app: { species: 'umano', build: 'robusto', height: 1.05, skin: '#a8714c', eyes: 'fieri', eyeColor: '#3a2414', mouth: 'ghigno', hair: 'calvo', hairColor: '#1a1210', beard: 'folta', topStyle: 'tunica', top: '#5a2a14', bottom: '#2b2018', shoes: '#1e1612' },
         look: { torso: 'grembiule', weapon: { type: 'martello', material: 'ferro', handle: 'cuoio', gem: 'nessuna', name: 'Martello di Brace' } },
         lines: ['Ferro, legno, osso: tutto si piega se lo scaldi abbastanza. Anche le persone.',
@@ -52,8 +52,8 @@ export const NPCS = {
         actions: [['forgia', 'Entra in Forgia'], ['castoni', 'Castoni e Parole di Runa']],
     },
     sarta: {
-        name: 'La Sarta Spettrale', where: 'Sartoria Spettrale', x: 16.2, z: 7.6, ry: -Math.PI / 2, teach: 6,
-        app: { species: 'spettro', build: 'snello', height: 1, skin: '#c8d0ff', eyes: 'luminosi', eyeColor: '#e3c8ff', mouth: 'sorriso', hair: 'codino', hairColor: '#e8e8ff', beard: 'nessuna', topStyle: 'veste', top: '#3d1466', bottom: '#2a1040', shoes: '#14101e' },
+        name: 'La Sarta Spettrale', where: 'Sartoria Spettrale', x: 22.7, z: 9.2, ry: -Math.PI / 2, teach: 6,
+        app: { sex: 'f', species: 'spettro', build: 'snello', height: 1, skin: '#c8d0ff', eyes: 'luminosi', eyeColor: '#e3c8ff', mouth: 'sorriso', hair: 'codino', hairColor: '#e8e8ff', beard: 'nessuna', topStyle: 'veste', top: '#3d1466', bottom: '#2a1040', shoes: '#14101e' },
         look: { face: 'monocolo', cape: 'mantello_viola' },
         lines: ['Ogni capo va d\'accordo con qualche seme e litiga con altri. Come la gente.',
             'Non si paga per sognare. Si paga per indossare.',
@@ -71,7 +71,7 @@ export const NPCS = {
     },
     custode: {
         name: 'La Custode senza Volto', where: 'Cappella in Rovina', x: 30, z: 58.2, ry: Math.PI, teach: 9,
-        app: { species: 'spettro', build: 'medio', height: 1.1, skin: '#0c0a12', eyes: 'luminosi', eyeColor: '#fff4ea', mouth: 'neutro', hair: 'calvo', hairColor: '#0c0a12', beard: 'nessuna', topStyle: 'veste', top: '#e8e2d6', bottom: '#d8d0c0', shoes: '#c8c0b0' },
+        app: { sex: 'f', species: 'spettro', build: 'medio', height: 1.1, skin: '#0c0a12', eyes: 'luminosi', eyeColor: '#fff4ea', mouth: 'neutro', hair: 'calvo', hairColor: '#0c0a12', beard: 'nessuna', topStyle: 'veste', top: '#e8e2d6', bottom: '#d8d0c0', shoes: '#c8c0b0' },
         look: { head: 'cappuccio', cape: 'mantello_regale' },
         lines: ['Porta qui ciò che hai raccolto. Io non ho volto, ma vedo tutto quello che sei.',
             'In fondo al cammino c\'è la Rinascita: si torna piccoli, con una stella in più sulla carta.',

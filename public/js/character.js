@@ -108,7 +108,7 @@ function shade(hex, f) {
     return '#' + c.getHexString();
 }
 function faceTextures(a) {
-    const key = ['face', a.species, a.skin, a.eyes, a.eyeColor, a.mouth, a.beard, a.hairColor].join('|');
+    const key = ['face', a.sex, a.species, a.skin, a.eyes, a.eyeColor, a.mouth, a.beard, a.hairColor].join('|');
     if (texCache.has(key)) return texCache.get(key);
     const make = (closed, emissive) => {
         const c = document.createElement('canvas');
@@ -160,8 +160,15 @@ function faceTextures(a) {
             g.beginPath(); g.arc(x + s * -1, ey + 1, Math.min(3.5, ry * 0.5), 0, Math.PI * 2); g.fill();
             g.fillStyle = '#fff';
             g.beginPath(); g.arc(x + 2, ey - 3, 2, 0, Math.PI * 2); g.fill();
+            // ciglia: una linea scura sopra l'occhio e due ciglia verso l'esterno
+            if (a.sex === 'f') {
+                const w = sp === 'ratto' ? 14 : 11;
+                g.strokeStyle = '#1a0f0a'; g.lineWidth = 2.4; g.lineCap = 'round';
+                g.beginPath(); g.moveTo(x - w, ey - ry * 0.35); g.quadraticCurveTo(x, ey - ry - 3, x + w, ey - ry * 0.35); g.stroke();
+                for (const k of [0.5, 0.85]) { const lx = x + s * w * k; g.beginPath(); g.moveTo(lx, ey - ry * 0.75); g.lineTo(lx + s * 4, ey - ry - 5); g.stroke(); }
+            }
             g.strokeStyle = sp === 'ratto' ? shade(a.skin, 0.6) : shade(a.hairColor, 0.9);
-            g.lineWidth = 4; g.lineCap = 'round';
+            g.lineWidth = a.sex === 'f' ? 3 : 5; g.lineCap = 'round';
             g.beginPath();
             if (a.eyes === 'fieri') { g.moveTo(x - s * -13, ey - 18); g.lineTo(x + s * 12, ey - 13); }
             else if (a.eyes === 'assonnati') {
@@ -185,7 +192,10 @@ function faceTextures(a) {
             g.fillStyle = '#0a0610';
             g.beginPath(); g.ellipse(cx, my, 10, a.mouth === 'sorpreso' ? 14 : 8, 0, 0, Math.PI * 2); g.fill();
         } else if (sp !== 'ratto') {
-            g.strokeStyle = '#5a1a14'; g.fillStyle = '#5a1a14'; g.lineWidth = 4;
+            const lip = a.sex === 'f' ? '#a8344c' : '#5a1a14';
+            g.strokeStyle = lip; g.fillStyle = lip; g.lineWidth = a.sex === 'f' ? 5.5 : 4;
+            // labbro superiore appena accennato
+            if (a.sex === 'f' && a.mouth !== 'sorpreso' && a.mouth !== 'zanne') { g.save(); g.globalAlpha = 0.55; g.beginPath(); g.ellipse(cx, my - 3, 11, 3.2, 0, Math.PI, 0); g.fill(); g.restore(); }
             g.beginPath();
             switch (a.mouth) {
                 case 'sorriso': g.moveTo(cx - 16, my - 3); g.quadraticCurveTo(cx, my + 12, cx + 16, my - 3); g.stroke(); break;
@@ -335,7 +345,7 @@ export class Character {
         const a = this.app = sanitizeAppearance(appearance);
         this.look = look || {};
         const b = BUILD[a.build];
-        const sp = a.species;
+        const sp = a.species, fem = a.sex === 'f';
         const ghost = sp === 'spettro', skel = sp === 'scheletro', rat = sp === 'ratto';
         const op = ghost ? 0.62 : 1;
         const em = ghost ? '#3b4fa0' : '';
@@ -349,7 +359,7 @@ export class Character {
         const botM = stdMat(a.bottom, { o: op, e: em, ei: 0.3 });
         const shoeM = stdMat(a.shoes, { o: op, r: 0.6 });
         const hairM = stdMat(a.hairColor, { o: op, r: 0.9 });
-        const limb = skel ? b.limb * 0.6 : b.limb;
+        const limb = (skel ? b.limb * 0.6 : b.limb) * (fem ? 0.9 : 1);
         const W = b.w, D = b.d;
 
         const body = this.body = new THREE.Group();
@@ -360,13 +370,14 @@ export class Character {
         const hips = this.hips = new THREE.Group();
         hips.position.y = hipY;
         body.add(hips);
-        hips.add(M(rbox(W * 0.92, 0.2, D * 0.95, 0.05), botM, 0, -0.03, 0));
+        // fianchi più larghi per lei, spalle più larghe per lui (più sotto, sulle braccia)
+        hips.add(M(rbox(W * (fem ? 1.08 : 0.92), 0.2, D * 0.95, 0.05), botM, 0, -0.03, 0));
 
         // --- GAMBE ---
         this.legs = [];
         for (const s of [1, -1]) {
             const hip = new THREE.Group();
-            hip.position.set(s * W * 0.25, -0.06, 0);
+            hip.position.set(s * W * (fem ? 0.28 : 0.25), -0.06, 0);
             hips.add(hip);
             if (!ghost) {
                 hip.add(M(capsule(limb * 1.25, 0.28), botM, 0, -0.2, 0));
@@ -401,6 +412,11 @@ export class Character {
         hips.add(spine);
         const torsoH = 0.52;
         spine.add(M(rbox(W, torsoH, D, 0.07), topM, 0, torsoH / 2, 0));
+        if (fem && !skel) for (const s of [1, -1]) {
+            const bust = M(sphere(W * 0.2, 14, 10), topM, s * W * 0.2, torsoH * 0.64, D / 2 - W * 0.05);
+            bust.scale.set(1, 0.92, 0.62);
+            spine.add(bust);
+        }
         if (a.topStyle === 'tunica' && !torsoItem) spine.add(M(box(W * 1.02, 0.06, D * 1.04), stdMat(shade(a.bottom, 0.6)), 0, 0.06, 0));
         if (a.topStyle === 'giacca' && !shirt) {
             spine.add(M(torus(0.1, 0.035), topM, 0, torsoH + 0.01, 0)).rotation.x = Math.PI / 2;
@@ -413,7 +429,8 @@ export class Character {
         const neck = this.neck = new THREE.Group();
         neck.position.y = torsoH;
         spine.add(neck);
-        neck.add(M(cyl(0.058, 0.065, 0.12, 10), skinM, 0, 0.05, 0));
+        neck.add(M(cyl(fem ? 0.05 : 0.06, fem ? 0.058 : 0.068, 0.12, 10), skinM, 0, 0.05, 0));
+        if (!fem && (sp === 'umano' || sp === 'elfo')) neck.add(M(sphere(0.02, 8, 6), skinM, 0, 0.065, 0.052));
         const head = this.head = new THREE.Group();
         head.position.y = 0.11 + HEAD_R;
         neck.add(head);
@@ -468,7 +485,7 @@ export class Character {
         for (const [key, s] of [['L', 1], ['R', -1]]) {
             const sh = new THREE.Group();
             sh.rotation.order = 'YXZ';
-            sh.position.set(s * (W / 2 + limb * 0.9), torsoH - 0.07, 0);
+            sh.position.set(s * (W / 2 * (fem ? 0.9 : 1.05) + limb * 0.9), torsoH - 0.07, 0);
             spine.add(sh);
             sh.add(M(sphere(limb * 1.45, 12, 10), topM, 0, 0, 0));
             sh.add(M(capsule(limb, 0.22), topM, 0, -0.15, 0));
@@ -863,6 +880,11 @@ export class Character {
             P.spineRx = 0.5; P.shLx = P.shRx = 0.9; P.hipLx = -0.6; P.hipRx = 0.7; P.knR = 0.6; P.cape = 0.9;
         } else if (st === 'sit') {
             P.hipLx = P.hipRx = -1.5; P.knL = P.knR = 1.5; P.bodyY = -0.42;
+        } else if (st === 'row') {
+            // in piedi a poppa, con il remo lungo: spinge e richiama
+            const s = Math.sin(t * 1.5);
+            P.shLx = P.shRx = -1.05 + s * 0.42; P.shLz = 0.28; P.shRz = -0.28; P.elL = P.elR = -0.75 - s * 0.3;
+            P.spineRx = 0.14 + s * 0.12; P.knL = P.knR = 0.18 + s * 0.06; P.headRx = -0.04; P.cape = 0.2;
         } else {
             P.spineRx = Math.sin(t * 1.6) * 0.025;
             P.shLz += Math.sin(t * 1.6) * 0.02; P.shRz -= Math.sin(t * 1.6) * 0.02;

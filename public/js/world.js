@@ -5,11 +5,13 @@
 // =====================================================================
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
 import { ELEMENTS, GATHER, FISH_SPOT, STONES, GRAVES, GRAVES_LEVEL, BOUNTY_BOARD, FOUNTAIN, PHONE_SPOT, CANTO_SEEDS, WHITE_ROOM, TOLL } from './shared/catalog.js';
 import { TABLETS } from './shared/lore.js';
 import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.js';
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
 import { addSkyExtras, addSnowCover, SNOW_COVER } from './sky.js';
+import { buildWeapon } from './character.js';
 
 // --- LAYOUT (metri) ---
 export const WORLD = {
@@ -560,10 +562,19 @@ export class World {
         const mirror = new THREE.Group(); mirror.position.set(Mi.x, my, Mi.z); mirror.rotation.y = -2.2;
         const frame = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.09, 8, 32), new THREE.MeshStandardMaterial({ color: '#c99a2e', metalness: 0.9, roughness: 0.3 }));
         frame.scale.y = 1.45; frame.position.y = 1.55; mirror.add(frame);
-        const glass = new THREE.Mesh(new THREE.CircleGeometry(0.74, 32), new THREE.MeshStandardMaterial({ color: '#9ab8ff', emissive: '#5a3aa8', emissiveIntensity: 0.9, metalness: 1, roughness: 0.05 }));
-        glass.scale.y = 1.45; glass.position.set(0, 1.55, 0.01); mirror.add(glass);
+        // il vetro riflette davvero la scena (si accende solo quando sei vicino: costa un secondo disegno)
+        const res = this.quality === 'alta' ? 512 : 256;
+        const glass = new Reflector(new THREE.CircleGeometry(0.74, 40).scale(1, 1.45, 1), { color: 0xb8b0d8, textureWidth: res, textureHeight: Math.round(res * 1.45), clipBias: 0.003 });
+        glass.position.set(0, 1.55, 0.012); mirror.add(glass);
+        // un alone viola sul bordo, perché resti uno specchio incantato
+        const halo = new THREE.Mesh(new THREE.RingGeometry(0.66, 0.76, 40).scale(1, 1.45, 1), new THREE.MeshBasicMaterial({ color: '#8a5aff', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+        halo.position.set(0, 1.55, 0.02); mirror.add(halo);
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, 0.5, 6), frame.material); leg.position.y = 0.25; mirror.add(leg);
-        this.animated.push((dt, t) => { glass.material.emissiveIntensity = 0.7 + Math.sin(t * 2) * 0.3; });
+        const mirrorAt = new THREE.Vector3(Mi.x, my + 1.55, Mi.z);
+        this.animated.push((dt, t) => {
+            halo.material.opacity = 0.25 + Math.sin(t * 2) * 0.12;
+            glass.visible = !this.focus || this.focus.distanceTo(mirrorAt) < 26;
+        });
         this.scene.add(mirror);
         this.addCirc(Mi.x, Mi.z, 0.5, my, my + 2.6);
         this.interactables.push({ id: 'specchio', x: Mi.x - 1.2, z: Mi.z - 1.2, r: 2.8, label: "Specchiati: modifica l'aspetto" });
@@ -795,54 +806,159 @@ export class World {
             g.fillStyle = color; g.font = '700 70px Almendra, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
             g.shadowColor = '#000'; g.shadowBlur = 8; g.fillText(text, 256, 84);
         });
-        const building = (id, cfg, title, color) => {
+        // una bottega in cui si entra: facciata con la porta, muri, pavimento, soffitto con le travi
+        const SW = 8, SD = 7, SH = 3.8, ST = 0.3, DOOR = 1.7, DOORH = 2.55;
+        this.shops = [];
+        const building = (id, cfg, title, color, floorMat) => {
             const grp = new THREE.Group();
             grp.position.set(cfg.x, cfg.h, cfg.z); grp.rotation.y = cfg.ry;
-            const body = new THREE.Mesh(wallBox(7, 3.6, 6), this.matWall);
-            body.position.y = 1.8; body.castShadow = body.receiveShadow = true; grp.add(body);
+            const cos = Math.cos(cfg.ry), sin = Math.sin(cfg.ry);
+            const toWorld = (lx, lz) => [cfg.x + lx * cos + lz * sin, cfg.z - lx * sin + lz * cos];
+            const solid = (lx, lz, w, d, h) => { const [wx, wz] = toWorld(lx, lz); this.addBox(wx, wz, w, d, cfg.h - 1, cfg.h + h, cfg.ry); };
+            const wall = (lx, lz, w, d, h = SH, y0 = 0) => {
+                const m = new THREE.Mesh(wallBox(w, h, d), this.matWall);
+                m.position.set(lx, y0 + h / 2, lz); m.castShadow = m.receiveShadow = true;
+                grp.add(m); this.cameraBlockers.push(m);
+                if (y0 < 0.1) solid(lx, lz, w, d, h);
+            };
+            wall(0, -SD / 2 + ST / 2, SW, ST);
+            wall(-SW / 2 + ST / 2, 0, ST, SD);
+            wall(SW / 2 - ST / 2, 0, ST, SD);
+            const side = (SW - DOOR) / 2;
+            wall(-SW / 2 + side / 2, SD / 2 - ST / 2, side, ST);
+            wall(SW / 2 - side / 2, SD / 2 - ST / 2, side, ST);
+            wall(0, SD / 2 - ST / 2, DOOR, ST, SH - DOORH, DOORH);       // architrave: sotto si passa
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(SW - ST * 2, SD - ST * 2), floorMat);
+            floor.rotation.x = -Math.PI / 2; floor.position.y = 0.04; floor.receiveShadow = true; grp.add(floor);
+            const ceil = new THREE.Mesh(new THREE.PlaneGeometry(SW, SD), this.matWood);
+            ceil.rotation.x = Math.PI / 2; ceil.position.y = SH; grp.add(ceil); this.cameraBlockers.push(ceil);
+            for (const bz of [-2, 0, 2]) { const b = new THREE.Mesh(new THREE.BoxGeometry(SW - 0.4, 0.2, 0.22), this.matWood); b.position.set(0, SH - 0.11, bz); grp.add(b); }
             const roof = new THREE.Mesh(new THREE.ConeGeometry(5.6, 2.8, 4), this.matRoof);
-            roof.rotation.y = Math.PI / 4; roof.scale.set(1.12, 1, 0.95); roof.position.y = 5; roof.castShadow = true; grp.add(roof);
-            const door = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.4, 0.1), this.matDark); door.position.set(0, 1.2, 3.01); grp.add(door);
-            const frame = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.2, 0.2), this.matWood); frame.position.set(0, 2.5, 3.05); grp.add(frame);
-            const board = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 0.875), new THREE.MeshStandardMaterial({ map: sign(title, color), emissive: '#fff', emissiveMap: null, emissiveIntensity: 0, roughness: 0.8 }));
-            board.material.emissiveMap = board.material.map; board.material.emissiveIntensity = 0.35;
-            board.position.set(0, 3.15, 3.12); grp.add(board);
-            for (const s of [-1, 1]) {
+            roof.rotation.y = Math.PI / 4; roof.scale.set(1.26, 1, 1.12); roof.position.y = SH + 1.35; roof.castShadow = true; grp.add(roof);
+            // la porta: stipiti, architrave di legno, insegna
+            for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.16, DOORH, 0.36), this.matWood); p.position.set(s * (DOOR / 2 + 0.06), DOORH / 2, SD / 2 - ST / 2); grp.add(p); }
+            const lint = new THREE.Mesh(new THREE.BoxGeometry(DOOR + 0.5, 0.2, 0.4), this.matWood); lint.position.set(0, DOORH + 0.08, SD / 2 - ST / 2); grp.add(lint);
+            const board = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 0.875), new THREE.MeshStandardMaterial({ map: sign(title, color), emissive: '#fff', emissiveIntensity: 0.35, roughness: 0.8 }));
+            board.material.emissiveMap = board.material.map;
+            board.position.set(0, 3.2, SD / 2 + 0.03); grp.add(board);
+            // finestre accese, viste da fuori e da dentro
+            for (const s of [-1, 1]) for (const [z, ry] of [[SD / 2 + 0.01, 0], [SD / 2 - ST - 0.01, Math.PI]]) {
                 const win = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ color: '#ffb35a' }));
-                win.position.set(s * 2.3, 1.9, 3.02); grp.add(win);
+                win.position.set(s * 2.6, 1.9, z); win.rotation.y = ry; grp.add(win);
             }
+            // luce calda dentro la bottega
+            const lamp = new THREE.PointLight('#ffb070', this.quality === 'alta' ? 14 : 10, 9, 1.4);
+            lamp.position.set(0, SH - 0.7, -0.4); grp.add(lamp);
             this.scene.add(grp);
-            this.addBox(cfg.x, cfg.z, 7, 6, cfg.h - 1, cfg.h + 6, cfg.ry);
-            this.cameraBlockers.push(body);
-            const fx = cfg.x + Math.sin(cfg.ry) * 4.6, fz = cfg.z + Math.cos(cfg.ry) * 4.6;
-            this.addTorch(cfg.x + Math.sin(cfg.ry) * 3.0 + Math.cos(cfg.ry) * 1.4, cfg.h + 2.4, cfg.z + Math.cos(cfg.ry) * 3.0 - Math.sin(cfg.ry) * 1.4, true, 1, { wall: cfg.ry });
-            this.interactables.push({ id, x: fx, z: fz, r: 3.6, label: `Entra: ${title}` });
-            return grp;
+            const [tx, tz] = toWorld(1.55, SD / 2 + 0.15);
+            this.addTorch(tx, cfg.h + 2.4, tz, true, 1, { wall: cfg.ry });
+            this.shops.push({ cfg, cos, sin, w: SW, d: SD, h: SH });
+            return { grp, toWorld, solid };
         };
-        // Forgia
-        const fg = building('forgia', S.forgia, 'Forgia', '#ff9a3a');
+        // pavimenti: lastre di pietra per la forgia, assi di legno per la sartoria
+        const tileTex = canvasTex(256, 256, (g) => {
+            g.fillStyle = '#4a4450'; g.fillRect(0, 0, 256, 256);
+            for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
+                const l = 30 + ((x * 7 + y * 13) % 9);
+                g.fillStyle = `hsl(270, 6%, ${l}%)`; g.fillRect(x * 64 + 2 + (y % 2) * 8, y * 64 + 2, 60, 60);
+            }
+        });
+        tileTex.wrapS = tileTex.wrapT = THREE.RepeatWrapping; tileTex.repeat.set(2.5, 2.2);
+        const plankTex = canvasTex(256, 256, (g) => {
+            for (let i = 0; i < 8; i++) { g.fillStyle = `hsl(24, 34%, ${20 + (i * 37 % 7)}%)`; g.fillRect(0, i * 32, 256, 31); g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(0, i * 32 + 31, 256, 1); g.fillRect((i * 97) % 256, i * 32, 2, 32); }
+        });
+        plankTex.wrapS = plankTex.wrapT = THREE.RepeatWrapping; plankTex.repeat.set(2, 2);
+        const iron = new THREE.MeshStandardMaterial({ color: '#2d2d33', metalness: 0.85, roughness: 0.35 });
+
+        // --- FORGIA: focolare, incudine, mantice, tinozza, rastrelliera ---
+        const F = building('forgia', S.forgia, 'Forgia', '#ff9a3a', new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.95 }));
+        const fg = F.grp;
+        // il focolare contro il muro di fondo, col suo comignolo
+        const hearth = new THREE.Mesh(wallBox(2.4, 1.1, 1.3), this.matStone); hearth.position.set(-2.2, 0.55, -2.75); fg.add(hearth);
+        const mouth = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 0.2), this.matDark); mouth.position.set(-2.2, 0.62, -2.08); fg.add(mouth);
+        const coals = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 0.9), new THREE.MeshBasicMaterial({ color: '#ff5a10' })); coals.position.set(-2.2, 1.12, -2.75); fg.add(coals);
+        const chim = new THREE.Mesh(wallBox(1.3, SH - 1.1, 0.9), this.matStone); chim.position.set(-2.2, 1.1 + (SH - 1.1) / 2, -3.0); fg.add(chim);
+        const flame = this.fires.make(1.3); flame.position.set(-2.2, 1.12, -2.7); fg.add(flame);
+        const hearthLight = new THREE.PointLight('#ff6a20', 18, 7, 1.6); hearthLight.position.set(-2.2, 1.6, -2.1); fg.add(hearthLight);
+        this.lights.push({ l: hearthLight, base: 18, sp: 4 });
+        this.animated.push((dt, t) => { coals.material.color.setHSL(0.04 + Math.sin(t * 3) * 0.01, 1, 0.45 + Math.sin(t * 7) * 0.08); });
+        F.solid(-2.2, -2.75, 2.4, 1.3, 1.1);
+        // il mantice accanto al fuoco
+        const bel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.35, 0.9, 4, 1), new THREE.MeshStandardMaterial({ color: '#5a3a24', roughness: 0.9 }));
+        bel.rotation.z = Math.PI / 2; bel.scale.set(1, 1, 0.5); bel.position.set(-0.7, 0.45, -2.85); fg.add(bel);
+        // l'incudine in mezzo, Mastro Brace ci sta dietro
         const anvil = new THREE.Group();
         anvil.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.35), this.matStone).translateY(0.25));
-        anvil.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.22, 0.32), new THREE.MeshStandardMaterial({ color: '#2d2d33', metalness: 0.85, roughness: 0.35 })).translateY(0.6));
-        anvil.position.set(2.2, 0, 4.2); fg.add(anvil);
-        const coals = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 0.5, 10), this.matStone);
-        coals.position.set(-2.3, 0.25, 4.2); fg.add(coals);
-        const ember = new THREE.Mesh(new THREE.CircleGeometry(0.55, 16), new THREE.MeshBasicMaterial({ color: '#ff5a10' }));
-        ember.rotation.x = -Math.PI / 2; ember.position.set(-2.3, 0.51, 4.2); fg.add(ember);
-        this.animated.push((dt, t) => { ember.material.color.setHSL(0.04 + Math.sin(t * 3) * 0.01, 1, 0.45 + Math.sin(t * 7) * 0.08); });
-        // Sartoria (manichino)
-        const sg = building('sartoria', S.sartoria, 'Sartoria', '#d9a0ff');
-        const man = new THREE.Group();
-        man.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 6), this.matWood).translateY(0.55));
-        const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.4, 4, 10), new THREE.MeshStandardMaterial({ color: '#5a1a6e', roughness: 0.8 }));
-        torso.position.y = 1.35; torso.scale.z = 0.6; man.add(torso);
-        const capeM = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.1), new THREE.MeshStandardMaterial({ color: '#7a1018', side: THREE.DoubleSide }));
-        capeM.position.set(0, 1.15, -0.16); man.add(capeM);
-        man.position.set(2.3, 0, 4.0); sg.add(man);
-        for (let i = 0; i < 3; i++) {
-            const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.2, 12), new THREE.MeshStandardMaterial({ color: ['#3d1466', '#7a1018', '#1d2a6b'][i] }));
-            roll.rotation.z = Math.PI / 2; roll.position.set(-2.2, 0.17 + i * 0.3, 4.1 - (i % 2) * 0.1); sg.add(roll);
+        anvil.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.22, 0.32), iron).translateY(0.6));
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.3, 6), iron); horn.rotation.z = -Math.PI / 2; horn.position.set(0.6, 0.6, 0); anvil.add(horn);
+        anvil.position.set(0.8, 0, -0.35); anvil.rotation.y = Math.PI / 2; fg.add(anvil);
+        F.solid(0.8, -0.35, 0.5, 0.9, 0.75);
+        // la tinozza per temprare
+        const tub = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.36, 0.6, 14), this.matWood); tub.position.set(2.6, 0.3, -2.5); fg.add(tub);
+        const water = new THREE.Mesh(new THREE.CircleGeometry(0.38, 14), new THREE.MeshStandardMaterial({ color: '#1a2a38', metalness: 0.6, roughness: 0.15 }));
+        water.rotation.x = -Math.PI / 2; water.position.set(2.6, 0.56, -2.5); fg.add(water);
+        F.solid(2.6, -2.5, 0.9, 0.9, 0.6);
+        // la rastrelliera con le armi di Brace, sul muro di destra
+        const rack = new THREE.Group(); rack.position.set(SW / 2 - 0.45, 0, 1.0); rack.rotation.y = -Math.PI / 2; fg.add(rack);
+        for (const y of [0.35, 1.45]) { const bar = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.08, 0.12), this.matWood); bar.position.set(0, y, 0); rack.add(bar); }
+        for (const x of [-1.05, 1.05]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.7, 0.12), this.matWood); leg.position.set(x, 0.85, 0); rack.add(leg); }
+        [['spada', 'ferro'], ['ascia', 'ferro'], ['lancia', 'ferro'], ['martello', 'ossidiana']].forEach(([type, material], i) => {
+            const w = buildWeapon({ type, material, handle: 'cuoio', gem: 'nessuna', name: '' });
+            w.position.set(-0.75 + i * 0.5, 0.1, 0.08); w.rotation.set(0, 0, 0.06);
+            rack.add(w);
+        });
+        F.solid(SW / 2 - 0.45, 1.0, 0.4, 2.2, 1.7);
+        const [ffx, ffz] = F.toWorld(SW / 2 - 1.4, 1.0);
+        this.interactables.push({ id: 'forgia', x: ffx, z: ffz, r: 1.8, label: 'Forgia: crea o migliora un\'arma' });
+        // il banco da lavoro sul muro di sinistra, verso la porta
+        const bench = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 2.0), this.matWood); bench.position.set(-SW / 2 + 0.75, 0.45, 1.3); fg.add(bench);
+        for (let i = 0; i < 3; i++) { const tl = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.3), iron); tl.position.set(-SW / 2 + 0.7, 0.94, 0.6 + i * 0.55); tl.rotation.y = i * 0.6; fg.add(tl); }
+        F.solid(-SW / 2 + 0.75, 1.3, 0.8, 2.0, 0.9);
+
+        // --- SARTORIA: bancone, scaffale delle stoffe, manichini, appendiabiti ---
+        const T = building('sartoria', S.sartoria, 'Sartoria', '#d9a0ff', new THREE.MeshStandardMaterial({ map: plankTex, roughness: 0.85 }));
+        const sg = T.grp;
+        // il bancone, la Sarta ci sta dietro
+        const counter = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.95, 0.7), this.matWood); counter.position.set(0, 0.475, -0.9); sg.add(counter);
+        const cloth = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.04, 0.5), new THREE.MeshStandardMaterial({ color: '#7a1018', roughness: 0.95 })); cloth.position.set(-0.6, 0.97, -0.9); cloth.rotation.y = 0.12; sg.add(cloth);
+        const sciss = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.012, 6, 12), iron); sciss.rotation.x = -Math.PI / 2; sciss.position.set(0.7, 0.97, -0.85); sg.add(sciss);
+        T.solid(0, -0.9, 3.6, 0.7, 0.95);
+        // lo scaffale delle stoffe sul muro di fondo
+        for (const y of [0.6, 1.3, 2.0]) {
+            const sh = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.06, 0.5), this.matWood); sh.position.set(0, y, -SD / 2 + ST + 0.28); sg.add(sh);
+            for (let i = 0; i < 6; i++) {
+                const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.46, 12), new THREE.MeshStandardMaterial({ color: ['#3d1466', '#7a1018', '#1d2a6b', '#2f4a24', '#c99a2e', '#e8d6a8'][(i + Math.round(y * 10)) % 6], roughness: 0.9 }));
+                roll.rotation.x = Math.PI / 2; roll.position.set(-1.45 + i * 0.58, y + 0.16, -SD / 2 + ST + 0.28); sg.add(roll);
+            }
         }
+        T.solid(0, -SD / 2 + ST + 0.28, 3.4, 0.5, 2.2);
+        // due manichini vestiti, vicino alla porta
+        const mannequin = (x, z, col, cape) => {
+            const man = new THREE.Group();
+            man.add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 0.06, 12), this.matWood).translateY(0.03));
+            man.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 6), this.matWood).translateY(0.55));
+            const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.4, 4, 10), new THREE.MeshStandardMaterial({ color: col, roughness: 0.8 }));
+            torso.position.y = 1.35; torso.scale.z = 0.6; man.add(torso);
+            if (cape) { const c = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.1), new THREE.MeshStandardMaterial({ color: cape, side: THREE.DoubleSide })); c.position.set(0, 1.15, -0.16); man.add(c); }
+            man.position.set(x, 0, z); sg.add(man);
+            T.solid(x, z, 0.5, 0.5, 1.7);
+        };
+        mannequin(-2.7, 1.7, '#5a1a6e', '#7a1018');
+        mannequin(2.7, 1.7, '#1d2a6b', '#c99a2e');
+        // l'appendiabiti con i capi appesi, sul muro di sinistra
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.2, 6), iron); pole.rotation.x = Math.PI / 2; pole.position.set(-SW / 2 + 0.6, 1.85, -0.6); sg.add(pole);
+        for (let i = 0; i < 5; i++) {
+            const g = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.9), new THREE.MeshStandardMaterial({ color: ['#3d1466', '#1a1a1f', '#7a1018', '#2f4a24', '#e8e2d6'][i], side: THREE.DoubleSide, roughness: 0.9 }));
+            g.rotation.y = Math.PI / 2; g.position.set(-SW / 2 + 0.6, 1.35, -1.5 + i * 0.45); sg.add(g);
+        }
+        T.solid(-SW / 2 + 0.6, -0.6, 0.6, 2.4, 2);
+        const [ssx, ssz] = T.toWorld(-SW / 2 + 1.5, -0.6);
+        this.interactables.push({ id: 'sartoria', x: ssx, z: ssz, r: 1.8, label: 'Sartoria: vesti il tuo viandante' });
+        // uno specchio da sarta sul muro di destra
+        const sm = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.7), new THREE.MeshStandardMaterial({ color: '#9ab0c8', metalness: 1, roughness: 0.08 }));
+        sm.position.set(SW / 2 - ST - 0.02, 1.2, -0.4); sm.rotation.y = -Math.PI / 2; sg.add(sm);
+        const smf = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.85, 0.95), this.matWood); smf.position.set(SW / 2 - ST - 0.05, 1.2, -0.4); sg.add(smf);
+
         // Bazar: bancarella aperta
         const B = S.bazar;
         const bz = new THREE.Group(); bz.position.set(B.x, B.h, B.z); bz.rotation.y = B.ry;
@@ -1442,7 +1558,15 @@ export class World {
     // dentro la Stanza Bianca la luce è calda e bianca
     inRoom(p) {
         const R = WORLD.ROOM;
-        return Math.abs(p.x - R.x) < R.w / 2 + 0.3 && Math.abs(p.z - R.z) < R.d / 2 + 0.3 && p.y > R.floor - 1;
+        return (Math.abs(p.x - R.x) < R.w / 2 + 0.3 && Math.abs(p.z - R.z) < R.d / 2 + 0.3 && p.y > R.floor - 1) || this.inShop(p);
+    }
+    inShop(p) {
+        for (const S of this.shops || []) {
+            const dx = p.x - S.cfg.x, dz = p.z - S.cfg.z;
+            const lx = dx * S.cos - dz * S.sin, lz = dx * S.sin + dz * S.cos;
+            if (Math.abs(lx) < S.w / 2 - 0.25 && Math.abs(lz) < S.d / 2 - 0.25 && p.y < S.cfg.h + S.h) return true;
+        }
+        return false;
     }
     // che cosa c'è sotto i piedi (per il suono dei passi)
     surfaceAt(x, z, y) {
@@ -1469,7 +1593,7 @@ export class World {
     nearestInteractable(x, z, y) {
         let best = null, bd = Infinity;
         for (const it of this.interactables) {
-            if (it.off || (it.y != null && y != null && Math.abs(y - it.y) > 2.5)) continue;
+            if (it.off || (it.when && !it.when()) || (it.y != null && y != null && Math.abs(y - it.y) > 2.5)) continue;
             const d = Math.hypot(x - it.x, z - it.z);
             if (d < it.r && d < bd) { bd = d; best = it; }
         }
@@ -1477,6 +1601,7 @@ export class World {
     }
 
     update(dt, focus) {
+        this.focus = focus;
         this.t += dt;
         const t = this.t;
         this.waterMat.uniforms.uTime.value = t;

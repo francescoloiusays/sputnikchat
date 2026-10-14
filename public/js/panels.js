@@ -15,6 +15,9 @@ import { NPCS, INSULTS, TOLL_LINES, TABLETS, TABLET_REWARD } from './shared/lore
 import { cardEditor } from './creator.js';
 import { composeCard, printCard, downloadCard, CARD_W, holoTrack } from './cards.js';
 import { icon, iconSVG, elIcon, itemIconName, rarityOf, tierOf } from './icons.js';
+import { storyBox, bookContent, storyCtx } from './story-ui.js';
+import { STORY_SPOTS } from './shared/story.js';
+import { ritratto } from './story-text.js';
 
 export function itemInfo(e) {
     if (e.kind === 'weapon') {
@@ -82,7 +85,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'arena', 'bacheca', 'pedaggio', 'tavoletta'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('open');
@@ -562,6 +565,7 @@ export class Panels {
             h('div', { class: 'npc-box' },
                 h('div', { class: 'npc-left' }, portrait, h('div', { class: 'muted small center' }, N.where)),
                 h('div', { class: 'npc-right' },
+                    storyBox(app, id),
                     h('div', { class: 'npc-say' }, `«${line}»`),
                     arg.learned != null ? h('div', { class: 'npc-learn', html: iconSVG('quill') }, h('b', {}, 'Ti ha insegnato una risposta per il Pedaggio dello Spettro: '), `«${INSULTS[arg.learned][1]}»`) : null,
                     arg.first && arg.xp ? h('p', { class: 'muted small' }, `Prima chiacchierata: +${arg.xp} esperienza.`) : null,
@@ -571,12 +575,50 @@ export class Panels {
                         btn('Arrivederci', () => this.close(), { ic: 'close' })))));
     }
 
+    // =================================================================
+    //  IL ROMANZO DELLA NEBBIA
+    // =================================================================
+    // i luoghi della storia senza abitante: il Ratto in piazza, le pietre, lo specchio
+    p_storia(arg) {
+        const app = this.app, who = arg?.who;
+        const extra = who === 'pietre' ? [btn('Il Canto delle Pietre', () => { this.close(); app.canto.start(); }, { ic: 'runestone' })]
+            : who === 'specchio' ? [btn('Specchiati', () => { this.close(); app.editAppearance(); }, { ic: 'mirror' })] : [];
+        const box = storyBox(app, who, extra);
+        this.set(who === 'specchio' ? 'mirror' : who === 'pietre' ? 'runestone' : 'openbook', STORY_SPOTS[who]?.name || 'Il Romanzo della Nebbia',
+            box || [h('p', { class: 'lore' }, 'Per ora qui c\'è solo silenzio.'), h('div', { class: 'btn-row' }, extra)]);
+    }
+    // il Libro dell'Approdo (tasto G)
+    p_libro() {
+        this.set('openbook', 'Il Libro dell\'Approdo', bookContent(this.app, this));
+    }
+    // il Nome Vero: quello che propone il libro, o uno scritto da te
+    p_nomevero(arg) {
+        const app = this.app, st = app.me?.story || {}, c = storyCtx(app);
+        const proposal = arg?.name || st.name || '';
+        const input = h('input', { type: 'text', id: 'nv-mine', maxlength: 60, placeholder: 'Scrivi il tuo Nome Vero', value: st.mine ? st.name : '' });
+        const msg = h('p', { class: 'auth-msg' });
+        const send = async (mine) => {
+            const r = await app.net.request('story:name', mine ? { mine: true, name: input.value } : {});
+            if (!r.ok) { msg.textContent = r.msg; msg.className = 'auth-msg bad'; return; }
+            app.applyStory(r.story);
+            app.audio.play('saved');
+            toast(h('div', {}, h('b', {}, 'Il tuo Nome Vero'), h('div', {}, r.name)), { kind: 'coin', icon: 'quill', duration: 9000 });
+            this.close();
+        };
+        this.set('quill', 'Il Nome Vero',
+            lore('Lo specchio ti ha restituito tutte le tue risposte. Il libro le ha messe in fila e ne ha tirato fuori un nome. Puoi tenerlo, o scriverne uno tuo.'),
+            h('div', { class: 'nv-box' }, h('small', {}, 'Il libro propone'), h('b', {}, proposal), h('p', {}, ritratto(c))),
+            h('div', { class: 'btn-row' }, btn('Lo accetto', () => send(false), { cls: 'btn-primary', ic: 'seal' })),
+            sect('quill', 'Oppure scrivilo tu'),
+            h('form', { class: 'acc-form two', onsubmit: (e) => { e.preventDefault(); send(true); } }, input, h('button', { type: 'submit', class: 'btn' }, 'Usa il mio')),
+            msg);
+    }
+
     // --- LA BACHECA DELLE TAGLIE ---
     p_bacheca() {
         const app = this.app, me = app.me, B = me.bounty;
         const T = 'Bacheca delle Taglie';
         if (!B || me.offline) return this.set('scroll', T, this.needOnline() || h('div', { class: 'empty' }, 'La bacheca è vuota.'));
-        const P = app.player?.pos, near = P && Math.hypot(P.x - BOUNTY_BOARD.x, P.z - BOUNTY_BOARD.z) <= BOUNTY_BOARD.r + 2;
         const R = BOUNTY_REWARD;
         const row = (b, weekly, i) => {
             const pct = Math.min(1, b.have / b.n);
@@ -586,12 +628,11 @@ export class Panels {
                 b.claimed ? h('span', { class: 'b-ok' }, 'Riscossa') : btn('Riscuoti', async () => {
                     const r = await this.act('bounty:claim', weekly ? { weekly: true } : { i }, null);
                     if (r.ok) toast(`Taglia riscossa: +${r.xp} esperienza, +${r.coins} monete${r.pergamena ? ', una Pergamena Benedetta' : ''}`, { kind: 'coin', icon: 'scroll' });
-                }, { cls: 'btn-sm btn-primary', disabled: !b.done || !near }));
+                }, { cls: 'btn-sm btn-primary', disabled: !b.done }));
         };
         const M = B.mission;
         this.set('scroll', T, this.needOnline(),
-            lore('«Tre lavori al giorno e uno alla settimana. Pago io, cioè il Mercante senza Ombra. Le ricompense si ritirano qui, davanti alla bacheca.»'),
-            near ? null : h('p', { class: 'req' }, 'Le taglie si riscuotono davanti alla Bacheca, in Piazza della Gloria.'),
+            lore('«Tre lavori al giorno e uno alla settimana. Pago io, cioè il Mercante senza Ombra, e ti trovo ovunque tu sia: non ho ombra, ma ho buone gambe.»'),
             sect('scroll', 'Le taglie di oggi'), B.daily.map((b, i) => row(b, false, i)),
             sect('star', 'La taglia della settimana'), B.weekly ? row(B.weekly, true) : null,
             M ? [sect('letter', 'La missione del telefono bianco'), h('div', { class: 'bounty mission' + (M.done ? ' done' : '') }, h('div', { class: 'b-txt' }, h('b', {}, M.text), h('small', {}, M.done ? 'Compiuta: premio già consegnato' : `${M.have} / ${M.n}`)))]
@@ -1107,7 +1148,7 @@ export class Panels {
                 h('label', { class: 'field' }, 'Sensibilità del mouse'),
                 h('input', { type: 'range', class: 'range', min: 0.4, max: 2.5, step: 0.1, value: set.sens || 1, oninput: (e) => { set.sens = +e.target.value; app.saveLocal(); } }),
                 h('div', { class: 'keys', style: { justifyContent: 'flex-start', marginTop: '12px', fontSize: '15px' } },
-                    [['WASD', 'cammina'], ['Shift', 'corri'], ['Spazio', 'salta'], ['E', 'interagisci'], ['R', 'profilo vicino'], ['F', 'fango'], ['V', 'visuale'], ['1-4', 'gesti'], ['Invio', 'parla'], ['M', 'voce'], ['B', 'musica'], ['I', 'bisaccia'], ['C', 'card'], ['O', 'compagnia'], ['Tab', 'albo'], ['K', 'album'], ['L', 'maestria'], ['J', 'taglie'], ['N', 'mappa']]
+                    [['WASD', 'cammina'], ['Shift', 'corri'], ['Spazio', 'salta'], ['E', 'interagisci'], ['R', 'profilo vicino'], ['F', 'fango'], ['V', 'visuale'], ['1-4', 'gesti'], ['Invio', 'parla'], ['M', 'voce'], ['B', 'musica'], ['I', 'bisaccia'], ['C', 'card'], ['O', 'compagnia'], ['Tab', 'albo'], ['K', 'album'], ['L', 'maestria'], ['J', 'taglie'], ['N', 'mappa'], ['G', 'libro'], ['Ctrl+S', 'salva']]
                         .map(([k, t]) => h('span', {}, h('i', { class: 'kbd' }, k), ' ', t))),
                 h('details', { class: 'mix' }, h('summary', {}, 'Codice di recupero (avanzato)'),
                 h('p', { class: 'lore', style: { marginTop: '8px' } }, 'Questo browser custodisce anche una copia sigillata del tuo viandante, che il server usa se si è dimenticato di te. Il codice è quella copia: incollato su un altro dispositivo, ti riporta lì il viandante. Custodiscilo come una chiave, perché chi lo possiede comanda il tuo personaggio e le tue monete.'),

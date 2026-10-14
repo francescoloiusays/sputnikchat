@@ -43,7 +43,12 @@ export function appearanceEditor(container, state, onChange) {
         const a = state.appearance;
         const L = APPEARANCE_LABELS;
         const skinLabel = { ratto: 'Pelliccia', scheletro: 'Ossa', spettro: 'Ectoplasma' }[a.species] || 'Carnagione';
-        const set = (k) => (v) => { a[k] = v; onChange(); if (k === 'species') render(); };
+        const set = (k) => (v) => {
+            a[k] = v;
+            if (k === 'sex' && v === 'f') a.beard = 'nessuna';
+            onChange();
+            if (k === 'species' || k === 'sex') render();
+        };
         container.replaceChildren(...[
             h('label', { class: 'field' }, 'Il tuo nome'),
             h('input', { type: 'text', maxlength: 16, value: state.name || '', placeholder: "Come ti chiameranno sull'isola?", style: { width: '100%' }, oninput: (e) => { state.name = e.target.value; onChange('name'); } }),
@@ -51,6 +56,7 @@ export function appearanceEditor(container, state, onChange) {
                 h('div', { class: 'opt-label' }, 'Parti da un volto noto', h('button', { class: 'btn btn-sm', html: iconSVG('dice'), onclick: () => { state.appearance = randomAppearance(); onChange(); render(); } }, 'A caso')),
                 h('div', { class: 'preset-row' }, [['ratto', 'Ratto', 'img/propic_rat.jpg'], ['alessandro', 'Alessandro', 'img/propic_alessandro.jpg'], ['francesco', 'Francesco', 'img/propic_francesco.jpg']].map(([id, nm, img]) =>
                     h('button', { class: 'preset', onclick: () => { state.appearance = { ...PRESETS[id] }; onChange(); render(); } }, h('img', { src: img, alt: '' }), nm)))),
+            chipGroup('Sesso', APPEARANCE.sex, L.sex, a.sex, set('sex')),
             chipGroup('Stirpe', APPEARANCE.species, L.species, a.species, set('species'), SPECIES_ICON),
             chipGroup('Corporatura', APPEARANCE.build, L.build, a.build, set('build')),
             h('div', { class: 'opt-group' }, h('div', { class: 'opt-label' }, 'Altezza'),
@@ -61,7 +67,7 @@ export function appearanceEditor(container, state, onChange) {
             a.species === 'scheletro' ? null : chipGroup('Bocca', APPEARANCE.mouth, L.mouth, a.mouth, set('mouth')),
             a.species === 'scheletro' ? null : chipGroup('Capelli', APPEARANCE.hair, L.hair, a.hair, set('hair')),
             swatchGroup('Colore di capelli e barba', PAL.hair, a.hairColor, set('hairColor')),
-            ['umano', 'elfo'].includes(a.species) ? chipGroup('Barba', APPEARANCE.beard, L.beard, a.beard, set('beard')) : null,
+            ['umano', 'elfo'].includes(a.species) && a.sex !== 'f' ? chipGroup('Barba', APPEARANCE.beard, L.beard, a.beard, set('beard')) : null,
             chipGroup('Abito', APPEARANCE.topStyle, L.topStyle, a.topStyle, set('topStyle')),
             swatchGroup('Colore abito', PAL.cloth, a.top, set('top')),
             swatchGroup('Pantaloni', PAL.cloth, a.bottom, set('bottom')),
@@ -80,6 +86,7 @@ export function randomAppearance() {
     a.skin = pick(PAL.skin); a.eyeColor = pick(PAL.eye); a.hairColor = pick(PAL.hair);
     a.top = pick(PAL.cloth); a.bottom = pick(PAL.cloth); a.shoes = pick(PAL.cloth);
     if (a.species === 'scheletro') a.skin = '#e9e2cf';
+    if (a.sex === 'f') { a.beard = 'nessuna'; if (Math.random() < 0.6) a.hair = pick(['lunghi', 'codino', 'lunghi']); }
     return sanitizeAppearance(a);
 }
 

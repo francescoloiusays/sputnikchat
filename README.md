@@ -63,6 +63,10 @@ Client in HTML/JS con Three.js (GitHub Pages), server Node.js con socket.io (Ren
 
 Su telefono ci sono joystick e pulsanti a schermo.
 
+- **Il Romanzo della Nebbia** (la storia, Libro I): chi arriva per la prima volta vede l'approdo, una scena girata nel gioco in cui il Traghettatore lo porta in barca sull'isola; la creazione del personaggio è il riflesso nell'acqua del molo. In piazza il Ratto dei Cronisti consegna il Libro dell'Approdo (tasto G), che si scrive in seconda persona mentre si gioca. Sette capitoli, uno per seme, si aprono parlando con gli abitanti (Mastro Brace, il Traghettatore, Ossobuco, le Pietre, lo Spettro del Pedaggio, la Custode, di nuovo Ossobuco) e usano i giochi dell'isola; ognuno finisce con una domanda. Le risposte compongono il Nome Vero, unico per ogni viandante, che si può accettare o riscrivere. Il settimo capitolo si affronta alla Veglia del sabato o da soli nella cripta del castello, e si chiude allo Specchio. Sotto l'orologio dell'isola il filo dice sempre la prossima cosa da fare. Chi giocava già trova il Ratto in piazza e può guardare l'approdo dal libro.
+- **Maschio o femmina** nella creazione del personaggio: spalle, fianchi, busto, ciglia e labbra cambiano; il libro accorda le frasi.
+- **Lo Specchio Incantato riflette davvero** (quando sei vicino), e **in Forgia e in Sartoria si entra**: Mastro Brace lavora tra focolare, incudine e rastrelliera, la Sarta dietro il bancone tra stoffe e manichini.
+- Il menu «Clicca per entrare nel mondo» torna solo con ESC; le taglie si riscuotono ovunque con J.
 - **Account**: alla prima apertura si accede con nome utente e password, si crea un account o si gioca da ospite. Chi gioca già senza account lo crea dalle Opzioni e tiene tutto ciò che ha. Con l'account il viandante si ritrova da qualsiasi dispositivo; la password non viene mai salvata (solo il suo hash scrypt), e dopo sei tentativi sbagliati si aspettano due minuti.
 - **Tasto Salva** (in alto a destra, o Ctrl+S): il server salva già a ogni azione, ma il tasto scrive subito e lo conferma. Il gioco salva anche da solo ogni minuto e quando cambi scheda; sotto le monete c'è scritto quando è stato l'ultimo salvataggio.
 - **Salvataggi che non si perdono**: il browser di ogni giocatore custodisce una copia sigillata (firmata dal server) di livello, esperienza, monete, borsa e annunci al Bazar. Se il server si riavvia e si dimentica di te, al rientro riprende quella copia; una copia ritoccata a mano viene rifiutata. Il **codice di recupero** nelle Opzioni ora contiene tutto il profilo, quindi funziona anche su un altro dispositivo.
@@ -82,6 +86,10 @@ public/css/style.css
 public/js/main.js         avvio, mondo in terza persona, rete, HUD, minimappa, voice chat
 public/js/sky.js          ciclo giorno/notte, meteo, pioggia e neve
 public/js/atlas.js        la carta grande disegnata a mano (zoom, simboli, scarabocchi)
+public/js/shared/story.js capitoli del Romanzo della Nebbia, passi, motore del Nome Vero
+public/js/story-text.js   le pagine del libro e le battute della storia
+public/js/story-ui.js     libro (G), filo degli obiettivi, dialoghi e luoghi della storia
+public/js/prologue.js     l'approdo: la scena della barca
 public/js/audio.js        musica ed effetti, passi, ambienti, versi, voci dei personaggi
 public/js/world.js        isola, laguna, castello, arena, botteghe, collisioni
 public/js/character.js    personaggi 3D procedurali, vestiti, armi, animazioni

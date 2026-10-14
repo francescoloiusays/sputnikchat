@@ -284,6 +284,7 @@ export function gearLines(id, element, plus = 0) {
 
 // --- ASPETTO DEL PERSONAGGIO ---
 export const APPEARANCE = {
+    sex: ['m', 'f'],
     species: ['umano', 'elfo', 'ratto', 'scheletro', 'spettro'],
     build: ['snello', 'medio', 'robusto'],
     eyes: ['tondi', 'sottili', 'fieri', 'assonnati', 'luminosi'],
@@ -293,6 +294,7 @@ export const APPEARANCE = {
     topStyle: ['tunica', 'giacca', 'veste'],
 };
 export const APPEARANCE_LABELS = {
+    sex: { m: 'Maschio', f: 'Femmina' },
     species: { umano: 'Umano', elfo: 'Elfo', ratto: 'Ratto', scheletro: 'Scheletro', spettro: 'Spettro' },
     build: { snello: 'Snello', medio: 'Medio', robusto: 'Robusto' },
     eyes: { tondi: 'Tondi', sottili: 'Sottili', fieri: 'Fieri', assonnati: 'Assonnati', luminosi: 'Luminosi' },
@@ -302,7 +304,7 @@ export const APPEARANCE_LABELS = {
     topStyle: { tunica: 'Tunica', giacca: 'Giacca', veste: 'Veste lunga' },
 };
 export const DEFAULT_APPEARANCE = {
-    species: 'umano', build: 'medio', height: 1, skin: '#d9a77c',
+    sex: 'm', species: 'umano', build: 'medio', height: 1, skin: '#d9a77c',
     eyes: 'tondi', eyeColor: '#3b6ea5', mouth: 'sorriso',
     hair: 'corti', hairColor: '#3a2414', beard: 'nessuna',
     topStyle: 'tunica', top: '#5a2a6e', bottom: '#2b2633', shoes: '#1e1612',
@@ -782,6 +784,14 @@ export const TITLES = {
     campioni: { name: 'Campione dei Campioni', how: 'Vinci il Torneo dei Campioni del venerdì (dal livello 25)' },
     rinato: { name: 'Rinato', how: 'Compi la Rinascita al livello 30' },
     spettrale: { name: 'Spettro della Stagione', how: 'Chiudi una stagione in lega Spettro' },
+    // il Romanzo della Nebbia: un titolo per capitolo
+    scintilla: { name: 'Scintilla', how: 'Chiudi il capitolo della Brace' },
+    brina: { name: 'Brina', how: 'Chiudi il capitolo della Brina' },
+    radice: { name: 'Radice', how: 'Chiudi il capitolo della Radice' },
+    masso: { name: 'Masso', how: 'Chiudi il capitolo del Masso' },
+    tuono: { name: 'Tuono', how: 'Chiudi il capitolo del Tuono' },
+    eco: { name: 'Eco', how: 'Chiudi il capitolo dell\'Eco' },
+    senzanome: { name: 'Senza Nome', how: 'Chiudi il Libro I del Romanzo della Nebbia' },
 };
 
 // --- IL CANTO DELLE PIETRE (Simon con le sette rune) ---

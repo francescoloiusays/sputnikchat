@@ -16,7 +16,7 @@ export class Npcs {
         const W = app.world;
         for (const [id, N] of Object.entries(NPCS)) {
             const ch = new Character(N.app, N.look || {}, { name: N.name, sub: N.where, color: '#c9a0ff' });
-            const y = W.groundAt(N.x, N.z);
+            const y = N.y ?? W.groundAt(N.x, N.z);   // chi sta in barca ha la sua altezza
             ch.root.position.set(N.x, y, N.z);
             ch.root.rotation.y = N.ry;
             app.scene.add(ch.root);

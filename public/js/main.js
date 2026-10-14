@@ -27,6 +27,8 @@ import { INSULTS, TABLETS, NPCS } from './shared/lore.js';
 import { VEGLIA, PHONE_SPOT, FOUNTAIN } from './shared/catalog.js';
 import { Environment, Precipitation, applySky, clockText } from './sky.js';
 import { Atlas } from './atlas.js';
+import { Prologue } from './prologue.js';
+import { buildStorySpots, storyBeat, storyInteract, storyVoice, updateThread } from './story-ui.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
@@ -146,13 +148,8 @@ class Game {
             clearInterval(this.titleTimer);
             this.audio.unlock();
             $('#title-screen').classList.add('hidden');
-            if ((!this.local.appearance && !this.local.token) || this.local.needsLook) {
-                const res = await this.creator.open({ mode: 'new', name: this.local.nameHint || this.local.account || '', appearance: randomAppearance() });
-                Object.assign(this.local, { name: res.name, appearance: res.appearance, card: res.card, cardImage: res.cardImage, look: { weapon: STARTER_WEAPON } });
-                delete this.local.needsLook; delete this.local.nameHint;
-                this.saveLocal();
-            }
-            this.enterWorld();
+            const fresh = (!this.local.appearance && !this.local.token) || this.local.needsLook;
+            this.enterWorld({ prologue: fresh });
         };
         btn.onclick = go;
         addEventListener('keydown', (e) => { if (e.key === 'Enter' && this.mode === 'title' && !this.authOpen) go(); });
@@ -283,7 +280,17 @@ class Game {
     saveLocal() { store.save(this.local); }
 
     // --- INGRESSO NEL MONDO ---
-    async enterWorld() {
+    // lo specchio d'acqua del molo: la creazione del personaggio del nuovo arrivato
+    async createCharacter() {
+        const res = await this.creator.open({ mode: 'new', name: this.local.nameHint || this.local.account || '', appearance: randomAppearance() });
+        Object.assign(this.local, { name: res.name, appearance: res.appearance, card: res.card, cardImage: res.cardImage, look: { weapon: STARTER_WEAPON } });
+        delete this.local.needsLook; delete this.local.nameHint;
+        this.saveLocal();
+        if (this.me?.offline) Object.assign(this.me, { name: res.name, appearance: res.appearance, card: res.card });
+        this.buildMyCharacter();
+        this.myChar.root.visible = true;
+    }
+    async enterWorld(opts = {}) {
         $('#loading').classList.remove('hidden');
         await new Promise(r => setTimeout(r, 30));
         this.setupRenderer();
@@ -298,23 +305,82 @@ class Game {
         this.cam = { yaw: 0, pitch: 0.28, dist: 9, wantDist: innerWidth < innerHeight ? 6.2 : 4.6, first: false };
         this.buildMyCharacter();
         this.npcs = new Npcs(this);
+        this.storySpots = buildStorySpots(this);
         // luce di riempimento: il personaggio non resta mai in controluce
         this.fillLight = new THREE.PointLight('#d8c4ff', 9, 10, 1.4);
         this.scene.add(this.fillLight);
         this.setupInput();
         this.setupHud();
         $('#loading').classList.add('hidden');
+        if (IS_MOBILE) this.setupMobile();
+        this.clock = new THREE.Clock();
+        if (opts.prologue) {
+            // la prima volta: la barca del Traghettatore, poi lo specchio d'acqua, poi l'isola
+            this.prologueLock = true;
+            this.myChar.root.visible = false;
+            this.mode = 'cutscene';
+            this.prologue = new Prologue(this, { onCreator: () => this.createCharacter(), onEnd: () => { this.prologueLock = false; this.seenPending = true; this.endCutscene(); this.tryHello(); } });
+        } else {
+            this.showHud();
+            this.tryHello();
+            toast(h('div', {}, h('b', {}, `Bentornato, ${this.me.name}`), h('div', {}, 'Il castello e la sua Arena sono a nord, oltre il Ponte dei Sospiri. Le botteghe circondano la piazza.')), { duration: 9000, icon: 'castle' });
+        }
+        this.loop();
+        if (this.local.settings.musicOn !== false) this.audio.toggleMusic(true).then(on => this.setMusicBtn(on));
+    }
+
+    showHud() {
         $('#hud').classList.remove('hidden');
-        if (IS_MOBILE) { $('#mobile-controls').classList.remove('hidden'); this.setupMobile(); }
+        if (IS_MOBILE) $('#mobile-controls').classList.remove('hidden');
         else $('#click-to-play').classList.remove('hidden');
         this.mode = 'world';
         this.updatePowerCard();
         this.updateProfileCard();
-        this.tryHello();
-        toast(h('div', {}, h('b', {}, `Bentornato, ${this.me.name}`), h('div', {}, 'Il castello e la sua Arena sono a nord, oltre il Ponte dei Sospiri. Le botteghe circondano la piazza.')), { duration: 9000, icon: 'castle' });
-        this.clock = new THREE.Clock();
-        this.loop();
-        if (this.local.settings.musicOn !== false) this.audio.toggleMusic(true).then(on => this.setMusicBtn(on));
+        updateThread(this);
+    }
+    endCutscene() {
+        this.prologue = null;
+        this.cutFog = null;
+        this.player.yaw = Math.PI;
+        this.cam.yaw = 0; this.cam.pitch = 0.28;
+        this.showHud();
+    }
+    // l'approdo rivisto dal libro: alla fine si torna dov'eri
+    playPrologue({ replay = true, markSeen = false } = {}) {
+        if (this.mode !== 'world' || this.prologue) return;
+        this.panels.close();
+        document.exitPointerLock?.();
+        const back = { pos: this.player.pos.clone(), yaw: this.player.yaw };
+        $('#hud').classList.add('hidden');
+        $('#mobile-controls')?.classList.add('hidden');
+        $('#click-to-play').classList.add('hidden');
+        this.mode = 'cutscene';
+        this.prologue = new Prologue(this, { replay, onEnd: () => {
+            this.player.pos.copy(back.pos); this.player.yaw = back.yaw;
+            this.myChar.root.position.copy(back.pos);
+            this.endCutscene();
+            if (markSeen) this.net.request('story:seen').then(r => { if (r.ok) this.applyStory(r.story); });
+        } });
+    }
+    applyStory(story) {
+        if (!story || !this.me) return;
+        this.me.story = story;
+        updateThread(this);
+        this.panels.refresh(['libro', 'npc', 'storia']);
+    }
+    // il Re Annegato da solo, nella cripta sotto il castello
+    startCrypt() {
+        this.audio.play('roar');
+        setTimeout(() => this.audio.voice('re', 'Sei arrivato al settimo. Vieni giù, che ti guardo la carta.'), 900);
+        this.startFoe({ kind: 'cripta', name: KING.name, botLevel: 1.15, level: 18, element: 'ghiaccio', boss: { hp: KING.hp, atk: KING.atk }, height: 1.15,
+            look: { head: 'corona', cape: 'mantello_regale', weapon: { type: 'lancia', material: 'argento', handle: 'oro', gem: 'zaffiro', name: 'Tridente del Re' } },
+            texts: ['Il Re Annegato si sbriciola in acqua salata. Prima di sparire ti guarda la carta e ride.', 'Il Re Annegato ti rimanda su per le scale. Riprova quando vuoi.'] });
+    }
+    async storyBoss(won) {
+        const r = await this.net.request('story:boss', { won });
+        if (!r.ok) return toast(r.msg, { kind: 'bad' });
+        this.applyStory(r.story);
+        if (won) toast(h('div', {}, h('b', {}, 'Il Re Annegato è caduto'), h('div', {}, '«Ti manca solo il settimo seme» ha detto prima di sparire. Dove hai messo piede il primo giorno?')), { kind: 'coin', icon: 'crown', duration: 12000 });
     }
 
     setupRenderer() {
@@ -437,6 +503,7 @@ class Game {
         toast('Lo specchio ti restituisce un volto nuovo', { kind: 'ok', icon: 'mirror' });
     }
     applyMe(p) {
+        setTimeout(() => updateThread(this), 0);
         const prev = this.me;
         const oldCoins = prev && !prev.offline ? prev.coins : null;
         const oldLook = prev ? JSON.stringify(this.look()) : '';
@@ -469,7 +536,7 @@ class Game {
 
     // --- RETE ---
     tryHello() {
-        if (!this.net.connected || this.helloDone || this.mode === 'title' || !this.world) return;
+        if (!this.net.connected || this.helloDone || this.mode === 'title' || !this.world || this.prologueLock) return;
         this.helloDone = true;
         const hasLocal = !!this.local.appearance;
         this.net.request('hello', {
@@ -503,6 +570,9 @@ class Game {
             if (r.seasonMsg) toast(h('div', {}, h('b', {}, `Fine della stagione ${r.seasonMsg.season}`), h('div', {}, `Hai chiuso in lega ${r.seasonMsg.league}: la sua cornice ora decora la tua carta. La gloria riparte da metà strada.`)), { kind: 'coin', icon: 'trophy', duration: 12000 });
             if (r.created) toast(h('div', {}, h('b', {}, 'Il tuo nome è inciso nell\'Albo'), h('div', {}, 'Ricevi 150 Sputnik Coin e una Spada di Legno. La Sartoria e la Forgia ti aspettano.')), { kind: 'coin', duration: 9000 });
             if (!this.local.cardImage || !hasLocal) this.regenerateCard(true);
+            // l'approdo appena visto si segna sul server; chi non l'ha mai visto lo vede adesso
+            if (this.seenPending) { this.seenPending = false; this.net.request('story:seen').then(s => { if (s.ok) this.applyStory(s.story); }); }
+            else if (r.profile.story && !r.profile.story.seen && !this.prologue) setTimeout(() => this.playPrologue({ markSeen: true }), 1500);
             if (!this.local.account && !this.nudged) { this.nudged = true; setTimeout(() => this.accountNudge(), r.created ? 90000 : 12000); }
             this.net.request('lb:get').then(lb => { if (lb.ok) this.world.setLeaderboard(lb.rating); });
         });
@@ -520,6 +590,10 @@ class Game {
         N.on('kicked', () => { toast('Sei entrato da un\'altra finestra o da un altro dispositivo: questa resta fuori dal portale.', { kind: 'bad', duration: 20000 }); this.net.socket.io.opts.reconnection = false; });
         N.on('me', (p) => this.applyMe(p));
         N.on('save', (t) => { store.keepTicket(t); this.setSaveState('ok'); });
+        N.on('story:step', (e) => {
+            this.audio.play('quest');
+            toast(h('div', {}, h('b', {}, e.ready ? 'Capitolo pronto da chiudere' : 'Un passo della storia'), h('div', {}, e.ready ? 'Hai fatto tutto: torna da chi ti ha aperto il capitolo (il filo sotto l\'orologio te lo ricorda).' : e.t)), { kind: 'ok', icon: 'openbook', duration: 6000 });
+        });
         N.on('notify', (n) => { toast(n.text, { kind: n.kind === 'coin' ? 'coin' : n.kind === 'friend' ? 'ok' : 'info' }); this.audio.play('notify'); });
         N.on('room:state', (s) => {
             for (const p of this.players.values()) p.dispose();
@@ -561,7 +635,7 @@ class Game {
             this.audio.play('special');
             toast(h('div', {}, h('b', {}, `Nuovo titolo: ${t.name}`), h('div', {}, 'Lo puoi scegliere nel Libro della Maestria (L).')), { kind: 'coin', icon: 'crown', duration: 9000 });
         });
-        N.on('bounty:done', (b) => { this.audio.play('quest'); toast(h('div', {}, h('b', {}, b.weekly ? 'Taglia della settimana compiuta!' : 'Taglia compiuta!'), h('div', {}, `${b.text}. Riscuotila alla Bacheca in piazza.`)), { kind: 'coin', icon: 'scroll', duration: 7000 }); });
+        N.on('bounty:done', (b) => { this.audio.play('quest'); toast(h('div', {}, h('b', {}, b.weekly ? 'Taglia della settimana compiuta!' : 'Taglia compiuta!'), h('div', {}, `${b.text}. Riscuotila quando vuoi con il tasto J.`)), { kind: 'coin', icon: 'scroll', duration: 7000 }); });
         N.on('mission:done', (m) => { this.audio.play('quest'); toast(h('div', {}, h('b', {}, 'Missione segreta compiuta'), h('div', {}, `${m.text} +${m.xp} esperienza e una Pergamena Benedetta.`)), { kind: 'coin', icon: 'letter', duration: 9000 }); });
         N.on('phone:ring', () => this.phoneRing());
         N.on('veglia:state', (v) => { this.vegliaState = v; this.panels.refresh(['tombe', 'npc']); });
@@ -698,7 +772,7 @@ class Game {
         this.duel = null;
         this.mode = 'world';
         $('#hud').classList.remove('duel-mode');
-        if (!IS_MOBILE && !silent) $('#click-to-play').classList.remove('hidden');
+        if (!IS_MOBILE && !silent) this.relock();
         if (IS_MOBILE) $('#mobile-controls').classList.remove('hidden');
     }
     async watchDuel(id) {
@@ -744,7 +818,7 @@ class Game {
         const r = await this.net.request('npc:talk', { id });
         this.npcs?.greet(id);
         this.openPanel('npc', { id, ...(r.ok ? r : {}) });
-        this.npcSay(id);
+        if (!storyVoice(this, id)) this.npcSay(id);
     }
     // il personaggio dice la battuta che il pannello sta mostrando, con la sua voce
     npcSay(id) {
@@ -851,6 +925,7 @@ class Game {
         const kind = this.localKind || 'practice';
         if (kind === 'skeleton') return this.foeDone('graves:skeleton', { won });
         if (kind === 'veglia' || kind === 'king') return this.foeDone('veglia:end', { won });
+        if (kind === 'cripta') return this.storyBoss(won);
         const tier = this.practiceLevel < 0.8 ? 1 : this.practiceLevel < 1.3 ? 2 : 3;
         const r = await this.net.request('practice:done', { tier, won, el: this.practiceEl });
         if (r.ok && r.xp) toast(`+${r.xp} esperienza dall'allenamento${r.ess ? ` e un'${MATS[r.ess].name}` : ''}`, { kind: 'ok', icon: r.ess ? 'vial' : 'star', duration: 3500 });
@@ -884,7 +959,12 @@ class Game {
     // --- PANNELLI ---
     openPanel(id, arg) { if (this.mode === 'world') this.panels.open(id, arg); }
     onPanelOpen() { document.exitPointerLock?.(); this.keys = {}; $('#click-to-play').classList.add('hidden'); }
-    onPanelClose() { if (this.mode === 'world' && !IS_MOBILE) $('#click-to-play').classList.remove('hidden'); }
+    // chiudendo un pannello si torna a guardare col mouse, senza il menu (il click o il tasto valgono come gesto)
+    onPanelClose() { if (this.mode === 'world' && !IS_MOBILE) this.relock(); }
+    relock() {
+        if (this.noLock || this.locked || IS_MOBILE || this.mode !== 'world' || this.panels.isOpen) return;
+        try { const p = this.renderer.domElement.requestPointerLock?.(); if (p?.catch) p.catch(() => {}); } catch { /* serve un click */ }
+    }
 
     // --- INPUT ---
     setupInput() {
@@ -901,6 +981,10 @@ class Game {
         };
         $('#click-to-play').addEventListener('click', lock);
         canvas.addEventListener('click', lock);
+        // ogni volta che è il gioco a liberare il puntatore (pannelli, chat, mappa, pesca...) non serve il menu:
+        // solo ESC, che il browser gestisce da sé, lo fa ricomparire
+        const exitLock = document.exitPointerLock?.bind(document);
+        if (exitLock) document.exitPointerLock = () => { this.quietUnlock = performance.now(); return exitLock(); };
         canvas.addEventListener('mousedown', (e) => { if (!this.locked) this.dragLook = { x: e.clientX, y: e.clientY }; });
         addEventListener('mouseup', () => { this.dragLook = null; });
         document.addEventListener('mousemove', (e) => {
@@ -912,8 +996,14 @@ class Game {
         });
         document.addEventListener('pointerlockchange', () => {
             this.locked = document.pointerLockElement === canvas;
-            $('#click-to-play').classList.toggle('hidden', this.locked || this.panels.isOpen || this.mode !== 'world' || IS_MOBILE);
             $('#crosshair').classList.toggle('hidden', !this.locked);
+            if (this.locked) { $('#click-to-play').classList.add('hidden'); return; }
+            // cambiare finestra (Alt+Tab, un'altra app) libera il puntatore senza menu: si torna cliccando
+            const quiet = performance.now() - (this.quietUnlock || 0) < 700;
+            setTimeout(() => {
+                const show = !quiet && !this.locked && document.hasFocus() && !document.hidden && !this.panels.isOpen && this.mode === 'world' && !IS_MOBILE;
+                $('#click-to-play').classList.toggle('hidden', !show);
+            }, 160);
         });
         document.addEventListener('mousemove', (e) => {
             if (!this.locked) return;
@@ -958,6 +1048,7 @@ class Game {
                 case 'KeyM': this.toggleMic(); break;
                 case 'KeyB': this.audio.toggleMusic().then(on => { this.setMusicBtn(on); this.local.settings.musicOn = on; this.saveLocal(); }); break;
                 case 'KeyN': this.toggleBigMap(true); break;
+                case 'KeyG': this.openPanel('libro'); break;
             }
             if (EMOTES[e.code]) this.emote(EMOTES[e.code][0]);
         });
@@ -999,7 +1090,10 @@ class Game {
     interact() {
         const it = this.nearInteract;
         if (!it) { if (this.nearPlayer) this.openPanel('profilo', this.nearPlayer.info.id); return; }
-        if (it.id === 'specchio') this.editAppearance();
+        const beat = (who) => { const b = storyBeat(this, who); return b && !['wait', 'early'].includes(b.kind); };
+        if (it.id === 'storia') storyInteract(this, it.who);
+        else if (it.id === 'specchio') beat('specchio') ? this.openPanel('storia', { who: 'specchio' }) : this.editAppearance();
+        else if (it.id === 'canto' && beat('pietre')) this.openPanel('storia', { who: 'pietre' });
         else if (it.id === 'quadro') {
             document.exitPointerLock?.();
             const ep = this.world.gallery.current(it.painting);
@@ -1135,6 +1229,7 @@ class Game {
         $('#btn-mic').onclick = () => this.toggleMic();
         $('#btn-music').onclick = () => this.audio.toggleMusic().then(on => { this.setMusicBtn(on); this.local.settings.musicOn = on; this.saveLocal(); });
         $('#btn-save').onclick = () => this.saveNow(true);
+        $('#story-thread').onclick = () => this.openPanel('libro');
         this.autoSaveT = setInterval(() => this.saveNow(false), 60000);
         document.addEventListener('visibilitychange', () => { if (document.hidden) this.saveNow(false); });
         this.setSaveState(this.net.connected ? 'ok' : 'off');
@@ -1261,10 +1356,20 @@ class Game {
         this.updateEnv(dt);
         if (this.mode === 'duel' && this.duel) { this.duel.update(dt); return; }
         if (!this.world) return;
+        if (this.mode === 'cutscene' && this.prologue) {
+            this.prologue.update(dt);
+            this.npcs?.update(dt, this.player.pos, this.camera.position);
+            this.storySpots?.update(dt, this.world.t);
+            this.world.update(dt, this.camera.position);
+            for (const p of this.players.values()) p.update(dt, this.camera.position);
+            if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
+            return;
+        }
         if (this.mode === 'world') this.updatePlayer(dt);
         else if (this.mode === 'fish') this.fishing.update(dt);
         else if (this.mode === 'canto') { const ch = this.myChar; ch.root.position.copy(this.player.pos); ch.state = 'idle'; ch.speed = 0; this.updateFill(this.player); }
         this.npcs?.update(dt, this.player.pos, this.camera.position);
+        this.storySpots?.update(dt, this.world.t);
         this.onda?.update();
         this.updateCamera(dt);
         this.world.update(dt, this.player.pos);
@@ -1288,7 +1393,7 @@ class Game {
     updateEnv(dt) {
         const now = Date.now() + (this.clockOffset || 0);
         if (!(this.vegliaCheck > now)) { this.vegliaCheck = now + 10000; this.vegliaNight = vegliaTime(now); }
-        this.env.forceNight = !!this.vegliaState?.open || this.vegliaNight;
+        this.env.forceNight = !!this.vegliaState?.open || this.vegliaNight || !!this.prologue;
         const S = this.env.update(dt, now);
         // Luminosità (Opzioni): esposizione più alta e ombre meno profonde
         const b = this.local.settings.bright ?? 1, boost = Math.max(0, b - 1) * 0.35;
@@ -1297,6 +1402,7 @@ class Game {
         if (this.mode === 'duel' && this.duel) this.duel.applyEnv?.(S, boost);
         else if (this.world) {
             this.world.applyEnv(S, boost);
+            if (this.cutFog != null && this.scene.fog) this.scene.fog.density = this.cutFog;
             applySky(this.sky, S, this.world.t);
             this.precip?.update(dt, this.camera.position, S, this.world.indoor);
             if (!this.fillInRoom) this.fillLight.intensity = 9 - 4.5 * S.day;

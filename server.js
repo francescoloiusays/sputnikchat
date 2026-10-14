@@ -25,6 +25,7 @@ import {
 } from './public/js/shared/catalog.js';
 import { INSULTS, TOLL_START, TOLL_LINES, NPCS, ONDA_Q, ONDA_PLOT, TABLETS, MISSIONS, PHONE_LINES, QUADRI } from './public/js/shared/lore.js';
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
+import { STORY, STORY_END, STORY_SPOTS, WAYS, newStory, chapterReady, nomeVero } from './public/js/shared/story.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
@@ -110,6 +111,7 @@ function migrate(p) {
         if (alt) p.equipment.weapon = alt.uid;
         changed = true;
     }
+    if (!p.story) { p.story = newStory(true); changed = true; }
     updateSeason(p);
     return changed;
 }
@@ -164,6 +166,9 @@ function bountyMatch(b, kind, ev, data) {
 }
 // Avanza le taglie del giorno, della settimana e la missione del telefono
 function progress(p, ev, amt = 1, data = {}) {
+    // gli stessi eventi fanno andare avanti anche la storia
+    const SE = { fish: 'fish', dig: 'dig', canto: 'canto', toll: 'toll' }[ev];
+    if (SE) storyStep(p, SE, amt);
     const B = ensureBounties(p), S = sessionOf(p.id);
     const step = (b, kind, max) => {
         if (!b || b.done || !bountyMatch(b, kind, ev, data)) return false;
@@ -180,6 +185,29 @@ function progress(p, ev, amt = 1, data = {}) {
         if (S) S.socket.emit('mission:done', { text: M.text, xp });
     }
 }
+// --- IL ROMANZO DELLA NEBBIA ---
+const storyOf = p => (p.story ||= newStory(true));
+// un passo del capitolo aperto: si conta solo da quando il capitolo è cominciato
+function storyStep(p, k, amt = 1) {
+    const st = storyOf(p), C = STORY[st.ch];
+    if (!C || !st.on) return;
+    const s = C.steps.find(x => x.k === k && !x.state);
+    if (!s) return;
+    const had = st.prog[k] || 0;
+    st.prog[k] = Math.min(s.n, s.max ? Math.max(had, amt) : had + amt);
+    const S = sessionOf(p.id);
+    if (S && st.prog[k] >= s.n && had < s.n) S.socket.emit('story:step', { ch: st.ch, k, t: s.t, ready: chapterReady(st, p) });
+}
+// i Nomi Veri già dati: due viandanti non portano mai lo stesso
+const usedNames = new Set();
+function proposeName(p) {
+    for (let salt = 0; salt < 60; salt++) {
+        const n = nomeVero(p.story, p.id, p.appearance?.sex, salt);
+        if (!usedNames.has(n.toLowerCase())) return n;
+    }
+    return nomeVero(p.story, p.id + Date.now(), p.appearance?.sex);
+}
+
 // Contatori del giorno (pescate e raccolte con premi pieni, Essenze dai duelli)
 function dayc(p) {
     const d = today();
@@ -228,6 +256,7 @@ function newProfile(d) {
         inventory: [weapon], equipment: { weapon: weapon.uid },
         friends: [], requests: [], collection: [],
         lastDaily: Date.now(), createdAt: Date.now(), lastSeen: Date.now(),
+        story: newStory(false),
     };
     pidIndex.set(p.id, p.token);
     return p;
@@ -279,6 +308,7 @@ function privateView(p) {
         cantoLeft: Math.max(0, CANTO.daily - (dayc(p).canto || 0)), cantoBest: p.cantoBest || 0, wishedToday: p.wishDay === d,
         fountainUntil: p.fountain?.until || 0, tollToday: p.tollDay === d, ondaToday: p.ondaDay === d,
         veglia: p.veglia || null, kingWeek: p.kingWeek || null, watched: Object.keys(p.watched || {}), account: p.account?.user || null,
+        story: storyOf(p),
         friends: p.friends.map(id => ({ id, name: byPid(id)?.name || '???', online: sidByPid.has(id) })),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
         collectionCount: p.collection.length,
@@ -584,6 +614,7 @@ function endDuel(d, winner, reason) {
     // Arena classificata: la gloria si muove solo se entrambi sono almeno al livello 5
     const ranked = levelOf(P.a) >= RANKED_LEVEL && levelOf(P.b) >= RANKED_LEVEL;
     result.ranked = ranked;
+    if (winner && fought && ranked) storyStep(P[winner], 'rankedWin');
     if (winner) {
         const loser = winner === 'a' ? 'b' : 'a';
         const W = P[winner], L = P[loser];
@@ -750,7 +781,7 @@ function awardFriday() {
 setInterval(awardFriday, 10 * 60 * 1000);
 
 // profili di prima: si aggiornano all'avvio (qui sotto tutti gli aiuti sono già pronti)
-for (const p of store.all()) { pidIndex.set(p.id, p.token); linkAccount(p); if (migrate(p)) store.put(p); }
+for (const p of store.all()) { pidIndex.set(p.id, p.token); linkAccount(p); if (migrate(p)) store.put(p); if (p.story?.name) usedNames.add(p.story.name.toLowerCase()); }
 
 io.on('connection', (socket) => {
     let me = null;
@@ -1054,6 +1085,7 @@ io.on('connection', (socket) => {
         const now = Date.now();
         if (now - (me.lastPractice || 0) < 20000) return reply({ ok: true, xp: 0 });
         me.lastPractice = now;
+        if (d.won) { storyStep(me.p, 'practiceWin'); save(me.p); }
         const P = me.p.practice, day = today();
         if (P.day !== day) { P.day = day; P.n = 0; }
         if (P.n >= XP.PRACTICE_DAILY) return reply({ ok: true, xp: 0, msg: 'Il Fantasma ti ha già insegnato abbastanza per oggi' });
@@ -1263,8 +1295,8 @@ io.on('connection', (socket) => {
     const needLv = (reply, lv, what) => { if (levelOf(me.p) < lv) { fail(reply, `${what} dal livello ${lv}`); return false; } return true; };
 
     // --- LA BACHECA DELLE TAGLIE (si riscuote in piazza) ---
+    // si riscuote ovunque (tasto J): il Mercante paga anche a distanza
     on('bounty:claim', (d, reply) => {
-        if (!near(BOUNTY_BOARD.x, BOUNTY_BOARD.z, BOUNTY_BOARD.r + 2)) return fail(reply, 'Le taglie si riscuotono alla Bacheca in piazza');
         const p = me.p, B = ensureBounties(p);
         const b = d.weekly ? B.weekly : B.daily[int(d.i, 0, 2)];
         if (!b || !b.done) return fail(reply, 'Taglia non ancora compiuta');
@@ -1503,10 +1535,100 @@ io.on('connection', (socket) => {
         me.phoneRing = false;
         const p = me.p, B = ensureBounties(p);
         p.phoneDay = today();
+        storyStep(p, 'phone');
         const ids = Object.keys(MISSIONS), mid = ids[crypto.randomInt(ids.length)], M = MISSIONS[mid];
         B.mission = { mid, k: M.kind, kind: M.kind, n: M.n, have: 0, done: false, text: M.text, id: M.id };
         save(p); sendMe(me);
         reply({ ok: true, line: PHONE_LINES[crypto.randomInt(PHONE_LINES.length)], text: M.text });
+    });
+
+    // =================================================================
+    //  IL ROMANZO DELLA NEBBIA
+    // =================================================================
+    // dove si trova chi apre o chiude un capitolo: un abitante o un luogo della storia
+    const spotOf = (who) => NPCS[who] || STORY_SPOTS[who];
+    const nearWho = (who) => { const s = spotOf(who); return !!s && near(s.x, s.z, (s.r || 4) + 1.5); };
+    const storyReply = (reply, extra = {}) => { save(me.p); sendMe(me); reply({ ok: true, story: me.p.story, ...extra }); };
+    // la scena della barca vista (o saltata)
+    on('story:seen', (d, reply) => {
+        const st = storyOf(me.p);
+        if (!st.seen) { st.seen = true; return storyReply(reply); }
+        reply({ ok: true, story: st });
+    });
+    // si apre il capitolo parlando con chi lo custodisce
+    on('story:start', (d, reply) => {
+        const p = me.p, st = storyOf(p), C = STORY[st.ch];
+        if (!C || st.on) return fail(reply, 'Niente da cominciare');
+        if (!C.steps.length) return fail(reply, 'Questo capitolo si chiude e basta');
+        if (levelOf(p) < C.lv) return fail(reply, `Questo capitolo si apre dal livello ${C.lv}`);
+        if (!nearWho(C.who)) return fail(reply, 'Troppo lontano');
+        if (C.way) {
+            if (!WAYS[d.way]) return fail(reply, 'Scegli come affrontarlo');
+            st.way = d.way;
+        }
+        st.on = true; st.prog = {};
+        storyReply(reply);
+    });
+    // la risposta alla domanda chiude il capitolo e scrive la pagina
+    on('story:answer', (d, reply) => {
+        const p = me.p, st = storyOf(p), C = STORY[st.ch];
+        if (!C) return fail(reply, 'Il libro è finito: la nebbia no');
+        if (!nearWho(C.end || C.who)) return fail(reply, 'Troppo lontano');
+        if (C.steps.length) {
+            if (!chapterReady(st, p)) return fail(reply, 'Il capitolo non è ancora finito');
+        } else if (st.ch === 0 && !st.seen) st.seen = true;
+        if (levelOf(p) < C.lv) return fail(reply, `Questo capitolo si chiude dal livello ${C.lv}`);
+        let a = null;
+        if (C.q) {
+            a = int(d.a, 0, C.a.length - 1);
+            if (d.a == null) return fail(reply, 'Scegli una risposta');
+            st.ans[st.ch] = a;
+        }
+        const out = { ch: st.ch, a, xp: C.xp ? grantXp(p, C.xp) : 0, title: C.reward && award(p, C.reward) ? C.reward : null };
+        st.done = { ...(st.done || {}), [st.ch]: Date.now() };
+        st.ch++; st.on = false; st.prog = {};
+        // dopo la Melma il libro propone il Nome Vero
+        if (C.id === 'melma') out.name = proposeName(p);
+        storyReply(reply, out);
+    });
+    // il Nome Vero: quello proposto, oppure uno scritto dal giocatore
+    on('story:name', (d, reply) => {
+        const p = me.p, st = storyOf(p);
+        const melma = STORY.findIndex(c => c.id === 'melma');
+        if (st.ch <= melma) return fail(reply, 'Il Nome Vero arriva alla fine del Libro I');
+        let name = d.mine ? cleanText(d.name, 60) : proposeName(p);
+        if (name.length < 3) return fail(reply, 'Scrivi almeno tre lettere');
+        if (usedNames.has(name.toLowerCase()) && name !== st.name) {
+            if (d.mine) return fail(reply, 'Questo nome lo porta già un altro viandante');
+            name = proposeName(p);
+        }
+        if (st.name) usedNames.delete(st.name.toLowerCase());
+        st.name = name; st.mine = !!d.mine;
+        usedNames.add(name.toLowerCase());
+        storyReply(reply, { name });
+    });
+    // il Re Annegato affrontato da solo nella cripta
+    on('story:boss', (d, reply) => {
+        const p = me.p, st = storyOf(p), C = STORY[st.ch];
+        if (C?.id !== 'melma' || !st.on || st.way !== 'cripta') return fail(reply, 'La cripta è chiusa');
+        if (Date.now() - (me.lastBoss || 0) < 20000) return fail(reply, 'Riprendi fiato');
+        me.lastBoss = Date.now();
+        if (d.won) storyStep(p, 're');
+        storyReply(reply, { won: !!d.won });
+    });
+    // le cose che si trovano: il cassetto della Stanza Bianca, il seme sotto il molo
+    on('story:find', (d, reply) => {
+        const p = me.p, st = storyOf(p), C = STORY[st.ch], k = String(d.k);
+        if (!st.on) return fail(reply, 'Non c\'è niente qui');
+        if (k === 'drawer' && C?.id === 'eco') {
+            if (!inWhiteRoom(me.pos[0], me.pos[1], me.pos[2])) return fail(reply, 'Il cassetto è nella Stanza Bianca');
+            storyStep(p, 'drawer');
+        } else if (k === 'fango' && C?.id === 'melma') {
+            if (!(st.prog.re >= 1)) return fail(reply, 'Prima il Re Annegato');
+            if (!nearWho('molo')) return fail(reply, 'Troppo lontano');
+            storyStep(p, 'fango');
+        } else return fail(reply, 'Non c\'è niente qui');
+        storyReply(reply, { k });
     });
 
     // --- CASTONI E PAROLE DI RUNA (Mastro Brace) ---
@@ -1585,6 +1707,7 @@ io.on('connection', (socket) => {
         if (Date.now() - F.at < VEGLIA.minMs) return fail(reply, 'Troppo in fretta: i morti non ci credono');
         vegliaState();
         if (F.king) {
+            if (p.story?.way === 'veglia') storyStep(p, 're');
             veglia.kings.add(p.id);
             out.xp = grantXp(p, 200);
             if (p.kingWeek !== weekOf()) { p.kingWeek = weekOf(); out.loot.cuore = addMat(p, 'cuore', 1); }
