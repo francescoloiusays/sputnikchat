@@ -1412,7 +1412,7 @@ class Game {
         const S = this.env.update(dt, now);
         // Luminosità (Opzioni): esposizione più alta e ombre meno profonde
         const b = this.local.settings.bright ?? 1, boost = Math.max(0, b - 1) * 0.35;
-        this.renderer.toneMappingExposure = 1.05 * b;
+        this.renderer.toneMappingExposure = 1.05 * b * (1 + 0.08 * S.day);
         if (this.bloom) this.bloom.strength = 0.5 - 0.2 * S.day;
         // il cielo riflesso: al chiuso ne entra poco
         const duel = this.mode === 'duel' && this.duel;
@@ -1424,7 +1424,7 @@ class Game {
             if (this.cutFog != null && this.scene.fog) this.scene.fog.density = this.cutFog;
             applySky(this.sky, S, this.world.t);
             this.precip?.update(dt, this.camera.position, S, this.world.indoor);
-            if (!this.fillInRoom) this.fillLight.intensity = 9 - 4.5 * S.day;
+            if (!this.fillInRoom) this.fillLight.intensity = 9 - 8.6 * S.day;   // di giorno la luce lilla di riempimento appiattirebbe tutto
         }
         this.audio.setEnv(S);
         this.updateSoundscape(dt);

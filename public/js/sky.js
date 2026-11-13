@@ -66,9 +66,9 @@ const P = (o) => ({
     water: o.water.map(c => new THREE.Color(c)), mist: new THREE.Color(o.mist[0]), mistI: o.mist[1], day: o.day,
 });
 const NIGHT = { sky: ['#0b001a', '#2d0a45', '#751e5e', '#ffaa00'], fog: '#2d0a45', fogD: 0.0085, hemi: ['#6a4a9a', '#1a1022', 1.2], amb: ['#2a1838', 0.78], dir: ['#b8b0ff', 1.15], water: ['#0d0618', '#2a1d3c', '#3a1458', '#c65a3a'], mist: ['#c8aae6', 1], day: 0 };
-const DAWN = { sky: ['#26306a', '#7a4c8c', '#e8807a', '#ffc46e'], fog: '#7a5a86', fogD: 0.0068, hemi: ['#e6b4c8', '#3a2830', 1.3], amb: ['#5a4060', 0.55], dir: ['#ffb27a', 1.8], water: ['#1a1830', '#4a3552', '#7a4a7e', '#f29a66'], mist: ['#f0c0d0', 0.8], day: 0.5 };
-const DAY = { sky: ['#3567b5', '#76a3dc', '#b8d2ee', '#f2dcc2'], fog: '#a7bad6', fogD: 0.0042, hemi: ['#d2e2ff', '#5a5244', 1.95], amb: ['#8a90b0', 0.7], dir: ['#fff0d6', 3.1], water: ['#0f3550', '#3a7a86', '#6c9cd0', '#d8e4ee'], mist: ['#ffffff', 0.45], day: 1 };
-const DUSK = { sky: ['#1d1a58', '#6a3a80', '#e0607a', '#ffa040'], fog: '#6a3f78', fogD: 0.007, hemi: ['#e0a0c0', '#2a1a2a', 1.25], amb: ['#4a3050', 0.55], dir: ['#ff9a5a', 1.7], water: ['#16122a', '#3e2a4a', '#6a3a70', '#ff8a50'], mist: ['#e0b0d8', 0.85], day: 0.45 };
+const DAWN = { sky: ['#26306a', '#7a4c8c', '#e8807a', '#ffc46e'], fog: '#7a5a86', fogD: 0.0068, hemi: ['#e6b4c8', '#3a2830', 1.05], amb: ['#5a4060', 0.38], dir: ['#ffb27a', 2.3], water: ['#1a1830', '#4a3552', '#7a4a7e', '#f29a66'], mist: ['#f0c0d0', 0.8], day: 0.5 };
+const DAY = { sky: ['#3567b5', '#76a3dc', '#b8d2ee', '#f2dcc2'], fog: '#a7bad6', fogD: 0.0029, hemi: ['#b8d0ff', '#4a4034', 1.05], amb: ['#8a90b0', 0.2], dir: ['#ffe6c2', 5.8], water: ['#0f3550', '#3a7a86', '#6c9cd0', '#d8e4ee'], mist: ['#ffffff', 0.45], day: 1 };
+const DUSK = { sky: ['#1d1a58', '#6a3a80', '#e0607a', '#ffa040'], fog: '#6a3f78', fogD: 0.007, hemi: ['#e0a0c0', '#2a1a2a', 1.0], amb: ['#4a3050', 0.38], dir: ['#ff9a5a', 2.2], water: ['#16122a', '#3e2a4a', '#6a3a70', '#ff8a50'], mist: ['#e0b0d8', 0.85], day: 0.45 };
 const KEYS = [[0, NIGHT], [4.6, NIGHT], [6, DAWN], [8.2, DAY], [16.6, DAY], [18.6, DUSK], [20.4, NIGHT], [24, NIGHT]].map(([h, o]) => ({ h, ...P(o) }));
 export const MOON_DIR = new THREE.Vector3(-0.32, 0.42, -1).normalize();
 const STORM = new THREE.Color('#c8c4ff'), GREY = new THREE.Color();
@@ -134,7 +134,7 @@ export class Environment {
         for (const col of S.water) greyed(col, c * 0.45, dim * 0.3);
         S.fogD *= 1 + c * 0.35 + S.rain * 0.85 + S.snow * 1.05;
         S.dirI *= Math.max(0.12, 1 - dim * 1.15);
-        S.hemiI *= 1 - dim * 0.1;
+        S.hemiI *= 1 + dim * 1.1 * S.day - dim * 0.1;
         S.ambI += c * 0.16;
         S.sunVis *= 1 - c * 0.92; S.moonVis *= 1 - c * 0.85; S.starsVis *= 1 - c;
         // nuvole: bianche di giorno, rosate al tramonto, viola scuro di notte

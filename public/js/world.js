@@ -434,7 +434,7 @@ export class World {
             const out = opts.wall != null ? 0.7 : 0;
             l.position.set(x + Math.sin(opts.wall || 0) * out, y + 0.3, z + Math.cos(opts.wall || 0) * out);
             this.scene.add(l);
-            this.lights.push({ l, base: 26, sp: 3 + Math.random() * 3 });
+            this.lights.push({ l, base: 26, sp: 3 + Math.random() * 3, out: true });
         }
     }
     addTorchPost(x, z, light, h = 2.2) {
@@ -915,6 +915,7 @@ export class World {
             // luce calda dentro la bottega
             const lamp = new THREE.PointLight('#ffb070', this.quality === 'alta' ? 14 : 10, 9, 1.4);
             lamp.position.set(0, SH - 0.7, -0.4); grp.add(lamp);
+            (this.shopLamps ||= []).push({ l: lamp, base: lamp.intensity });
             this.scene.add(grp);
             const [tx, tz] = toWorld(1.55, SD / 2 + 0.15);
             this.addTorch(tx, cfg.h + 2.4, tz, true, 1, { wall: cfg.ry });
@@ -1278,7 +1279,7 @@ export class World {
         const l = new THREE.PointLight('#ff8a3a', intensity, 16, 1.5);
         l.position.set(x, y, z);
         this.scene.add(l);
-        this.lights.push({ l, base: intensity, sp: 4 + Math.random() * 3 });
+        this.lights.push({ l, base: intensity, sp: 4 + Math.random() * 3, out: true });
     }
 
     buildDock() {
@@ -1626,7 +1627,11 @@ export class World {
         SNOW_COVER.value = S.cover;
         this.grass?.applyEnv(S, ind);
         // i colori del terreno sono nati per la notte: di giorno si schiariscono un poco
-        this.terrain.material.color.setScalar(1 + 0.35 * S.day);
+        this.terrain.material.color.setScalar(1 + 0.2 * S.day);
+        // al sole le torce quasi non illuminano: tenerle piene di giorno lava via tutte le ombre
+        this.torchK = 1 - 0.9 * S.day;
+        // le lampade delle botteghe passano attraverso i muri: da fuori, di giorno, si spengono quasi
+        for (const L of this.shopLamps || []) L.l.intensity = L.base * (ind ? 1 : this.torchK);
     }
     // dentro la Stanza Bianca la luce è calda e bianca
     inRoom(p) {
@@ -1679,7 +1684,7 @@ export class World {
         const t = this.t;
         this.waterMat.uniforms.uTime.value = t;
         this.grass?.update(t, focus);
-        for (const L of this.lights) L.l.intensity = L.base * (0.85 + Math.sin(t * L.sp) * 0.08 + Math.random() * 0.07);
+        for (const L of this.lights) L.l.intensity = L.base * (L.out ? this.torchK ?? 1 : 1) * (0.85 + Math.sin(t * L.sp) * 0.08 + Math.random() * 0.07);
         for (const f of this.flames) f.glow.material.opacity = 0.38 + Math.sin(t * f.sp) * 0.06 + Math.random() * 0.04;
         for (const w of this.wisps) {
             w.s.position.set(w.x + Math.cos(t * w.sp + w.a) * w.rad, w.y + Math.sin(t * w.sp * 1.7 + w.a) * 0.4, w.z + Math.sin(t * w.sp + w.a) * w.rad);
