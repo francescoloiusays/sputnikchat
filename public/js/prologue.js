@@ -95,7 +95,7 @@ function buildBoat(glowTex) {
     // il remo lungo del Traghettatore, a poppa (gira attorno allo scalmo)
     const oarPivot = new THREE.Group();
     oarPivot.position.set(0.46, 0.5, 1.55);
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 3.4, 6), dark);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 3.4, 12), dark);
     shaft.rotation.x = Math.PI / 2; shaft.position.z = 0.9;
     const blade = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.6), dark);
     blade.position.z = 2.5;
@@ -104,7 +104,7 @@ function buildBoat(glowTex) {
     oarPivot.add(arm);
     boat.add(oarPivot);
     // la lanterna a prua
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.3, 6), dark);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.3, 12), dark);
     pole.position.set(0, 0.95, -2.05); pole.rotation.x = -0.25; boat.add(pole);
     const lamp = new THREE.Group(); lamp.position.set(0, 1.55, -2.25);
     lamp.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.2), new THREE.MeshStandardMaterial({ color: '#ffb35a', emissive: '#ff9a3a', emissiveIntensity: 2.6, transparent: true, opacity: 0.9 })));

@@ -357,7 +357,7 @@ export class DuelView {
     // stessa ora e stesso tempo dell'isola, un po' più luminosi: l'Arena deve leggersi bene
     applyEnv(S, boost = 0) {
         applySky(this.sky, S, this.t);
-        this.hemi.color.copy(S.hemiS); this.hemi.groundColor.copy(S.hemiG); this.hemi.intensity = S.hemiI * 1.15 + boost;
+        this.hemi.color.copy(S.hemiS); this.hemi.groundColor.copy(S.hemiG); this.hemi.intensity = (S.hemiI * 1.15 + boost) * (this.envOn ? 0.84 : 1);
         this.moonL.color.copy(S.dir); this.moonL.intensity = S.dirI * 1.3;
         this.scene.fog.color.copy(S.fog); this.scene.fog.density = S.fogD * 1.4;
         const u = this.water.material.uniforms;

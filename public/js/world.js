@@ -11,6 +11,8 @@ import { TABLETS } from './shared/lore.js';
 import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.js';
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
 import { addSkyExtras, addSnowCover, SNOW_COVER } from './sky.js';
+import { Relief, tileHeights, roughRock } from './realism.js';
+import { Grass } from './grass.js';
 import { buildWeapon } from './character.js';
 
 // --- LAYOUT (metri) ---
@@ -86,11 +88,12 @@ function computeHeight(x, z) {
     // sentieri più dolci
     const pd = pathDist(x, z);
     h = lerp(h, base + 0.35 + hills * 0.25, (1 - smooth(2.5, 7, pd)) * smooth(0.0, 0.25, m));
-    // piazza e botteghe
+    h = lerp(h, 1.7, 1 - smooth(8, 14, Math.hypot(x - WORLD.CEMETERY.x, z - WORLD.CEMETERY.z)) * 0.6);
+    // piazza e botteghe: spianate per ultime, così il terreno sta esattamente alla loro quota
+    // (prima finiva alla stessa altezza dei pavimenti e le due superfici sfarfallavano)
     const P = WORLD.PLAZA;
     h = lerp(h, P.h, 1 - smooth(P.r, P.r + 9, Math.hypot(x - P.x, z - P.z)));
     for (const s of Object.values(WORLD.SHOPS)) h = lerp(h, s.h, 1 - smooth(6, 11, Math.hypot(x - s.x, z - s.z)));
-    h = lerp(h, 1.7, 1 - smooth(8, 14, Math.hypot(x - WORLD.CEMETERY.x, z - WORLD.CEMETERY.z)) * 0.6);
     // altopiano del castello
     const C = WORLD.CASTLE;
     const dq = Math.pow(Math.pow(Math.abs(x - C.x), 4) + Math.pow(Math.abs(z - C.z), 4), 0.25);
@@ -180,7 +183,7 @@ export function makeWaterMaterial(heightTex, bounds) {
             uTime: { value: 0 },
             uDeep: { value: new THREE.Color('#0d0618') }, uShallow: { value: new THREE.Color('#2a1d3c') },
             uSky: { value: new THREE.Color('#3a1458') }, uHor: { value: new THREE.Color('#c65a3a') },
-            uMoon: { value: MOON_DIR.clone() },
+            uMoon: { value: MOON_DIR.clone() }, uGlint: { value: new THREE.Color(1, 0.92, 0.85) },
             uHeight: { value: heightTex || null }, uHasH: { value: heightTex ? 1 : 0 },
             uBounds: { value: new THREE.Vector4(...(bounds || [0, 0, 1, 1])) },
         }]),
@@ -191,7 +194,7 @@ export function makeWaterMaterial(heightTex, bounds) {
             #include <fog_vertex>
             }`,
         fragmentShader: `
-            uniform float uTime, uHasH; uniform vec3 uDeep, uShallow, uSky, uHor, uMoon; uniform sampler2D uHeight; uniform vec4 uBounds;
+            uniform float uTime, uHasH; uniform vec3 uDeep, uShallow, uSky, uHor, uMoon, uGlint; uniform sampler2D uHeight; uniform vec4 uBounds;
             varying vec3 vW;
             #include <fog_pars_fragment>
             float wv(vec2 p, vec2 d, float f, float s){ return sin(dot(p, d) * f + uTime * s); }
@@ -201,17 +204,24 @@ export function makeWaterMaterial(heightTex, bounds) {
               vec2 D[4]; D[0]=normalize(vec2(1.0,0.3)); D[1]=normalize(vec2(-0.6,1.0)); D[2]=normalize(vec2(0.2,-1.0)); D[3]=normalize(vec2(-1.0,-0.4));
               float F[4]; F[0]=0.35; F[1]=0.6; F[2]=1.3; F[3]=2.1;
               for(int i=0;i<4;i++){ float c = cos(dot(p, D[i]) * F[i] + uTime * (0.6 + float(i)*0.35)); grad += D[i] * F[i] * c * (0.06 / (1.0 + float(i))); }
+              // increspature fini: si spengono con la distanza, dove diventerebbero solo sfarfallio
+              float dist = length(cameraPosition - vW);
+              float fine = 1.0 / (1.0 + dist * dist * 0.0009);
+              vec2 E[3]; E[0]=normalize(vec2(0.7,0.7)); E[1]=normalize(vec2(-0.9,0.35)); E[2]=normalize(vec2(0.15,-1.0));
+              for(int i=0;i<3;i++){ float f = 3.7 + float(i) * 2.9; grad += E[i] * cos(dot(p, E[i]) * f + uTime * (1.5 + float(i) * 0.55) + float(i) * 1.7) * 0.034 * fine; }
               vec3 N = normalize(vec3(-grad.x, 1.0, -grad.y));
               vec3 V = normalize(cameraPosition - vW);
-              float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-              vec3 R = reflect(-V, N);
+              // di sbieco l'acqua è uno specchio, guardata dall'alto lascia vedere il fondo
+              float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 4.0);
+              vec3 R = reflect(-V, N); R.y = abs(R.y);
               vec3 sky = mix(uHor, uSky, smoothstep(0.0, 0.35, R.y));
-              float spec = pow(max(dot(R, uMoon), 0.0), 120.0) * 1.6;
+              float rm = max(dot(R, uMoon), 0.0);
+              float spec = pow(rm, 160.0) * 1.7 + pow(rm, 22.0) * 0.1;
               float h = -6.0;
               if (uHasH > 0.5) { vec2 uv = (p - uBounds.xy) / (uBounds.zw - uBounds.xy); h = texture2D(uHeight, uv).r * 16.0 - 8.0; if(uv.x<0.0||uv.y<0.0||uv.x>1.0||uv.y>1.0) h = -8.0; }
               float shallow = smoothstep(-2.5, 0.0, h);
               vec3 base = mix(uDeep, uShallow, shallow);
-              vec3 col = mix(base, sky, 0.18 + 0.55 * fres) + vec3(1.0, 0.92, 0.85) * spec;
+              vec3 col = mix(base, sky, min(0.9, 0.14 + 0.8 * fres)) + uGlint * spec;
               float foam = smoothstep(-0.35, 0.0, h) * (0.55 + 0.45 * sin(uTime * 1.6 + h * 18.0 + p.x * 0.4));
               col += vec3(0.55, 0.45, 0.65) * foam * 0.35;
               gl_FragColor = vec4(col, mix(0.94, 0.55, shallow));
@@ -233,6 +243,8 @@ export function wallBox(w, h, d, tile = 2.6) {
     }
     return g;
 }
+// superfici appoggiate su un'altra (pavimenti, tappeti, rune): in profondità vincono sempre, niente sfarfallio
+export const OVER = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 };
 export function place(g, x, y, z, ry = 0, rx = 0, rz = 0) {
     g.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz)).setPosition(x, y, z));
     return g;
@@ -251,14 +263,20 @@ export class World {
         this.flames = [];
         this.t = 0;
         const L = new THREE.TextureLoader();
-        const load = (p, rep) => { const t = L.load(p); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; if (rep) t.repeat.set(rep, rep); t.anisotropy = 4; return t; };
-        this.texWall = load('./muro.jpg');
-        this.texFloor = load('./pavimento.jpg');
-        this.matWall = new THREE.MeshStandardMaterial({ map: this.texWall, roughness: 0.95, color: '#c9c0d6' });
+        const alta = this.quality === 'alta';
+        const tex = (file, srgb, rx = 1, ry = rx, aniso = alta ? 8 : 4) => { const t = L.load(file); if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = aniso; return t; };
+        // in qualità alta i materiali sono fotografici (Poly Haven, CC0, in public/tex): colore, rilievo e ruvidità
+        this.photo = (name, rx = 1, ry = rx) => ({ map: tex(`./tex/${name}_diff.jpg`, true, rx, ry), normalMap: tex(`./tex/${name}_nor.jpg`, false, rx, ry, 4), roughnessMap: tex(`./tex/${name}_rough.jpg`, false, rx, ry, 2), roughness: 1 });
+        this.alta = alta;
+        this.texFloor = tex('./pavimento.jpg', true);
+        this.matWall = new THREE.MeshStandardMaterial(alta ? { ...this.photo('castle_wall_slates'), color: '#b4adc0' } : { map: tex('./muro.jpg', true), roughness: 0.95, color: '#c9c0d6' });
         this.matStone = new THREE.MeshStandardMaterial({ color: '#5d5866', roughness: 0.92 });
-        this.matWood = new THREE.MeshStandardMaterial({ color: '#3d2a1c', roughness: 0.9 });
+        this.matWood = new THREE.MeshStandardMaterial(alta ? { ...this.photo('weathered_brown_planks'), color: '#8f7b6c' } : { color: '#3d2a1c', roughness: 0.9 });
         this.matDark = new THREE.MeshStandardMaterial({ color: '#0d0a10', roughness: 1 });
-        this.matRoof = new THREE.MeshStandardMaterial({ color: '#2a2036', roughness: 0.85, flatShading: true });
+        this.matRoof = new THREE.MeshStandardMaterial(alta ? { ...this.photo('roof_slates_02', 5, 2.5), color: '#7d7290', flatShading: true } : { color: '#2a2036', roughness: 0.85, flatShading: true });
+        // superfici che la pioggia bagna: [materiale, ruvidità da asciutto, ruvidità da bagnato]
+        this.wetMats = alta ? [[this.matWall, 1, 0.72], [this.matWood, 1, 0.6], [this.matRoof, 1, 0.45]] : [[this.matWall, 0.95, 0.7]];
+        this.wet = 0;
         addSnowCover(this.matRoof);
         this.indoor = false;
         this.lightDir = MOON_DIR.clone();
@@ -282,6 +300,7 @@ export class World {
         this.buildGather();
         this.buildPlaces();
         this.buildMapImage();
+        if (alta) this.buildGrass();
     }
 
     // --- ALTEZZE ---
@@ -363,6 +382,14 @@ export class World {
     }
     addCirc(x, z, r, y0, y1, opts = {}) { this.colliders.push({ type: 'circ', x, z, r, y0, y1, ...opts }); }
 
+    // lastricato: vince sempre sul terreno che ha sotto, e la pioggia lo lucida
+    floorMat(map, color, roughness) {
+        // la foto copre circa due metri: il doppio delle ripetizioni del vecchio lastricato
+        const m = new THREE.MeshStandardMaterial(this.alta ? { ...this.photo('monastery_stone_floor', map.repeat.x * 2), color, ...OVER } : { map, color, roughness, ...OVER });
+        this.wetMats.push(this.alta ? [m, 1, 0.5] : [m, roughness, 0.42]);
+        return m;
+    }
+
     // --- LUCI ---
     buildLights() {
         const s = this.scene;
@@ -392,7 +419,7 @@ export class World {
             fire.position.set(x, y - scale * 0.42, z);
             this.scene.add(fire);
             if (opts.cup) {
-                const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * scale, 0.09 * scale, 0.14 * scale, 10), new THREE.MeshStandardMaterial({ color: '#2a2628', metalness: 0.85, roughness: 0.45 }));
+                const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * scale, 0.09 * scale, 0.14 * scale, 18), new THREE.MeshStandardMaterial({ color: '#2a2628', metalness: 0.85, roughness: 0.45 }));
                 cup.position.set(x, y - scale * 0.46, z); cup.castShadow = true;
                 this.scene.add(cup);
             }
@@ -412,10 +439,10 @@ export class World {
     }
     addTorchPost(x, z, light, h = 2.2) {
         const y = this.terrainAt(x, z);
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, h, 6), this.matWood);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, h, 12), this.matWood);
         post.position.set(x, y + h / 2, z); post.castShadow = true;
         this.scene.add(post);
-        const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.12, 0.2, 8), new THREE.MeshStandardMaterial({ color: '#2a2a2a', metalness: 0.7, roughness: 0.4 }));
+        const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.12, 0.2, 16), new THREE.MeshStandardMaterial({ color: '#2a2a2a', metalness: 0.7, roughness: 0.4 }));
         bowl.position.set(x, y + h, z);
         this.scene.add(bowl);
         this.addTorch(x, y + h + 0.42, z, light, 1.1);
@@ -460,16 +487,25 @@ export class World {
         g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
         g.setIndex(idx);
         g.computeVertexNormals();
-        const detail = canvasTex(256, 256, (cx, w, h) => {
+        // in qualità alta la grana del suolo è più fitta, si ripete senza cuciture e ha il suo rilievo
+        const fine = this.quality === 'alta' ? tileHeights(512, 5) : null;
+        const detail = canvasTex(fine ? 512 : 256, fine ? 512 : 256, (cx, w, h) => {
             const img = cx.createImageData(w, h);
             for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-                const v = 200 + (fbm(x * 0.06, y * 0.06, 3) * 40 + (hash(x, y) - 0.5) * 36);
+                const v = fine ? 136 + fine[y * w + x] * 128 + (hash(x, y) - 0.5) * 30 : 200 + (fbm(x * 0.06, y * 0.06, 3) * 40 + (hash(x, y) - 0.5) * 36);
                 const k = (y * w + x) * 4; img.data[k] = img.data[k + 1] = img.data[k + 2] = v; img.data[k + 3] = 255;
             }
             cx.putImageData(img, 0, 0);
         });
         detail.wrapS = detail.wrapT = THREE.RepeatWrapping;
         const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97, map: detail }));
+        if (fine) {
+            detail.anisotropy = 8;
+            const relief = new Relief(14, 512);
+            mesh.material.normalMap = relief.like(detail);
+            relief.bake(fine);
+        }
+        this.wetMats.push([mesh.material, 0.97, 0.6]);
         addSnowCover(mesh.material, 0.25);
         mesh.receiveShadow = true;
         this.scene.add(mesh);
@@ -482,6 +518,21 @@ export class World {
         this.heightTex.needsUpdate = true;
     }
 
+    // --- ERBA (vedi grass.js): cresce sul verde, non su sentieri, piazza, botteghe, castello e pendii ripidi ---
+    buildGrass() {
+        const { MIN_X, MIN_Z } = WORLD, n = this.n, P = WORLD.PLAZA, C = WORLD.CASTLE;
+        const mask = (ix, iz) => {
+            const x = MIN_X + ix * this.cw, z = MIN_Z + iz * this.cd, h = this.H[iz * n + ix];
+            const hx = this.H[iz * n + Math.min(n - 1, ix + 1)] - h, hz = this.H[Math.min(n - 1, iz + 1) * n + ix] - h;
+            let m = smooth(0.65, 1.15, h) * smooth(2.4, 4.6, pathDist(x, z)) * smooth(P.r + 0.6, P.r + 3.2, Math.hypot(x - P.x, z - P.z));
+            for (const s of Object.values(WORLD.SHOPS)) m *= smooth(6, 8.5, Math.hypot(x - s.x, z - s.z));
+            m *= smooth(27, 32, Math.pow(Math.pow(Math.abs(x - C.x), 4) + Math.pow(Math.abs(z - C.z), 4), 0.25));
+            m *= 1 - smooth(0.4, 0.75, Math.hypot(hx, hz) / this.cw);
+            return m * (0.55 + 0.45 * smooth(-0.35, 0.3, fbm(x * 0.11 + 3, z * 0.11)));   // a chiazze, non un prato all'inglese
+        };
+        this.grass = new Grass(this.scene, { H: this.H, n, mask, minX: MIN_X, minZ: MIN_Z, cw: this.cw, cd: this.cd });
+    }
+
     buildWater() {
         const { MIN_X, MAX_X, MIN_Z, MAX_Z } = WORLD;
         this.waterMat = makeWaterMaterial(this.heightTex, [MIN_X, MIN_Z, MAX_X, MAX_Z]);
@@ -489,6 +540,7 @@ export class World {
         w.rotation.x = -Math.PI / 2;
         w.position.y = 0;
         w.renderOrder = 1;
+        w.userData.aoKeep = true;   // la laguna conta per l'ombra di contatto: pali e rive vi si appoggiano
         this.scene.add(w);
         // nebbia bassa sulla laguna
         const mistTex = canvasTex(128, 128, (g) => {
@@ -513,8 +565,9 @@ export class World {
     buildPlaza() {
         const P = WORLD.PLAZA;
         const ft = this.texFloor.clone(); ft.needsUpdate = true; ft.repeat.set(6, 6);
-        const plaza = new THREE.Mesh(new THREE.CircleGeometry(P.r, 48), new THREE.MeshStandardMaterial({ map: ft, roughness: 0.9, color: '#a79db0' }));
-        plaza.rotation.x = -Math.PI / 2; plaza.position.set(P.x, P.h + 0.03, P.z);
+        const plaza = new THREE.Mesh(new THREE.CircleGeometry(P.r, 48), this.floorMat(ft, '#a79db0', 0.9));
+        // il terreno della piazza sta un palmo sopra P.h: il lastricato lo segue, altrimenti resta sepolto
+        plaza.rotation.x = -Math.PI / 2; plaza.position.set(P.x, Math.max(P.h, this.terrainAt(P.x, P.z)) + 0.02, P.z);
         plaza.receiveShadow = true;
         this.scene.add(plaza);
         // muretti bassi attorno alla piazza (con varchi)
@@ -569,7 +622,7 @@ export class World {
         // un alone viola sul bordo, perché resti uno specchio incantato
         const halo = new THREE.Mesh(new THREE.RingGeometry(0.66, 0.76, 40).scale(1, 1.45, 1), new THREE.MeshBasicMaterial({ color: '#8a5aff', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
         halo.position.set(0, 1.55, 0.02); mirror.add(halo);
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, 0.5, 6), frame.material); leg.position.y = 0.25; mirror.add(leg);
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, 0.5, 12), frame.material); leg.position.y = 0.25; mirror.add(leg);
         const mirrorAt = new THREE.Vector3(Mi.x, my + 1.55, Mi.z);
         this.animated.push((dt, t) => {
             halo.material.opacity = 0.25 + Math.sin(t * 2) * 0.12;
@@ -620,11 +673,15 @@ export class World {
             return true;
         };
         // alberi morti (3 varianti)
+        const fineTree = this.quality === 'alta', SIDES = fineTree ? 8 : 5;
         const makeTree = (seed) => {
             const rr = rng(seed), geos = [];
             const branch = (pos, dir, len, rad, depth) => {
-                const g = new THREE.CylinderGeometry(rad * 0.62, rad, len, 5);
+                // tronco e rami grossi tondi, con un nodo che chiude la giunzione; i rametti restano leggeri
+                const thick = fineTree && depth >= 2, sides = thick ? SIDES : 5;
+                const g = new THREE.CylinderGeometry(rad * 0.62, rad, len, sides, 1, fineTree);
                 g.translate(0, len / 2, 0);
+                if (thick) geos.push(new THREE.SphereGeometry(rad * 0.62, SIDES, 3).translate(pos.x + dir.x * len, pos.y + dir.y * len, pos.z + dir.z * len));
                 const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
                 g.applyMatrix4(new THREE.Matrix4().compose(pos, q, new THREE.Vector3(1, 1, 1)));
                 geos.push(g);
@@ -639,7 +696,7 @@ export class World {
             branch(new THREE.Vector3(0, -0.3, 0), new THREE.Vector3((rr() - 0.5) * 0.25, 1, (rr() - 0.5) * 0.25).normalize(), 2.6 + rr(), 0.26, 4);
             return mergeGeometries(geos);
         };
-        const treeMat = new THREE.MeshStandardMaterial({ color: '#2b2321', roughness: 1 });
+        const treeMat = new THREE.MeshStandardMaterial(fineTree ? { ...this.photo('bark_willow', 1, 2), color: '#6e5e56' } : { color: '#2b2321', roughness: 1 });
         const variants = [makeTree(11), makeTree(23), makeTree(37)];
         const per = [[], [], []];
         let tries = 0;
@@ -667,7 +724,7 @@ export class World {
             this.scene.add(im);
         });
         // rocce
-        const rockG = new THREE.DodecahedronGeometry(1, 0);
+        const rockG = this.quality === 'alta' ? roughRock(2, 7) : new THREE.DodecahedronGeometry(1, 0);
         const rocks = [];
         tries = 0;
         while (rocks.length < 140 && tries++ < 3000) {
@@ -680,7 +737,15 @@ export class World {
             rocks.push([x, h, z, 0.3 + r() * (h < 0.4 ? 1.3 : 0.8)]);
         }
         this.mapRocks = rocks;
-        const rim = new THREE.InstancedMesh(rockG, new THREE.MeshStandardMaterial({ color: '#4d4757', roughness: 0.95, flatShading: true }), rocks.length);
+        const rockM = new THREE.MeshStandardMaterial({ color: '#4d4757', roughness: 0.93, flatShading: this.quality !== 'alta', vertexColors: this.quality === 'alta' });
+        if (this.quality === 'alta') {   // la grana della pietra: scalfitture e crepe fini sulla forma liscia
+            const grain = new Relief(9, 256);
+            rockM.normalMap = grain.like({ wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, repeat: new THREE.Vector2(1, 1), anisotropy: 4 });
+            rockM.normalScale.set(1.4, 1.4);
+            grain.bake(tileHeights(256, 9));
+            this.wetMats.push([rockM, 0.93, 0.5]);
+        }
+        const rim = new THREE.InstancedMesh(rockG, rockM, rocks.length);
         rocks.forEach(([x, y, z, s], i) => {
             rim.setMatrixAt(i, m4.compose(new THREE.Vector3(x, y + s * 0.2, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(r() * 3, r() * 3, r() * 3)), new THREE.Vector3(s * (1 + r() * 0.5), s * 0.65, s)));
             if (s > 0.75) this.addCirc(x, z, s * 0.9, y - 1, y + s * 0.75);
@@ -720,7 +785,7 @@ export class World {
         for (const p of pieces) wall(...p);
         for (const [dx, dz] of [[-2.5, -2], [2.5, -2], [-2.5, 2], [2.5, 2]]) {
             const x = cx + dx, z = cz + dz, y = this.terrainAt(x, z), h = 1.2 + r() * 2.2;
-            geos.push(place(new THREE.CylinderGeometry(0.35, 0.42, h, 8), x, y + h / 2, z));
+            geos.push(place(new THREE.CylinderGeometry(0.35, 0.42, h, 16), x, y + h / 2, z));
             this.addCirc(x, z, 0.42, y, y + h);
         }
         const altarY = this.terrainAt(cx, cz + 4.5);
@@ -759,7 +824,7 @@ export class World {
     // --- CIMITERO ---
     buildCemetery() {
         const C = WORLD.CEMETERY, r = rng(5);
-        const stoneG = mergeGeometries([new THREE.BoxGeometry(0.7, 0.9, 0.18).translate(0, 0.45, 0), new THREE.CylinderGeometry(0.35, 0.35, 0.18, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 0.9, 0)]);
+        const stoneG = mergeGeometries([new THREE.BoxGeometry(0.7, 0.9, 0.18).translate(0, 0.45, 0), new THREE.CylinderGeometry(0.35, 0.35, 0.18, 20, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 0.9, 0)]);
         const crossG = mergeGeometries([new THREE.BoxGeometry(0.12, 1.2, 0.12).translate(0, 0.6, 0), new THREE.BoxGeometry(0.6, 0.12, 0.12).translate(0, 0.88, 0)]);
         const graves = GRAVES.map(g => [g.x, g.z, g.cross]);
         const m4 = new THREE.Matrix4();
@@ -829,6 +894,7 @@ export class World {
             wall(SW / 2 - side / 2, SD / 2 - ST / 2, side, ST);
             wall(0, SD / 2 - ST / 2, DOOR, ST, SH - DOORH, DOORH);       // architrave: sotto si passa
             const floor = new THREE.Mesh(new THREE.PlaneGeometry(SW - ST * 2, SD - ST * 2), floorMat);
+            Object.assign(floorMat, OVER);
             floor.rotation.x = -Math.PI / 2; floor.position.y = 0.04; floor.receiveShadow = true; grp.add(floor);
             const ceil = new THREE.Mesh(new THREE.PlaneGeometry(SW, SD), this.matWood);
             ceil.rotation.x = Math.PI / 2; ceil.position.y = SH; grp.add(ceil); this.cameraBlockers.push(ceil);
@@ -894,7 +960,7 @@ export class World {
         anvil.position.set(0.8, 0, -0.35); anvil.rotation.y = Math.PI / 2; fg.add(anvil);
         F.solid(0.8, -0.35, 0.5, 0.9, 0.75);
         // la tinozza per temprare
-        const tub = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.36, 0.6, 14), this.matWood); tub.position.set(2.6, 0.3, -2.5); fg.add(tub);
+        const tub = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.36, 0.6, 24), this.matWood); tub.position.set(2.6, 0.3, -2.5); fg.add(tub);
         const water = new THREE.Mesh(new THREE.CircleGeometry(0.38, 14), new THREE.MeshStandardMaterial({ color: '#1a2a38', metalness: 0.6, roughness: 0.15 }));
         water.rotation.x = -Math.PI / 2; water.position.set(2.6, 0.56, -2.5); fg.add(water);
         F.solid(2.6, -2.5, 0.9, 0.9, 0.6);
@@ -927,7 +993,7 @@ export class World {
         for (const y of [0.6, 1.3, 2.0]) {
             const sh = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.06, 0.5), this.matWood); sh.position.set(0, y, -SD / 2 + ST + 0.28); sg.add(sh);
             for (let i = 0; i < 6; i++) {
-                const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.46, 12), new THREE.MeshStandardMaterial({ color: ['#3d1466', '#7a1018', '#1d2a6b', '#2f4a24', '#c99a2e', '#e8d6a8'][(i + Math.round(y * 10)) % 6], roughness: 0.9 }));
+                const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.46, 20), new THREE.MeshStandardMaterial({ color: ['#3d1466', '#7a1018', '#1d2a6b', '#2f4a24', '#c99a2e', '#e8d6a8'][(i + Math.round(y * 10)) % 6], roughness: 0.9 }));
                 roll.rotation.x = Math.PI / 2; roll.position.set(-1.45 + i * 0.58, y + 0.16, -SD / 2 + ST + 0.28); sg.add(roll);
             }
         }
@@ -935,8 +1001,8 @@ export class World {
         // due manichini vestiti, vicino alla porta
         const mannequin = (x, z, col, cape) => {
             const man = new THREE.Group();
-            man.add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 0.06, 12), this.matWood).translateY(0.03));
-            man.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 6), this.matWood).translateY(0.55));
+            man.add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 0.06, 20), this.matWood).translateY(0.03));
+            man.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 12), this.matWood).translateY(0.55));
             const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.4, 4, 10), new THREE.MeshStandardMaterial({ color: col, roughness: 0.8 }));
             torso.position.y = 1.35; torso.scale.z = 0.6; man.add(torso);
             if (cape) { const c = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.1), new THREE.MeshStandardMaterial({ color: cape, side: THREE.DoubleSide })); c.position.set(0, 1.15, -0.16); man.add(c); }
@@ -946,7 +1012,7 @@ export class World {
         mannequin(-2.7, 1.7, '#5a1a6e', '#7a1018');
         mannequin(2.7, 1.7, '#1d2a6b', '#c99a2e');
         // l'appendiabiti con i capi appesi, sul muro di sinistra
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.2, 6), iron); pole.rotation.x = Math.PI / 2; pole.position.set(-SW / 2 + 0.6, 1.85, -0.6); sg.add(pole);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.2, 12), iron); pole.rotation.x = Math.PI / 2; pole.position.set(-SW / 2 + 0.6, 1.85, -0.6); sg.add(pole);
         for (let i = 0; i < 5; i++) {
             const g = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.9), new THREE.MeshStandardMaterial({ color: ['#3d1466', '#1a1a1f', '#7a1018', '#2f4a24', '#e8e2d6'][i], side: THREE.DoubleSide, roughness: 0.9 }));
             g.rotation.y = Math.PI / 2; g.position.set(-SW / 2 + 0.6, 1.35, -1.5 + i * 0.45); sg.add(g);
@@ -963,7 +1029,7 @@ export class World {
         const B = S.bazar;
         const bz = new THREE.Group(); bz.position.set(B.x, B.h, B.z); bz.rotation.y = B.ry;
         for (const [px, pz] of [[-2.6, -1.6], [2.6, -1.6], [-2.6, 1.6], [2.6, 1.6]]) {
-            const p = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.8, 6), this.matWood);
+            const p = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.8, 12), this.matWood);
             p.position.set(px, 1.4, pz); p.castShadow = true; bz.add(p);
         }
         const awn = canvasTex(256, 128, (g) => { for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#e8d6a8' : '#6b1a3a'; g.fillRect(i * 32, 0, 32, 128); } });
@@ -975,7 +1041,7 @@ export class World {
             crate.position.set(-1.8 + i * 0.9, 1.21, 1.1); bz.add(crate);
         }
         for (let i = 0; i < 3; i++) {
-            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.9, 12), this.matWood);
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.9, 20), this.matWood);
             barrel.position.set(-2 + i * 0.8, 0.45, -1.1); bz.add(barrel);
         }
         this.scene.add(bz);
@@ -996,7 +1062,7 @@ export class World {
     }
     addLantern(x, z) {
         const y = this.terrainAt(x, z);
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 2.2, 6), this.matWood);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 2.2, 12), this.matWood);
         post.position.set(x, y + 1.1, z); post.castShadow = true; this.scene.add(post);
         const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.22), new THREE.MeshStandardMaterial({ color: '#ffcf7a', emissive: '#ffa53a', emissiveIntensity: 2.5 }));
         lamp.position.set(x, y + 2.3, z); this.scene.add(lamp);
@@ -1021,8 +1087,8 @@ export class World {
         planks.castShadow = planks.receiveShadow = true;
         this.scene.add(planks);
         // pali, corrimano e pilastri
-        const postG = new THREE.CylinderGeometry(0.08, 0.1, 1.1, 6);
-        const pillarG = new THREE.CylinderGeometry(0.22, 0.28, 1, 8);
+        const postG = new THREE.CylinderGeometry(0.08, 0.1, 1.1, 12);
+        const pillarG = new THREE.CylinderGeometry(0.22, 0.28, 1, 16);
         const nPost = Math.ceil(len / 3) + 1;
         const posts = new THREE.InstancedMesh(postG, this.matWood, nPost * 2);
         const pillars = new THREE.InstancedMesh(pillarG, this.matWood, nPost * 2);
@@ -1084,11 +1150,11 @@ export class World {
         wall(C.x + gate + sw / 2, C.z + hs, sw, T);
         geos.push(place(wallBox(gate * 2, 1.8, T), C.x, y0 + H - 0.9, C.z + hs));
         // torri angolari
-        const towerG = (r, h) => { const g = new THREE.CylinderGeometry(r, r * 1.08, h, 16); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * r * 6.28 / 2.6, uv.getY(i) * h / 2.6); return g; };
+        const towerG = (r, h) => { const g = new THREE.CylinderGeometry(r, r * 1.08, h, 40); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * r * 6.28 / 2.6, uv.getY(i) * h / 2.6); return g; };
         const roofs = [];
         const tower = (x, z, r, h) => {
             geos.push(place(towerG(r, h), x, y0 + h / 2, z));
-            roofs.push(place(new THREE.ConeGeometry(r * 1.25, r * 1.5, 16), x, y0 + h + r * 0.75, z));
+            roofs.push(place(new THREE.ConeGeometry(r * 1.25, r * 1.5, 40), x, y0 + h + r * 0.75, z));
             this.addCirc(x, z, r, y0 - 2, y0 + h);
             this.addTorch(x, y0 + h + r * 1.5 + 0.55, z, false, 1.6, { cup: true });
         };
@@ -1113,13 +1179,13 @@ export class World {
         }
         // cortile
         const ft = this.texFloor.clone(); ft.needsUpdate = true; ft.repeat.set(10, 10);
-        const yard = new THREE.Mesh(new THREE.PlaneGeometry(hs * 2, hs * 2), new THREE.MeshStandardMaterial({ map: ft, color: '#9a90a8', roughness: 0.92 }));
+        const yard = new THREE.Mesh(new THREE.PlaneGeometry(hs * 2, hs * 2), this.floorMat(ft, '#9a90a8', 0.92));
         yard.rotation.x = -Math.PI / 2; yard.position.set(C.x, y0 + 0.02, C.z); yard.receiveShadow = true;
         this.scene.add(yard);
         // arena
         const at = this.texFloor.clone(); at.needsUpdate = true; at.repeat.set(4, 4);
         const arena = new THREE.Mesh(new THREE.CylinderGeometry(A.r, A.r + 0.2, A.top - y0, 48), [
-            this.matWall, new THREE.MeshStandardMaterial({ map: at, color: '#b8aec8', roughness: 0.85 }), this.matWall]);
+            this.matWall, this.floorMat(at, '#b8aec8', 0.85), this.matWall]);
         arena.position.set(A.x, (A.top + y0) / 2, A.z); arena.receiveShadow = true;
         this.scene.add(arena);
         this.addCirc(A.x, A.z, A.r, y0 - 1, A.top);
@@ -1220,26 +1286,26 @@ export class World {
         const y = 0.65;
         const g = [];
         for (let z = z0; z < z1; z += 0.55) g.push(new THREE.BoxGeometry(w, 0.1, 0.48).translate(x, y, z));
-        for (const s of [-1, 1]) for (let z = z0; z <= z1; z += 3.5) g.push(new THREE.CylinderGeometry(0.12, 0.14, 3, 6).translate(x + s * (w / 2), y - 1.2, z));
+        for (const s of [-1, 1]) for (let z = z0; z <= z1; z += 3.5) g.push(new THREE.CylinderGeometry(0.12, 0.14, 3, 12).translate(x + s * (w / 2), y - 1.2, z));
         const dock = new THREE.Mesh(mergeGeometries(g), this.matWood);
         dock.castShadow = dock.receiveShadow = true;
         this.scene.add(dock);
         this.addBox(x, (z0 + z1) / 2, w, z1 - z0 + 0.5, -3, y + 0.05);
         // barchetta
         const boat = new THREE.Group();
-        const hull = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.6, 3.6, 10, 1, true, 0, Math.PI), new THREE.MeshStandardMaterial({ color: '#3a2618', side: THREE.DoubleSide, roughness: 0.9 }));
+        const hull = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.6, 3.6, 18, 1, true, 0, Math.PI), new THREE.MeshStandardMaterial({ color: '#3a2618', side: THREE.DoubleSide, roughness: 0.9 }));
         hull.rotation.set(Math.PI / 2, 0, Math.PI); hull.scale.set(1, 1, 0.5);
         boat.add(hull);
         boat.position.set(x + 2.6, 0.15, z1 - 3); boat.rotation.y = 0.1;
         this.scene.add(boat);
         this.animated.push((dt, t) => { boat.position.y = 0.15 + Math.sin(t * 1.2) * 0.06; boat.rotation.z = Math.sin(t * 0.9) * 0.05; });
         this.addTorch(x - w / 2 - 0.1, y + 1.95, z1, true, 0.9, { cup: true });
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 6), this.matWood); pole.position.set(x - w / 2 - 0.1, y + 0.8, z1); this.scene.add(pole);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 12), this.matWood); pole.position.set(x - w / 2 - 0.1, y + 0.8, z1); this.scene.add(pole);
         // il posto del pescatore: un secchio, una cassa e due canne appoggiate
         const fg = [];
-        fg.push(new THREE.CylinderGeometry(0.2, 0.16, 0.34, 10).translate(x + 0.85, y + 0.22, z1 - 1.1));
+        fg.push(new THREE.CylinderGeometry(0.2, 0.16, 0.34, 18).translate(x + 0.85, y + 0.22, z1 - 1.1));
         fg.push(new THREE.BoxGeometry(0.6, 0.45, 0.5).translate(x + 0.8, y + 0.28, z1 - 2.1));
-        for (const dx of [0.62, 0.78]) fg.push(new THREE.CylinderGeometry(0.015, 0.025, 2.3, 5).rotateX(-0.28).translate(x + dx, y + 1.1, z1 - 2.55));
+        for (const dx of [0.62, 0.78]) fg.push(new THREE.CylinderGeometry(0.015, 0.025, 2.3, 10).rotateX(-0.28).translate(x + dx, y + 1.1, z1 - 2.55));
         const fm = new THREE.Mesh(mergeGeometries(fg), this.matWood);
         fm.castShadow = true; this.scene.add(fm);
         this.addBox(x + 0.8, z1 - 2.1, 0.6, 0.5, y, y + 0.5);
@@ -1253,7 +1319,7 @@ export class World {
         const B = BOUNTY_BOARD, by = this.groundAt(B.x, B.z);
         const board = new THREE.Group();
         board.position.set(B.x, by, B.z); board.rotation.y = B.ry;
-        for (const sx of [-0.95, 0.95]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 2.4, 6), this.matWood); post.position.set(sx, 1.2, 0); board.add(post); }
+        for (const sx of [-0.95, 0.95]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 2.4, 12), this.matWood); post.position.set(sx, 1.2, 0); board.add(post); }
         const notes = canvasTex(512, 320, (g, w, h) => {
             g.fillStyle = '#3d2a1c'; g.fillRect(0, 0, w, h);
             g.strokeStyle = '#c99a2e'; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
@@ -1279,7 +1345,7 @@ export class World {
 
         // Tavolette della Cronaca: una stele per seme, con la runa che brilla
         this.tablets = {};
-        const steleG = mergeGeometries([new THREE.BoxGeometry(0.72, 1.05, 0.2).translate(0, 0.52, 0), new THREE.CylinderGeometry(0.36, 0.36, 0.2, 14, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 1.05, 0)]);
+        const steleG = mergeGeometries([new THREE.BoxGeometry(0.72, 1.05, 0.2).translate(0, 0.52, 0), new THREE.CylinderGeometry(0.36, 0.36, 0.2, 24, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 1.05, 0)]);
         for (const [el, T] of Object.entries(TABLETS)) {
             const y = this.terrainAt(T.x, T.z) - 0.05, E = ELEMENTS[el];
             const g = new THREE.Group(); g.position.set(T.x, y, T.z); g.rotation.y = Math.atan2(WORLD.MAIN.x - T.x, WORLD.MAIN.z - T.z);
@@ -1542,16 +1608,23 @@ export class World {
     applyEnv(S, boost = 0) {
         const ind = this.indoor;
         this.hemiLight.color.copy(S.hemiS); this.hemiLight.groundColor.copy(S.hemiG);
-        this.hemiLight.intensity = S.hemiI * (ind ? 0.35 : 1);
+        // con il cielo riflesso (envOn) una parte della luce diffusa arriva da lì: la luce d'ambiente cala di pari passo
+        this.hemiLight.intensity = S.hemiI * (ind ? 0.35 : 1) * (this.envOn ? 0.84 : 1);
         this.ambLight.color.copy(S.amb); this.ambLight.intensity = (S.ambI + boost) * (ind ? 0.6 : 1);
         this.moonLight.color.copy(S.dir); this.moonLight.intensity = S.dirI * (ind ? 0.22 : 1);
         this.lightDir.copy(S.dirVec);
         if (this.scene.fog) { this.scene.fog.color.copy(S.fog); this.scene.fog.density = S.fogD; }
         const u = this.waterMat.uniforms;
         u.uDeep.value.copy(S.water[0]); u.uShallow.value.copy(S.water[1]); u.uSky.value.copy(S.water[2]); u.uHor.value.copy(S.water[3]); u.uMoon.value.copy(S.dirVec);
+        u.uGlint.value.set(1, 0.92, 0.85).lerp(S.dir, 0.6).multiplyScalar(Math.min(1.8, 0.55 + S.dirI * 0.4));
+        // la pioggia lucida pietra e terra (si bagnano in fretta, asciugano piano); sotto la neve no
+        const rain = S.rain * (1 - S.cover);
+        this.wet += (rain - this.wet) * (rain > this.wet ? 0.012 : 0.0015);
+        for (const [m, dry, wet] of this.wetMats) m.roughness = dry + (wet - dry) * this.wet;
         for (const m of this.mist) { m.s.material.color.copy(S.mist); m.s.material.opacity = m.op * S.mistI; }
         this.wispDim = 0.3 + 0.7 * (1 - S.day);
         SNOW_COVER.value = S.cover;
+        this.grass?.applyEnv(S, ind);
         // i colori del terreno sono nati per la notte: di giorno si schiariscono un poco
         this.terrain.material.color.setScalar(1 + 0.35 * S.day);
     }
@@ -1605,6 +1678,7 @@ export class World {
         this.t += dt;
         const t = this.t;
         this.waterMat.uniforms.uTime.value = t;
+        this.grass?.update(t, focus);
         for (const L of this.lights) L.l.intensity = L.base * (0.85 + Math.sin(t * L.sp) * 0.08 + Math.random() * 0.07);
         for (const f of this.flames) f.glow.material.opacity = 0.38 + Math.sin(t * f.sp) * 0.06 + Math.random() * 0.04;
         for (const w of this.wisps) {

@@ -7,8 +7,9 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { World, WORLD, makeSky } from './world.js';
-import { Character } from './character.js';
+import { Character, setCharacterQuality } from './character.js';
 import { Studio } from './studio.js';
 import { Creator, randomAppearance } from './creator.js';
 import { Panels } from './panels.js';
@@ -28,6 +29,7 @@ import { VEGLIA, PHONE_SPOT, FOUNTAIN } from './shared/catalog.js';
 import { Environment, Precipitation, applySky, clockText } from './sky.js';
 import { Atlas } from './atlas.js';
 import { Prologue } from './prologue.js';
+import { SkyProbe, ContactShade } from './realism.js';
 import { buildStorySpots, storyBeat, storyInteract, storyVoice, updateThread } from './story-ui.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
@@ -100,6 +102,7 @@ class Game {
         this.local.settings ||= {};
         this.defaultQuality = IS_MOBILE ? 'bassa' : 'alta';
         this.quality = this.local.settings.quality || this.defaultQuality;
+        setCharacterQuality(this.quality);
         this.audio = new GameAudio();
         this.env = new Environment();
         this.env.onThunder = (delay) => this.audio.thunder?.(delay);
@@ -400,12 +403,19 @@ class Game {
         this.scene.fog = new THREE.FogExp2('#2d0a45', 0.0085);
         this.sky = makeSky();
         this.scene.add(this.sky);
-        this.camera = new THREE.PerspectiveCamera(innerWidth < innerHeight ? 78 : 62, innerWidth / innerHeight, 0.1, 2000);
+        this.camera = new THREE.PerspectiveCamera(innerWidth < innerHeight ? 78 : 62, innerWidth / innerHeight, 0.15, 1500);
         if (alta) {
             this.composer = new EffectComposer(r);
             this.composer.addPass(new RenderPass(this.scene, this.camera));
+            // un po' più vero (vedi realism.js): ombra di contatto e cielo riflesso sui materiali
+            this.composer.addPass(this.contact = new ContactShade(this.scene, this.camera, innerWidth, innerHeight));
+            this.skyProbe = new SkyProbe(r);
             this.composer.addPass(this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.55, 0.86));
             this.composer.addPass(new OutputPass());
+            // gli effetti lavorano su un'immagine a parte e lì l'antialias della scheda video non arriva:
+            // un ultimo passaggio leggero ammorbidisce i bordi seghettati
+            const pr = r.getPixelRatio();
+            this.composer.addPass(new SMAAPass(innerWidth * pr, innerHeight * pr));
         }
         this.raycaster = new THREE.Raycaster();
         addEventListener('resize', () => {
@@ -1353,6 +1363,11 @@ class Game {
     loop() {
         requestAnimationFrame(() => this.loop());
         const dt = Math.min(0.05, this.clock.getDelta());
+        // se per cinque secondi di fila si scende sotto i 40 fotogrammi, l'ombra di contatto si spegne da sola
+        if (this.contact?.enabled && this.world && !document.hidden) {
+            this.slowT = dt > 1 / 40 ? (this.slowT || 0) + dt : Math.max(0, (this.slowT || 0) - dt * 2);
+            if (this.slowT > 5) this.contact.enabled = false;
+        }
         this.updateEnv(dt);
         if (this.mode === 'duel' && this.duel) { this.duel.update(dt); return; }
         if (!this.world) return;
@@ -1399,8 +1414,12 @@ class Game {
         const b = this.local.settings.bright ?? 1, boost = Math.max(0, b - 1) * 0.35;
         this.renderer.toneMappingExposure = 1.05 * b;
         if (this.bloom) this.bloom.strength = 0.5 - 0.2 * S.day;
-        if (this.mode === 'duel' && this.duel) this.duel.applyEnv?.(S, boost);
+        // il cielo riflesso: al chiuso ne entra poco
+        const duel = this.mode === 'duel' && this.duel;
+        const envTex = this.skyProbe ? this.skyProbe.update(dt, S, !duel && this.world?.indoor ? 0.18 : 0.55) : null;
+        if (duel) { this.duel.scene.environment = envTex; this.duel.envOn = !!envTex; this.duel.applyEnv?.(S, boost); }
         else if (this.world) {
+            this.scene.environment = envTex; this.world.envOn = !!envTex;
             this.world.applyEnv(S, boost);
             if (this.cutFog != null && this.scene.fog) this.scene.fog.density = this.cutFog;
             applySky(this.sky, S, this.world.t);

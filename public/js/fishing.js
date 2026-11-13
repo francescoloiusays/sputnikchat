@@ -57,9 +57,9 @@ export class Fishing {
         const app = this.app, ch = app.myChar;
         const rod = new THREE.Group();
         const woodM = new THREE.MeshStandardMaterial({ color: '#5a3a1e', roughness: 0.8 });
-        const g = new THREE.CylinderGeometry(0.012, 0.028, 2.1, 6); g.translate(0, 1.05, 0);
+        const g = new THREE.CylinderGeometry(0.012, 0.028, 2.1, 12); g.translate(0, 1.05, 0);
         rod.add(new THREE.Mesh(g, woodM));
-        const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 10), new THREE.MeshStandardMaterial({ color: '#9ea4ab', metalness: 0.8, roughness: 0.3 }));
+        const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 18), new THREE.MeshStandardMaterial({ color: '#9ea4ab', metalness: 0.8, roughness: 0.3 }));
         reel.rotation.z = Math.PI / 2; reel.position.set(0.04, 0.25, 0); rod.add(reel);
         rod.rotation.x = Math.PI / 2 - 0.5;
         this.rodTip = new THREE.Object3D(); this.rodTip.position.y = 2.1; rod.add(this.rodTip);

@@ -92,9 +92,9 @@ export function makeSconce(fires) {
     const plate = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.42, 0.05), im); plate.position.z = 0.025; g.add(plate);
     const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.34), im); arm.position.set(0, -0.08, 0.2); g.add(arm);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.018, 6, 14), im); ring.rotation.x = Math.PI / 2; ring.position.set(0, -0.06, 0.36); g.add(ring);
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.03, 0.62, 8), wm);
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.03, 0.62, 16), wm);
     handle.position.set(0, 0.12, 0.4); handle.rotation.x = 0.28; g.add(handle);
-    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.055, 0.14, 8), new THREE.MeshStandardMaterial({ color: '#1a120c', roughness: 1, emissive: '#5a1800', emissiveIntensity: 0.8 }));
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.055, 0.14, 16), new THREE.MeshStandardMaterial({ color: '#1a120c', roughness: 1, emissive: '#5a1800', emissiveIntensity: 0.8 }));
     head.position.set(0, 0.43, 0.49); head.rotation.x = 0.28; g.add(head);
     const fire = fires.make(0.75);
     fire.position.set(0, 0.48, 0.51); g.add(fire);
@@ -112,12 +112,12 @@ export function makeBrazier(fires, h = 1.9) {
     const im = iron();
     for (let i = 0; i < 3; i++) {
         const a = i / 3 * Math.PI * 2;
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, h, 6), im);
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, h, 12), im);
         leg.position.set(Math.cos(a) * 0.18, h / 2, Math.sin(a) * 0.18);
         leg.rotation.set(Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12);
         g.add(leg);
     }
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.22, 0.32, 14, 1, true), new THREE.MeshStandardMaterial({ color: '#2a2628', metalness: 0.85, roughness: 0.45, side: THREE.DoubleSide }));
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.22, 0.32, 24, 1, true), new THREE.MeshStandardMaterial({ color: '#2a2628', metalness: 0.85, roughness: 0.45, side: THREE.DoubleSide }));
     bowl.position.y = h; g.add(bowl);
     const coals = new THREE.Mesh(new THREE.CircleGeometry(0.38, 16), new THREE.MeshStandardMaterial({ color: '#2a0a02', emissive: '#ff4a10', emissiveIntensity: 1.6, roughness: 1 }));
     coals.rotation.x = -Math.PI / 2; coals.position.y = h + 0.1; g.add(coals);

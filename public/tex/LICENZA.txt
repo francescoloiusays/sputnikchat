@@ -1,0 +1,4 @@
+Texture di Poly Haven (https://polyhaven.com), licenza CC0: uso libero, senza obbligo di attribuzione.
+castle_wall_slates, monastery_stone_floor, weathered_brown_planks, roof_slates_02, bark_willow
+Versione 1k JPG: colore (_diff), rilievo OpenGL (_nor), ruvidità (_rough).
+Stoffe dei personaggi: rough_linen, denim_fabric, cotton_jersey, brown_leather (512 px; _det è il colore convertito in grigio).
