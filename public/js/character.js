@@ -19,7 +19,7 @@ function fxGlow() {
     glowTex = new THREE.CanvasTexture(c); glowTex.colorSpace = THREE.SRGBColorSpace;
     return glowTex;
 }
-const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _ax = new THREE.Vector3(), _q1 = new THREE.Quaternion(), _m4 = new THREE.Matrix4();
 
 // --- CACHE (geometrie e materiali condivisi tra personaggi) ---
 const geoCache = new Map();
@@ -1113,6 +1113,10 @@ export class Character {
         this.pose = Object.fromEntries(POSE_KEYS.map(k => [k, 0]));
         this.blinkT = 2 + Math.random() * 3;
         this.tint = null;
+        this.react = null;      // reazione al colpo in corso
+        this.spin = 0;          // capriola quando si viene sbalzati
+        this.koT = -1;          // tempo dal K.O.
+        this.loose = null;      // arma caduta a terra
         this.build(appearance, look);
         if (opts.name) this.setNameTag(opts.name, opts.sub, opts.color);
     }
@@ -1834,6 +1838,54 @@ export class Character {
         pos.needsUpdate = true; col.needsUpdate = true;
     }
 
+    // Colpo subito: dir = 1 se arriva davanti, -1 se da dietro; power 0..1 (pesante = 1)
+    hurt(dir = 1, power = 0.5) {
+        this.react = { t: 0, dir, p: Math.min(1.2, power), tw: Math.random() < 0.5 ? -1 : 1 };
+        if (this.faceMat && this.faceTex) { this.faceMat.map = this.faceTex.closed; this.blinkT = 0.18 + power * 0.2; }   // strizza gli occhi
+    }
+    // al K.O. l'arma scivola di mano, vola girando e rimbalza a terra
+    dropWeapon() {
+        const w = this.weaponMesh, world = this.root.parent;
+        if (!w || !world || this.loose || !w.children.length) return;
+        world.attach(w);
+        this.loose = { w, vx: (Math.random() - 0.5) * 3.5, vy: 4.5 + Math.random() * 2, wz: (Math.random() < 0.5 ? -1 : 1) * (9 + Math.random() * 6), floor: this.root.position.y, rest: 0, bounces: 0 };
+    }
+    restoreWeapon() {
+        const L = this.loose;
+        if (!L) return;
+        this.loose = null;
+        L.w.visible = true;
+        this.arms.R.hand.add(L.w);
+        L.w.position.set(0, 0, 0); L.w.rotation.set(Math.PI / 2, 0, 0); L.w.scale.set(1, 1, 1);
+    }
+    updateLoose(dt) {
+        const L = this.loose;
+        if (!L) return;
+        const w = L.w;
+        if (L.rest > 0) {
+            // si adagia piatta sul pavimento
+            L.rest = Math.min(1, L.rest + dt * 6);
+            w.quaternion.slerp(L.q, L.rest);
+            w.position.y += (L.floor + 0.03 - w.position.y) * L.rest;
+            return;
+        }
+        L.vy -= 26 * dt;
+        w.position.x += L.vx * dt; w.position.y += L.vy * dt;
+        w.rotateOnWorldAxis(_ax.set(0, 0, 1), L.wz * dt);
+        const onStage = Math.abs(w.position.x) < 9.3;
+        if (onStage && w.position.y < L.floor + 0.05 && L.vy < 0) {
+            w.position.y = L.floor + 0.05;
+            L.vy = -L.vy * 0.35; L.vx *= 0.55; L.wz *= 0.45; L.bounces++;
+            if (L.vy < 1.4 || L.bounces > 2) {
+                // stesa: lunga lungo la x, il piatto verso l'alto
+                const sx = Math.sign(_ax.set(0, 1, 0).applyQuaternion(w.quaternion).x) || 1;
+                _m4.makeBasis(_v1.set(0, 0, sx), _v2.set(sx, 0, 0), _ax.set(0, 1, 0));
+                L.q = new THREE.Quaternion().setFromRotationMatrix(_m4); L.rest = 0.01;
+            }
+        }
+        if (w.position.y < -14) w.visible = false;
+    }
+
     // Azioni one-shot (world) o con progresso esterno (duello)
     play(name, dur, loop = false) { this.action = { name, t: 0, dur, loop }; }
     stop() { this.action = null; }
@@ -1846,6 +1898,12 @@ export class Character {
         P.shLz = 0.1; P.shRz = -0.1; P.elR = -0.35; P.elL = -0.15;
         const st = ext?.st ?? this.state;
         const v = ext?.speed ?? this.speed;
+        // K.O.: il tempo parte quando si va a terra; al round dopo l'arma torna in mano
+        if (st === 'ko' && this.prevSt !== 'ko') { this.koT = 0; this.koLand = -1; }
+        if (st !== 'ko' && this.koT >= 0) { this.koT = -1; this.restoreWeapon(); }
+        this.prevSt = st;
+        const air = ext ? ext.grounded === false : false;
+        const fling = ext ? Math.hypot(ext.vx || 0, ext.vy || 0) : 0;
 
         // --- LOCOMOZIONE ---
         if (st === 'walk' || st === 'run') {
@@ -1865,9 +1923,37 @@ export class Character {
             P.shLx = -1.35; P.shLz = -0.5; P.elL = -1.3; P.shRx = -1.35; P.shRz = 0.5; P.elR = -1.3;
             P.knL = P.knR = 0.35; P.hipLx = P.hipRx = -0.18; P.bodyY = -0.05; P.spineRx = 0.12;
         } else if (st === 'stun') {
-            P.spineRx = -0.35; P.headRx = -0.3; P.shLz = 0.8; P.shRz = -0.8; P.shLx = P.shRx = 0.35; P.knL = 0.3; P.cape = 0.4;
+            if (air) {
+                // sbalzato: braccia e gambe aperte, testa all'indietro
+                P.spineRx = -0.25; P.headRx = -0.35; P.shLz = 1.2; P.shRz = -1.2; P.shLx = -0.4; P.shRx = -0.2; P.elL = P.elR = -0.3;
+                P.hipLx = -0.6; P.knL = 1.0; P.hipRx = 0.35; P.knR = 0.4; P.cape = 0.9;
+            } else {
+                // barcolla: piegato in avanti, passi incerti
+                const w = Math.sin(t * 13);
+                P.spineRx = 0.28; P.headRx = 0.18; P.spineRz = w * 0.08; P.shLz = 0.45; P.shRz = -0.45; P.shLx = P.shRx = 0.25; P.elL = P.elR = -0.5;
+                P.hipLx = w * 0.3; P.hipRx = -w * 0.3; P.knL = 0.45 + Math.max(0, w) * 0.3; P.knR = 0.45 + Math.max(0, -w) * 0.3; P.bodyY = -0.06; P.cape = 0.4;
+            }
         } else if (st === 'ko') {
-            P.bodyRx = -1.5; P.bodyY = 0.18; P.shLz = 1.3; P.shRz = -1.3; P.headRy = 0.4; P.knL = 0.3;
+            this.koT += dt;
+            if (this.koLand < 0 && (!air || this.koT > 2.5)) { this.koLand = this.koT; this.koFrom = Math.min(1, this.koT * 3) * 0.45; this.dropWeapon(); }
+            if (this.koLand < 0) {
+                // in volo: si inarca all'indietro, le braccia si aprono
+                const f = Math.min(1, this.koT * 3);
+                P.bodyRx = -0.45 * f; P.spineRx = -0.4 * f; P.headRx = -0.5 * f;
+                P.shLx = -2.0 * f; P.shRx = -2.2 * f; P.shLz = 0.9 * f; P.shRz = -0.9 * f; P.elL = P.elR = -0.2;
+                P.hipLx = -0.5 * f; P.knL = 0.9 * f; P.hipRx = 0.2; P.knR = 0.3; P.cape = 1;
+            } else {
+                // cade all'indietro sempre più in fretta, sbatte, rimbalza e si affloscia
+                const u = this.koT - this.koLand, T = 0.42;
+                const fall = Math.min(1, (u / T) ** 2);
+                const b = u > T ? Math.exp(-(u - T) * 8) * Math.abs(Math.sin((u - T) * 18)) : 0;
+                const settle = ease(seg(u, T, T + 0.6));
+                P.bodyRx = -(this.koFrom + (1.52 - this.koFrom) * fall) + 0.16 * b; P.bodyY = 0.18 * fall;
+                P.spineRx = -0.25 * (1 - settle) + 0.05; P.headRx = -0.4 * fall * (1 - settle) - 0.05 * settle; P.headRy = 0.55 * settle;
+                P.shLx = -2.3 * fall * (1 - settle) - 0.3 * settle; P.shRx = -2.1 * fall * (1 - settle) + 0.2 * settle;
+                P.shLz = 0.6 + 0.7 * settle + 0.25 * b; P.shRz = -0.6 - 0.8 * settle - 0.25 * b; P.elL = -0.3 * settle; P.elR = -0.6 * settle;
+                P.hipLx = -0.4 * (1 - settle); P.knL = 0.3 + 0.4 * (1 - settle); P.hipRx = 0.1; P.knR = 0.15 + 0.3 * b; P.cape = 0.2;
+            }
         } else if (st === 'win') {
             P.shRx = -2.9 + Math.sin(t * 8) * 0.15; P.shRz = -0.15; P.elR = -0.2; P.shLz = 0.35;
             P.bodyY = Math.abs(Math.sin(t * 4)) * 0.08; P.headRx = -0.2;
@@ -1889,27 +1975,46 @@ export class Character {
 
         // --- AZIONI ---
         const a = ext?.action ?? (this.action ? { name: this.action.name, p: this.action.t / this.action.dur } : null);
-        if (a) applyAction(P, a.name, Math.min(1, Math.max(0, a.p)), t);
+        if (a) applyAction(P, a.name, Math.min(1, Math.max(0, a.p)), t, a.v | 0);
+
+        // capriola quando un colpo forte lo sbalza in aria; atterrato, si raddrizza dal verso più corto
+        const tumbling = (st === 'stun' || (st === 'ko' && this.koLand < 0)) && air && fling > 9;
+        if (tumbling) this.spin -= dt * Math.min(14, fling * 0.75) * (ext.back ? 1 : -1);
+        else { const tg = Math.round(this.spin / (Math.PI * 2)) * Math.PI * 2; this.spin += (tg - this.spin) * Math.min(1, dt * 10); if (Math.abs(tg - this.spin) < 0.01) this.spin = 0; }
 
         // Spettro: fluttua
         if (this.app.species === 'spettro') P.bodyY += 0.22 + Math.sin(t * 2.2) * 0.06;
 
         // --- APPLICA (smorzato) ---
-        const k = st === 'frozen' ? 0 : 1 - Math.exp(-dt * (ext ? 22 : 14));
+        const k = st === 'frozen' ? 0 : 1 - Math.exp(-dt * (st === 'ko' ? 40 : ext ? 22 : 14));
         const C = this.pose;
         for (const key of POSE_KEYS) C[key] += (P[key] - C[key]) * k;
-        this.body.rotation.set(C.bodyRx, C.bodyRy, C.bodyRz);
-        this.body.position.y = C.bodyY;
-        this.spine.rotation.set(C.spineRx, C.spineRy, C.spineRz);
-        this.head.rotation.set(C.headRx, C.headRy, 0);
-        this.arms.L.sh.rotation.set(C.shLx, C.shLy, C.shLz);
+        // reazione al colpo: scatto immediato (fuori dallo smorzamento) e ritorno con un piccolo rimbalzo
+        let rx = 0, rh = 0, ry = 0, rs = 0, rk = 0, sq = 0;
+        if (this.react) {
+            const R = this.react; R.t += dt;
+            const e = R.p * Math.exp(-R.t * 6.5) * (Math.cos(R.t * 12) * 0.4 + 0.6);
+            const e2 = R.p * Math.exp(-Math.max(0, R.t - 0.05) * 5.5) * Math.min(1, R.t / 0.05);   // la testa segue con un attimo di ritardo
+            rx = -0.55 * e * R.dir; rh = -0.6 * e2 * R.dir; ry = 0.4 * e * R.tw; rs = 0.7 * e; rk = 0.45 * e;
+            sq = 0.1 * R.p * Math.exp(-R.t * 14);
+            if (R.t > 1.2) this.react = null;
+        }
+        const hs = this.app.height || 1, sp = this.spin, cy = this.hipY * hs;
+        this.body.scale.set(hs * (1 + sq * 0.8), hs * (1 - sq), hs * (1 + sq * 0.8));
+        // la capriola gira attorno ai fianchi, non ai piedi
+        this.body.rotation.set(C.bodyRx + sp, C.bodyRy, C.bodyRz);
+        this.body.position.set(0, C.bodyY + cy * (1 - Math.cos(sp)), -cy * Math.sin(sp));
+        this.spine.rotation.set(C.spineRx + rx, C.spineRy + ry, C.spineRz);
+        this.head.rotation.set(C.headRx + rh, C.headRy, 0);
+        this.arms.L.sh.rotation.set(C.shLx, C.shLy, C.shLz + rs);
         this.arms.L.el.rotation.x = C.elL;
-        this.arms.R.sh.rotation.set(C.shRx, C.shRy, C.shRz);
+        this.arms.R.sh.rotation.set(C.shRx, C.shRy, C.shRz - rs);
         this.arms.R.el.rotation.x = C.elR;
         this.legs[0].hip.rotation.set(C.hipLx, 0, C.hipLz);
-        this.legs[0].knee.rotation.x = C.knL;
+        this.legs[0].knee.rotation.x = C.knL + rk;
         this.legs[1].hip.rotation.set(C.hipRx, 0, C.hipRz);
-        this.legs[1].knee.rotation.x = C.knR;
+        this.legs[1].knee.rotation.x = C.knR + rk;
+        this.updateLoose(dt);
         if (this.skirt) this.updateSkirt(t);
         if (this.cape) this.updateCape(Math.max(0, C.cape), t);
         if (this.wings) for (const w of this.wings) w.piv.rotation.y = -w.s * (0.5 + Math.sin(t * (st === 'air' ? 12 : 2)) * (st === 'air' ? 0.5 : 0.12));
@@ -1944,30 +2049,41 @@ export class Character {
 
 // Pose delle azioni (p = progresso 0..1)
 const ease = x => x * x * (3 - 2 * x);
+const easeOut = x => 1 - (1 - x) ** 3;      // parte veloce, rallenta: caricare
+const easeIn = x => x * x * x;              // parte piano, esplode: colpire
 function seg(p, a, b) { return Math.min(1, Math.max(0, (p - a) / (b - a))); }
-function applyAction(P, name, p, t) {
+// v = variante (colpi leggeri alternati: dritto e rovescio)
+function applyAction(P, name, p, t, v = 0) {
     switch (name) {
         case 'light': case 'air': {
-            const w = ease(seg(p, 0, 0.3)), s = ease(seg(p, 0.3, 0.55)), r = ease(seg(p, 0.6, 1));
+            const m = v ? -1 : 1;
+            const w = easeOut(seg(p, 0, 0.24)), s = easeIn(seg(p, 0.2, 0.42)), r = ease(seg(p, 0.55, 1));
             const amt = 1 - r;
-            P.shRx = -1.45 * amt + P.shRx * r;
-            P.shRy = (-1.0 * w + 1.9 * s) * amt;
+            P.shRx = (-1.3 - 0.25 * w + 0.15 * s) * amt + P.shRx * r;
+            P.shRy = (-1.1 * w + 2.3 * s) * m * amt;
             P.shRz = -0.15 * amt + P.shRz * r;
-            P.elR = -0.2 * amt + P.elR * r;
-            P.spineRy = (-0.45 * w + 1.0 * s) * amt;
+            P.elR = (-0.2 - 0.8 * w * (1 - s)) * amt + P.elR * r;       // il braccio si distende nel colpo
+            P.spineRy = (-0.5 * w + 1.1 * s) * m * amt;
+            P.shLx = -0.4 * w * amt; P.shLz = 0.25 * s * amt + P.shLz;
             if (name === 'air') { P.hipLx = -0.9; P.knL = 1.3; P.hipRx = -0.6; P.knR = 1.2; P.bodyRx = 0.2 * amt; }
+            else { P.hipLx = -0.35 * s * amt; P.knL = 0.25 * s * amt; P.knR = 0.15 * w * amt; P.bodyY = -0.03 * s * amt; }
             break;
         }
         case 'heavy': {
-            const w = ease(seg(p, 0, 0.42)), s = ease(seg(p, 0.42, 0.62)), r = ease(seg(p, 0.66, 1));
-            const amt = 1 - r;
-            P.shRx = (-2.9 * w + 2.5 * s) * amt + P.shRx * r;
-            P.elR = -0.5 * w * amt + P.elR * r;
-            P.shLx = -1.0 * w * amt;
-            P.spineRx = (-0.28 * w + 0.65 * s) * amt;
-            P.knL = P.knR = 0.45 * s * amt;
-            P.hipLx = -0.3 * s * amt;
-            P.bodyY = -0.08 * s * amt;
+            // carica alta dietro la testa (con il tremito dello sforzo), passo avanti e fendente che va oltre
+            const w = easeOut(seg(p, 0, 0.3)), s = easeIn(seg(p, 0.29, 0.44)), f = ease(seg(p, 0.44, 0.62)), r = ease(seg(p, 0.62, 1));
+            const amt = 1 - r, trem = Math.sin(t * 55) * 0.05 * w * (1 - s);
+            P.shRx = (-3.0 * w + 2.7 * s + 0.45 * f + trem) * amt + P.shRx * r;
+            P.shRz = (-0.35 * w + 0.25 * s) * amt + P.shRz * r;
+            P.elR = (-1.0 * w * (1 - s) - 0.1) * amt + P.elR * r;
+            P.shLx = (-1.2 * w + 1.0 * s) * amt; P.shLz = 0.35 * w * amt + P.shLz * r;
+            P.spineRx = (-0.35 * w + 0.75 * s - 0.1 * f + trem) * amt;
+            P.spineRy = (-0.45 * w + 0.55 * s) * amt;
+            P.headRx = (-0.15 * w + 0.2 * s) * amt;
+            P.knL = P.knR = (0.25 * w + 0.35 * s) * amt;
+            P.hipLx = (0.2 * w - 0.75 * s) * amt; P.hipRx = 0.35 * s * amt;
+            P.bodyY = (-0.05 * w - 0.12 * s) * amt;
+            P.cape = 0.3 + 0.6 * s * amt;
             break;
         }
         case 'up': {
@@ -1981,14 +2097,17 @@ function applyAction(P, name, p, t) {
             break;
         }
         case 'special': {
-            const w = ease(seg(p, 0, 0.45)), s = ease(seg(p, 0.45, 0.6)), r = ease(seg(p, 0.7, 1));
-            const amt = 1 - r;
-            P.shLx = (-2.6 * w + 1.1 * s) * amt; P.shRx = (-2.6 * w + 1.1 * s) * amt;
-            P.shLz = -0.25 * amt + 0.1 * r; P.shRz = 0.25 * amt - 0.1 * r;
-            P.elL = P.elR = -0.1;
-            P.spineRx = (-0.25 * w + 0.4 * s) * amt;
-            P.headRx = -0.2 * w * amt;
-            P.cape = 0.6 * amt;
+            // si solleva caricando a braccia alte, trema, poi si schianta a terra
+            const w = easeOut(seg(p, 0, 0.3)), s = easeIn(seg(p, 0.29, 0.42)), r = ease(seg(p, 0.6, 1));
+            const amt = 1 - r, trem = Math.sin(t * 60) * 0.06 * w * (1 - s);
+            P.shLx = P.shRx = (-2.8 * w + 1.6 * s + trem) * amt;
+            P.shLz = (0.5 * w - 0.25 * s) * amt + 0.1 * r; P.shRz = (-0.5 * w + 0.25 * s) * amt - 0.1 * r;
+            P.elL = P.elR = -0.15;
+            P.spineRx = (-0.35 * w + 0.65 * s) * amt;
+            P.headRx = (-0.3 * w + 0.3 * s) * amt;
+            P.bodyY = (0.16 * w - 0.2 * s) * amt;
+            P.knL = P.knR = 0.6 * s * amt; P.hipLx = P.hipRx = -0.35 * s * amt;
+            P.cape = 0.9 * amt;
             break;
         }
         case 'throw': {

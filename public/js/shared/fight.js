@@ -47,6 +47,11 @@ const SPECIALS = {
     fango:    { start: 0.20, rec: 0.30 },
 };
 
+// quanto dura la carica prima che il colpo parta (per gli effetti di chi guarda)
+export function moveStart(f, mv) {
+    if (mv === 'sp') return SPECIALS[f.special]?.start || 0.2;
+    return (MOVES[mv]?.start || 0.1) / f.aspd;
+}
 export function moveDuration(f, mv) {
     if (mv === 'sp') { const s = SPECIALS[f.special]; return s.start + (s.active || 0) + s.rec; }
     const m = MOVES[mv]; return (m.start + m.active + m.rec) / f.aspd;

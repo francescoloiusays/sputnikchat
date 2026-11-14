@@ -8,7 +8,7 @@ import { Character } from './character.js';
 import { makeSky, makeWaterMaterial, glowTexture } from './world.js';
 import { FireSet, makeSconce, Gallery } from './decor.js';
 import { applySky, Precipitation } from './sky.js';
-import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration } from './shared/fight.js';
+import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration, moveStart } from './shared/fight.js';
 import { ELEMENTS, ECONOMY, weaponStats, seedRelation, MATS } from './shared/catalog.js';
 
 // Come si guardano i due semi sulla Ruota (riga sotto le barre e nella schermata delle scommesse)
@@ -27,6 +27,7 @@ import { elIcon, iconSVG } from './icons.js';
 const ACTION_OF = { light: 'light', heavy: 'heavy', air: 'air', up: 'up', sp: 'special' };
 const SPECIAL_SFX = { fiammata: 'fire', gelo: 'ice', saetta: 'thunder', frana: 'rock', fango: 'mudhit', miasma: 'ghost', passo: 'dash' };
 const HEAVY_WEAPONS = ['martello', 'ascia', 'falce', 'bastone'];
+const _tip = new THREE.Vector3();
 
 function textSprite(text, color = '#fff', size = 64) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 96;
@@ -51,6 +52,11 @@ export class DuelView {
         this.camPos = new THREE.Vector3(0, 3, 18);
         this.camLook = new THREE.Vector3(0, 2, 0);
         this.shake = 0;
+        this.hitstop = 0;                       // fermo immagine sull'impatto
+        this.timeScale = 1; this.slowT = 0;     // rallentatore (K.O. e SUPER)
+        this.kick = new THREE.Vector3();        // spinta della camera nel verso del colpo
+        this.fovPunch = 0;
+        this.koFocus = null;
         this.snaps = [];
         this.evQueue = [];
         this.fx = [];
@@ -71,8 +77,12 @@ export class DuelView {
             this.fighters[s] = {
                 ch, info: f, aspd: ws.speed, special: ELEMENTS[f.element]?.special.id || 'fango',
                 ice: this.makeIce(), status: this.makeStatus(), hpShown: 1, lastHp: null,
+                // lampo di luce sul corpo colpito e bagliore della carica: creati subito, così non si ricompilano gli shader a metà duello
+                hitL: new THREE.PointLight('#ffe8c8', 0, 4.5, 2),
+                glow: new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: '#ffe2a8', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })),
+                px: null, py: null, vx: 0, vy: 0, alt: 0, jit: 0, charging: false, facing: 1,
             };
-            this.scene.add(this.fighters[s].ice, this.fighters[s].status);
+            this.scene.add(this.fighters[s].ice, this.fighters[s].status, this.fighters[s].hitL, this.fighters[s].glow);
         }
         this.projMeshes = [];
         this.zoneMeshes = [];
@@ -368,9 +378,14 @@ export class DuelView {
     update(dt) {
         this.t += dt;
         this.envDt = dt;
+        // fermo immagine e rallentatore: in allenamento rallenta anche la simulazione, online solo le animazioni
+        this.hitstop = Math.max(0, this.hitstop - dt);
+        this.slowT = Math.max(0, this.slowT - dt);
+        this.timeScale += ((this.slowT > 0 ? 0.3 : 1) - this.timeScale) * Math.min(1, dt * (this.slowT > 0 ? 14 : 4));
+        const animDt = this.hitstop > 0 ? dt * 0.06 : dt * this.timeScale;
         if (this.role !== 'spectator') this.readJoy();
         if (this.role === 'local' && !this.ended) {
-            this.acc += Math.min(dt, 0.1);
+            this.acc += Math.min(dt, 0.1) * (this.hitstop > 0 ? 0 : this.timeScale);
             const ev = [];
             while (this.acc >= FIGHT.DT) {
                 this.acc -= FIGHT.DT;
@@ -388,10 +403,16 @@ export class DuelView {
         let s0 = null, s1 = null;
         for (let i = this.snaps.length - 1; i >= 0; i--) { if (this.snaps[i].t <= rt) { s0 = this.snaps[i]; s1 = this.snaps[i + 1] || null; break; } }
         if (!s0) s0 = this.snaps[0];
-        if (s0) this.render(s0, s1, rt, dt);
+        if (s0) this.render(s0, s1, rt, animDt);
+        if (this.koFocus && (this.koFocus.t -= dt) <= 0) this.koFocus = null;
 
-        // camera
-        this.camera.position.lerp(this.camPos, 1 - Math.exp(-dt * 5));
+        // camera: segue, poi la spinta del colpo (torna da sola) e un piccolo zoom sull'impatto
+        this.camera.position.lerp(this.camPos, 1 - Math.exp(-dt * (this.koFocus ? 3 : 5)));
+        this.kick.multiplyScalar(Math.exp(-dt * 9));
+        this.camera.position.add(this.kick);
+        this.fovPunch *= Math.exp(-dt * 7);
+        const fov = 32 + this.fovPunch;
+        if (Math.abs(this.camera.fov - fov) > 0.01) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
         if (this.shake > 0) {
             this.shake = Math.max(0, this.shake - dt * 2.5);
             this.camera.position.x += (Math.random() - 0.5) * this.shake;
@@ -405,7 +426,8 @@ export class DuelView {
         const ep = this.embers.geometry.attributes.position;
         for (let i = 0; i < ep.count; i++) { let y = ep.getY(i) + dt * 0.8; if (y > 14) y = -4; ep.setY(i, y); ep.setX(i, ep.getX(i) + Math.sin(this.t + i) * dt * 0.2); }
         ep.needsUpdate = true;
-        this.updateFx(dt);
+        this.updateFx(this.hitstop > 0 ? 0 : dt * this.timeScale);
+        for (const F of Object.values(this.fighters)) F.hitL.intensity *= Math.exp(-dt * 16);
         if (!$('#dh-vs').classList.contains('hidden') && this.vsCount) {
             const left = Math.max(0, Math.ceil((this.vsEnd - performance.now()) / 1000));
             this.vsCount.textContent = left > 0 ? `Il duello inizia tra ${left}s` : 'Che il duello abbia inizio!';
@@ -426,7 +448,13 @@ export class DuelView {
             const teleport = Math.abs(f1.x - f0.x) > 3;
             pos[side] = { x: teleport ? f.x : x, y: teleport ? f.y : y };
             const ch = F.ch;
+            // velocità sullo schermo (serve alla capriola e alla caduta)
+            if (F.px !== null && dt > 1e-4 && !teleport) {
+                F.vx += ((pos[side].x - F.px) / dt - F.vx) * 0.5; F.vy += ((pos[side].y - F.py) / dt - F.vy) * 0.5;
+            }
+            F.px = pos[side].x; F.py = pos[side].y; F.facing = f.facing;
             ch.root.position.set(pos[side].x, pos[side].y, 0);
+            if (this.hitstop > 0 && F.jit > 0) ch.root.position.x += (Math.random() - 0.5) * F.jit;   // trema sull'impatto
             const targetRy = f.facing > 0 ? Math.PI / 2 - 0.35 : -Math.PI / 2 + 0.35;
             ch.root.rotation.y += (targetRy - ch.root.rotation.y) * Math.min(1, dt * 18);
             let st = f.st, action = null;
@@ -435,14 +463,18 @@ export class DuelView {
                 const wt = F.info.look?.weapon?.type;
                 this.app.audio.play('swing', { heavy: f.mv === 'heavy' || HEAVY_WEAPONS.includes(wt), blade: !HEAVY_WEAPONS.includes(wt), vol: 0.85 });
             }
+            const newAtk = f.st === 'atk' && (F.pst !== 'atk' || F.pmv !== f.mv || f.mt < F.pmt - 0.05);
+            if (newAtk && (f.mv === 'light' || f.mv === 'air')) F.alt ^= 1;   // dritto, rovescio, dritto...
             F.pst = f.st; F.pmv = f.mv; F.pmt = f.mt;
             if (st === 'atk') {
                 const dur = moveDuration({ aspd: F.aspd, special: F.special }, f.mv);
-                action = { name: ACTION_OF[f.mv] || 'light', p: f.mt / dur };
+                action = { name: ACTION_OF[f.mv] || 'light', p: f.mt / dur, v: F.alt };
                 st = f.grounded ? 'idle' : 'air';
             }
             if (st === 'run') st = 'run';
-            ch.update(dt, { st, speed: st === 'run' ? 7 : 0, action });
+            ch.update(dt, { st, speed: st === 'run' ? 7 : 0, action, grounded: f.grounded, vx: F.vx, vy: F.vy, back: F.vx * f.facing < -1 });
+            this.chargeFx(F, f, side);
+            F.hitL.position.set(pos[side].x, pos[side].y + 1.2, 1.4);
             ch.root.visible = !(f.flags & 16) || Math.floor(this.t * 12) % 2 === 0;
             F.ice.visible = !!(f.flags & 2);
             F.ice.position.set(pos[side].x, pos[side].y + 1.05, 0);
@@ -500,6 +532,7 @@ export class DuelView {
         const dist = Math.max(14, sep / 2 / Math.tan(hf) * 1.1, sepY / 2 / Math.tan(vf) * 1.15);
         this.camPos.set(cx, cy + 1.2 + dist * 0.06, Math.min(34, dist));
         this.camLook.set(cx, cy, 0);
+        if (this.koFocus && !this.zoomed) { const L = pos[this.koFocus.side]; this.camPos.set(L.x + 1.2, L.y + 2.4, 9.5); this.camLook.set(L.x, L.y + 0.7, 0); }
         if (S.ph === 'over' && S.w && !this.zoomed) { this.zoomed = true; }
         if (this.zoomed && S.w) { const W = pos[S.w]; this.camPos.set(W.x + 1.5, W.y + 2.2, 8); this.camLook.set(W.x, W.y + 1.3, 0); }
     }
@@ -550,20 +583,60 @@ export class DuelView {
     }
 
     // --- EFFETTI ---
-    burst(x, y, color, n = 12, speed = 6, size = 0.35) {
+    burst(x, y, color, n = 12, speed = 6, size = 0.35, dir = 0) {
         for (let i = 0; i < n; i++) {
             const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
             s.position.set(x, y, 0.3); s.scale.setScalar(size * (0.6 + Math.random()));
-            const a = Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random());
+            // con una direzione, le scintille schizzano via dal colpo a ventaglio
+            const a = dir ? (dir > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 1.7 : Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random());
             this.scene.add(s);
             this.fx.push({ o: s, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.35 + Math.random() * 0.25, g: 12 });
         }
     }
-    floatText(text, x, y, color) {
+    floatText(text, x, y, color, big = 1) {
         const s = textSprite(text, color);
         s.position.set(x, y + 0.6, 0.5);
         this.scene.add(s);
-        this.fx.push({ o: s, vx: (Math.random() - 0.5), vy: 2.2, life: 0.9, g: 0, text: true });
+        this.fx.push({ o: s, vx: (Math.random() - 0.5) * 1.5, vy: 3.2, life: 0.9, g: 4, text: true, pop: big });
+    }
+    // onda d'urto a terra (SUPER, atterraggio del fendente)
+    ring(x, y, color, size = 3.2) {
+        const m = new THREE.Mesh(new THREE.RingGeometry(0.7, 1, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+        m.rotation.x = -Math.PI / 2; m.position.set(x, y, 0); m.scale.setScalar(0.3);
+        this.scene.add(m);
+        this.fx.push({ o: m, vx: 0, vy: 0, life: 0.45, g: 0, grow: size / 0.45, fade: true });
+    }
+    // carica del fendente e della SUPER: un bagliore che cresce sull'arma e scintille che ci corrono dentro; al rilascio scoppia
+    chargeFx(F, f, side) {
+        const charged = f.st === 'atk' && (f.mv === 'heavy' || f.mv === 'sp');
+        const k = charged ? f.mt / Math.max(0.05, moveStart({ aspd: F.aspd, special: F.special }, f.mv)) : -1;
+        const g = F.glow, ch = F.ch, w = ch.weaponMesh, len = w?.userData.length || 0.6;
+        const tip = (w && w.parent ? w : ch.arms.R.hand).localToWorld(_tip.set(0, w && w.children.length ? len * 0.85 : 0, 0));
+        const col = f.mv === 'sp' ? (ELEMENTS[this.info[side].element]?.color || '#ffe2a8') : '#ffe2a8';
+        if (k >= 0 && k < 1) {
+            g.material.color.set(col);
+            g.position.copy(tip); g.position.z += 0.2;
+            g.scale.setScalar(0.3 + k * (f.mv === 'sp' ? 1.8 : 1.1));
+            g.material.opacity = 0.35 + k * 0.6 + Math.sin(this.t * 40) * 0.1;
+            if (Math.random() < 0.5) {      // scintille risucchiate verso la punta
+                const a = Math.random() * Math.PI * 2, r = 0.9 + Math.random() * 0.5;
+                const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: col, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+                s.position.set(tip.x + Math.cos(a) * r, tip.y + Math.sin(a) * r, 0.3); s.scale.setScalar(0.12 + Math.random() * 0.1);
+                this.scene.add(s);
+                this.fx.push({ o: s, vx: -Math.cos(a) * r / 0.22, vy: -Math.sin(a) * r / 0.22, life: 0.22, g: 0 });
+            }
+            F.charging = true;
+        } else {
+            g.material.opacity *= 0.6;
+            if (F.charging && k >= 1) {
+                // rilascio: scoppio sull'arma, polvere ai piedi, spinta della camera
+                this.burst(tip.x, tip.y, col, f.mv === 'sp' ? 20 : 12, 7, 0.4);
+                const p = ch.root.position;
+                this.burst(p.x + f.facing * 0.4, p.y + 0.1, '#cbbfae', 8, 3, 0.45, f.facing);
+                if (f.mv === 'heavy') { this.ring(p.x + f.facing * 0.5, p.y + 0.05, '#e8dcc8', 1.8); this.kick.x += f.facing * 0.12; }
+            }
+            F.charging = false;
+        }
     }
     lightning(x) {
         const c = document.createElement('canvas'); c.width = 64; c.height = 512;
@@ -593,10 +666,13 @@ export class DuelView {
             p.vy -= p.g * dt;
             p.o.position.x += p.vx * dt; p.o.position.y += p.vy * dt;
             if (p.o.material) p.o.material.opacity = Math.min(1, p.life * (p.text ? 2 : 3));
+            if (p.pop) { const k = Math.max(0, (p.life - 0.72) / 0.18); p.o.scale.set(1.6, 0.6, 1).multiplyScalar(p.pop * (1 + 0.8 * k * k)); if (p.vy < 0.4) { p.vy = 0.4; } }
+            if (p.grow) p.o.scale.addScalar(p.grow * dt);
             if (p.life <= 0) {
                 this.scene.remove(p.o);
                 p.o.material?.map && p.text && p.o.material.map.dispose();
                 p.o.material?.dispose();
+                if (p.o.isMesh) p.o.geometry.dispose();   // gli sprite condividono la geometria: quella non si tocca
                 this.fx.splice(i, 1);
             }
         }
@@ -609,11 +685,21 @@ export class DuelView {
             case 'round': this.announce(`ROUND ${e.n}`); A.play('gong'); this.zoomed = false; break;
             case 'go': this.announce('COMBATTI!', 'blood'); A.play('fight'); break;
             case 'hit': {
-                this.burst(e.x, e.y, e.h ? '#ffb347' : '#fff3a0', e.h ? 18 : 10, e.h ? 9 : 6);
-                this.floatText(`-${e.d}`, e.x, e.y + 0.6, e.h ? '#ff5a3a' : '#ffffff');
+                const V = this.fighters[e.s], At = this.fighters[e.s === 'a' ? 'b' : 'a'];
+                const vx = V.ch.root.position.x, ax = At.ch.root.position.x, dir = Math.sign(vx - ax) || 1;
+                const power = e.h ? 1 : Math.min(0.75, 0.35 + e.d / 20);
+                // scintille nel verso del colpo, numero che "salta", lampo sul corpo
+                this.burst(e.x, e.y, e.h ? '#ffb347' : '#fff3a0', e.h ? 22 : 12, e.h ? 10 : 7, 0.35, dir);
+                this.floatText(`-${e.d}`, e.x, e.y + 0.6, e.h ? '#ff5a3a' : '#ffffff', 1 + Math.min(0.7, e.d / 25));
                 A.play(e.h ? 'heavy' : 'hit');
-                this.shake = Math.max(this.shake, e.h ? 0.5 : 0.18);
-                this.fighters[e.s].ch.play?.('hit', 0.3);
+                V.ch.hurt(Math.sign(ax - vx) * (V.facing || 1) >= 0 ? 1 : -1, power);
+                V.hitL.color.set(e.h ? '#ffb070' : '#fff0d8'); V.hitL.intensity = e.h ? 70 : 35;
+                // fermo immagine: chi colpisce "sente" l'impatto
+                this.hitstop = Math.max(this.hitstop, e.h ? 0.12 : 0.055);
+                V.jit = e.h ? 0.16 : 0.08;
+                this.kick.set(dir * (e.h ? 0.45 : 0.16), e.h ? -0.12 : -0.04, e.h ? -0.7 : -0.25);
+                this.fovPunch = Math.min(this.fovPunch, e.h ? -2.2 : -0.7);
+                this.shake = Math.max(this.shake, e.h ? 0.22 : 0.06);
                 break;
             }
             case 'block': this.burst(e.x, e.y, '#7ac8ff', 8, 4, 0.25); A.play('block'); break;
@@ -628,6 +714,9 @@ export class DuelView {
                 setTimeout(() => { $('#dh-announce').style.fontSize = ''; }, 1300);
                 A.play('special'); setTimeout(() => A.play(SPECIAL_SFX[e.k] || 'special'), 200);
                 this.flash(e.pure ? '#ffd23a' : el.color);
+                this.slowT = Math.max(this.slowT, 0.35); this.fovPunch = -3;
+                const P = this.fighters[e.s].ch.root.position;
+                this.ring(P.x, P.y + 0.05, el.color);
                 break;
             }
             case 'tp': this.burst(e.x, e.y + 1, '#b06cff', 20, 5, 0.6); break;
@@ -640,7 +729,15 @@ export class DuelView {
             case 'fall': { this.announce('CADUTA!', ''); A.play('splash'); this.floatText(`-${e.d}`, 0, 8, '#ff5a3a'); break; }
             case 'jump': if (e.d) { const p = fpos(e.s); this.burst(p.x, p.y, '#d8cfe6', 6, 2, 0.3); } A.play('jump'); break;
             case 'dash': A.play('dash'); break;
-            case 'ko': this.announce(e.p ? 'PERFETTO!' : 'K.O.!', 'blood'); A.play('ko'); this.shake = 1; break;
+            case 'ko': {
+                this.announce(e.p ? 'PERFETTO!' : 'K.O.!', 'blood'); A.play('ko');
+                // il colpo finale: fermo lungo, rallentatore e camera su chi cade
+                this.hitstop = 0.2; this.slowT = 1.1; this.shake = 0.5; this.fovPunch = -4;
+                const loser = e.w ? (e.w === 'a' ? 'b' : 'a') : null;
+                if (loser) this.koFocus = { side: loser, t: 1.7 };
+                this.flash('#ffffff');
+                break;
+            }
             case 'time': this.announce('TEMPO!'); A.play('gong'); break;
             case 'over': {
                 const w = e.w ? this.info[e.w].name : null;
