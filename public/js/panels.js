@@ -15,7 +15,7 @@ import { NPCS, INSULTS, TOLL_LINES, TABLETS, TABLET_REWARD } from './shared/lore
 import { cardEditor } from './creator.js';
 import { composeCard, printCard, downloadCard, CARD_W, holoTrack } from './cards.js';
 import { icon, iconSVG, elIcon, itemIconName, rarityOf, tierOf } from './icons.js';
-import { storyBox, bookContent, storyCtx } from './story-ui.js';
+import { storyBox, bookContent, storyCtx, npcLine } from './story-ui.js';
 import { STORY_SPOTS } from './shared/story.js';
 import { ritratto } from './story-text.js';
 
@@ -555,7 +555,7 @@ export class Panels {
     p_npc(arg) {
         const app = this.app, id = arg?.id, N = NPCS[id];
         if (!N) return this.close();
-        const line = N.lines[(this.npcLine = ((this.npcLine ?? -1) + 1)) % N.lines.length];
+        const line = this.npcLineText = npcLine(app, id, (this.npcLine = ((this.npcLine ?? -1) + 1)));
         const go = { diario: () => { this.tabs.bag = 'diario'; this.open('inventario'); }, forgia: () => { this.tabs.forge = 'crea'; this.open('forgia'); }, castoni: () => { this.tabs.forge = 'castoni'; this.open('forgia'); },
             sartoria: () => this.open('sartoria'), bazar: () => this.open('bazar'), bacheca: () => this.open('bacheca'), altare: () => this.open('altare'),
             tombe: () => { this.tabs.tombe = 'prato'; this.open('tombe'); }, veglia: () => { this.tabs.tombe = 'veglia'; this.open('tombe'); }, pedaggio: () => this.open('pedaggio') };

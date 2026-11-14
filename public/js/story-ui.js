@@ -7,7 +7,9 @@
 import * as THREE from 'three';
 import { STORY, STORY_END, STORY_SPOTS, WAYS, chapterReady, stepHave, gx } from './shared/story.js';
 import { NPCS } from './shared/lore.js';
-import { TEXT, SEME_DI, ritratto } from './story-text.js';
+import { TEXT, SEME_DI, ritratto, npcMemory } from './story-text.js';
+import { xpForLevel } from './shared/catalog.js';
+import { islandHour } from './sky.js';
 import { Character } from './character.js';
 import { h, toast, $ } from './util.js';
 import { iconSVG } from './icons.js';
@@ -16,6 +18,10 @@ const SEED_COL = { fuoco: '#ff6a2f', ghiaccio: '#7fd8ff', palude: '#6fcf5a', pie
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
 const whoName = (who) => NPCS[who]?.name || STORY_SPOTS[who]?.name || who;
 const whoWhere = (who) => NPCS[who]?.where || STORY_SPOTS[who]?.name || '';
+// «da Il Traghettatore» → «dal Traghettatore», «con Il Ratto» → «con il Ratto»
+const ART = [['Il ', 'dal ', 'il '], ['Lo ', 'dallo ', 'lo '], ['La ', 'dalla ', 'la '], ['Le ', 'dalle ', 'le '], ['I ', 'dai ', 'i '], ["L'", "dall'", "l'"]];
+const withArt = (name, k) => { for (const a of ART) if (name.startsWith(a[0])) return a[k] + name.slice(a[0].length); return (k === 1 ? 'da ' : '') + name; };
+const daWho = (who) => withArt(whoName(who), 1), conWho = (who) => withArt(whoName(who), 2);
 
 export function storyCtx(app) {
     const me = app.me || {}, st = me.story || {};
@@ -23,6 +29,23 @@ export function storyCtx(app) {
     return { name: me.name || app.local?.name || 'Viandante', sex, o: sex === 'f' ? 'a' : 'o', seme: SEME_DI[me.card?.element] || 'della nebbia', ans: st.ans || [], nome: st.name, way: st.way, lv: me.level || 1 };
 }
 const islandNight = (app) => (app.env?.state?.day ?? 0) < 0.3;
+// fra quanti minuti veri cala il buio sull'isola (0 = è già notte)
+const darkHour = (hr) => hr >= 19.5 || hr < 5.3;   // come islandNight: day < 0.3
+export function minutesToNight(app) {
+    if (islandNight(app)) return 0;
+    const now = Date.now();
+    for (let s = 15; s <= 25 * 60; s += 15) if (darkHour(islandHour(now + s * 1000))) return Math.max(1, Math.round(s / 60));
+    return 0;
+}
+// quanto manca al livello che apre il capitolo, e dove prenderlo
+function xpGap(app, lv) {
+    const me = app.me || {}, L = me.level || 1;
+    const gap = Math.max(0, xpForLevel(lv) - (me.xp || 0));
+    const where = ['le taglie della Bacheca in piazza (J)', 'il Fantasma nell\'Arena', 'la pesca al Molo'];
+    if (L >= 3) where.push('il Canto delle Pietre', 'il Prato dei Morti');
+    if (L >= 5) where.push('i duelli classificati');
+    return { gap, where };
+}
 
 // --- CHE COSA SUCCEDE QUANDO PARLI CON QUALCUNO DELLA STORIA ---
 export function storyBeat(app, who) {
@@ -43,14 +66,17 @@ export function storyBeat(app, who) {
     }
     if (!st.on) {
         if (who !== C.who) return null;
-        if (lv < C.lv) return { kind: 'early', lines: [`Non ancora. Torna quando sarai più forte: la storia riprende da qui al livello ${C.lv}.`] };
+        if (lv < C.lv) {
+            const g = xpGap(app, C.lv);
+            return { kind: 'early', lines: [`Non ancora. La storia riprende da qui al livello ${C.lv}: ti mancano ${g.gap} punti di esperienza.`, `Intanto prova ${g.where.slice(0, -1).join(', ')} o ${g.where.at(-1)}. Poi torna.`] };
+        }
         const lines = [...(T.echo?.(c) || []), ...T.open(c)];
         if (C.way) return { kind: 'way', lines, act: Object.entries(WAYS).map(([k, label]) => ({ label, ic: k === 'cripta' ? 'skull' : 'friends', fn: () => storyStart(app, k) })) };
         return { kind: 'start', lines, act: [{ label: `Comincia: ${C.title}`, ic: 'openbook', fn: () => storyStart(app) }] };
     }
     if (who !== endWho) return who === C.who ? { kind: 'wait', lines: T.wait(c, st), steps: true } : null;
     if (!chapterReady(st, me)) return { kind: 'wait', lines: T.wait(c, st), steps: true };
-    if (C.night && !islandNight(app)) return { kind: 'wait', lines: T.night(c) };
+    if (C.night && !islandNight(app)) return { kind: 'wait', lines: T.night(c, minutesToNight(app)) };
     return { kind: 'ask', lines: T.ask(c), q: C.q, act: C.a.map((a, i) => ({ label: gx(a, c.sex), fn: () => storyAnswer(app, who, i) })) };
 }
 
@@ -87,13 +113,17 @@ export function storyThread(app) {
     const C = STORY[st.ch], lv = me.level || 1;
     if (C.id === 'approdo') return { text: 'Raggiungi la Piazza della Gloria: il Ratto dei Cronisti ha un libro per te' };
     if (!st.on) {
-        if (lv < C.lv) return { text: `${C.title}: il prossimo capitolo si apre al livello ${C.lv}`, wait: true };
-        return { text: C.who === 'pietre' ? `${C.title}: vai al Cerchio di Pietre` : `${C.title}: parla con ${whoName(C.who)} (${whoWhere(C.who)})` };
+        if (lv < C.lv) return { text: `${C.title}: si apre al livello ${C.lv} · mancano ${xpGap(app, C.lv).gap} esp. (taglie, Fantasma, pesca)`, wait: true };
+        return { text: C.who === 'pietre' ? `${C.title}: vai al Cerchio di Pietre` : `${C.title}: parla con ${conWho(C.who)} (${whoWhere(C.who)})` };
     }
     const next = C.steps.find(s => stepHave(st, s, me) < s.n);
     if (next) return { text: `${C.title}: ${next.t}${next.n > 1 ? ` (${Math.min(next.n, stepHave(st, next, me))}/${next.n})` : ''}` };
     const end = C.end || C.who;
-    return { text: `${C.title}: torna da ${whoName(end)}${C.night ? ', di notte' : ''}` };
+    if (C.night) {
+        const m = minutesToNight(app);
+        return { text: `${C.title}: torna ${daWho(end)}, di notte · ${m ? `il buio cala fra ${m} min` : 'è notte: vai ora'}` };
+    }
+    return { text: `${C.title}: torna ${daWho(end)}` };
 }
 export function updateThread(app) {
     const el = $('#story-thread');
@@ -107,6 +137,27 @@ export function updateThread(app) {
     el.classList.toggle('dim', !!T.wait || !!T.done);
     el.innerHTML = iconSVG('openbook') + '<span></span>';
     el.querySelector('span').textContent = txt;
+}
+
+// --- CHE COSA DICE UN ABITANTE QUANDO GLI PARLI ---
+// Prima le battute che ricordano la tua storia e che non hai ancora sentito, poi il solito giro.
+const HEARD_KEY = 'sputnik:npcHeard';
+function heardSet(app) {
+    if (!app.npcHeard) { try { app.npcHeard = new Set(JSON.parse(localStorage.getItem(HEARD_KEY)) || []); } catch { app.npcHeard = new Set(); } }
+    return app.npcHeard;
+}
+export function npcLine(app, id, turn) {
+    const N = NPCS[id];
+    if (!N) return '';
+    const st = app.me?.story, mem = st && !app.me.offline ? npcMemory(id, storyCtx(app), st.ch || 0) : [];
+    const heard = heardSet(app), fresh = mem.find(l => !heard.has(id + '|' + l));
+    if (fresh) {
+        heard.add(id + '|' + fresh);
+        try { localStorage.setItem(HEARD_KEY, JSON.stringify([...heard].slice(-300))); } catch { /* ok */ }
+        return fresh;
+    }
+    const pool = [...mem.slice(0, 2), ...N.lines];
+    return pool[turn % pool.length];
 }
 
 // --- IL BLOCCO DELLA STORIA NEI DIALOGHI ---

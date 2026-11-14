@@ -833,7 +833,7 @@ class Game {
     // il personaggio dice la battuta che il pannello sta mostrando, con la sua voce
     npcSay(id) {
         const N = NPCS[id];
-        if (N) this.audio.voice(id, N.lines[(this.panels.npcLine || 0) % N.lines.length]);
+        if (N) this.audio.voice(id, this.panels.npcLineText || N.lines[0]);
     }
     // chi guarda una puntata dai quadri del cortile riceve qualche moneta
     async watchEpisode(ep) {
@@ -1433,6 +1433,7 @@ class Game {
             this.clockT = 0.5;
             const txt = `${clockText(S.hour)} · ${S.weatherName}`, el = $('#sky-clock');
             if (el && el.dataset.txt !== txt + S.icon) { el.dataset.txt = txt + S.icon; el.innerHTML = iconSVG(S.icon) + `<span>${txt}</span>`; }
+            if (this.me?.story) updateThread(this);   // il filo conta i minuti alla notte
         }
         return S;
     }

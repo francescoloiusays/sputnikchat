@@ -61,7 +61,7 @@ export const TEXT = {
             'Chi vuole essere amato tiene la lanterna accesa anche di giorno. Lo so perché lo faccio anch\'io.',
         ][c.ans[1] ?? 0]],
         open: (c) => ['Di notte, sotto le assi, nuota qualcosa di fatto di nebbia. E ogni tanto il mare porta bottiglie.', 'Pescami tre pesci e ritrova due pagine di quel diario. Poi torna. Di notte: certe cose si dicono solo col buio.'],
-        night: (c) => ['È ancora giorno. Torna quando cala il buio: certe cose si dicono solo di notte.'],
+        night: (c, m) => ['È ancora giorno. Torna quando cala il buio: certe cose si dicono solo di notte.', m ? `Il buio arriva fra ${m === 1 ? 'un minuto' : m + ' minuti'}, a occhio. Intanto la lenza non si offende, se la butti.` : 'Eccolo, il buio. Siediti.'],
         wait: (c) => ['Tre pesci e due pagine. La laguna non ha fretta: aspetta anche te.'],
         ask: (c) => ['Il naufrago aspettava una barca che non ero io. E tu, invece?'],
         reply: [
@@ -270,4 +270,96 @@ export function ritratto(c) {
     if (!parts.length) return '';
     const last = parts.pop();
     return `Sei ${c.o === 'a' ? 'colei' : 'colui'} che ${parts.length ? parts.join(', che ') + ', e che ' : ''}${last}.`;
+}
+
+// =====================================================================
+//  GLI ABITANTI RICORDANO
+//  Dopo un capitolo chiuso (ch: l'indice in STORY), chi c'era ne parla
+//  ancora, con le parole della risposta che gli hai dato. Gli altri ne
+//  hanno sentito parlare: sull'isola le voci girano più della nebbia.
+//  Una battuta che torna null non si dice.
+// =====================================================================
+const pickAns = (c, i, lines) => (c.ans[i] != null ? lines[c.ans[i]] : null);
+export const MEMORY = {
+    brace: [
+        { ch: 1, line: (c) => pickAns(c, 1, [
+            'La lama che ti ho fatto la riconosco da lontano. Le cose che restano fanno un rumore diverso.',
+            'Ancora con quell\'arma? Ti avevo detto di non affezionarti. Però ti sta bene in mano.',
+            `Adesso la tieni più leggera, l'arma. Si vede anche da qui. Brav${c.o}.`,
+        ]) },
+        { ch: 2, line: () => 'Il Traghettatore dice che gli hai letto le pagine del naufrago a voce alta. A me non legge mai niente nessuno.' },
+        { ch: 6, line: () => 'La Custode ha ritrovato il volto, dicono. Io ho ancora la chiave e nessuna porta. Ognuno ha il suo cassetto.' },
+        { ch: 7, line: (c) => c.ans[7] === 0
+            ? `Porti la corona come la portava lui. Stai attent${c.o}: l'ho forgiata io, e so quanto pesa.`
+            : 'Hai lasciato la corona al fango. Bene. Era la cosa peggiore che abbia mai forgiato.' },
+    ],
+    traghettatore: [
+        { ch: 2, line: (c) => pickAns(c, 2, [
+            'Guardo sempre chi scende dalle barche. Per te, dico. Nel caso torni qualcuno.',
+            `Ti senti più pront${c.o}? Non rispondere. Si vede dal passo.`,
+            'Il tempo ti aspetta ancora? Allora non fargli perdere la pazienza.',
+        ]) },
+        { ch: 3, line: () => 'Ossobuco dice che c\'è una tomba col tuo seme sopra. Io di notte non ci andrei. Ma io non scendo dalla barca, quindi non faccio testo.' },
+        { ch: 5, line: () => 'Lo Spettro del ponte ti chiama «il mio rivale preferito». Agli altri dice «quello là».' },
+        { ch: 7, line: () => 'Il settimo seme era sotto le mie assi. Trecento anni che ci remo sopra, e non me n\'ero mai accorto.' },
+    ],
+    becchino: [
+        { ch: 1, line: () => 'Mastro Brace ti ha fatto un\'arma. Quando si rompe, portamela: anche le armi hanno un posto, qui.' },
+        { ch: 3, line: (c) => pickAns(c, 3, [
+            'La tua paura sta bene, laggiù. Non si lamenta. Le paure sepolte sono le più educate.',
+            'Ogni tanto porto un fiore a quel nome che hai sepolto. Di chi era non lo so, e non lo dico.',
+            'Il tuo nome è ancora là sotto, intero. Lo ricopro piano ogni sera, come promesso.',
+        ]) },
+        { ch: 5, line: () => 'Lo Spettro dice che l\'hai battuto a parole. Io lo batto ogni notte, ma lui dice che non vale perché dormo.' },
+        { ch: 7, line: (c) => c.ans[7] === 0
+            ? 'Il re aveva la stessa camminata, quando portava la corona. Ti ho già preso le misure, per scrupolo.'
+            : 'Il fango si è preso la corona. Finalmente una sepoltura che non ho dovuto scavare io.' },
+    ],
+    spettro: [
+        { ch: 4, line: (c) => pickAns(c, 4, [
+            'Le pietre dicono che hai la testa dura. Vediamo se regge anche le mie battute.',
+            'Le pietre dicono che mantieni la parola. Brutto vizio, su un ponte come questo.',
+            'Le pietre dicono che ridi in un modo tutto tuo. Io rido in un modo tutto mio. Nessuno dei due fa ridere.',
+        ]) },
+        { ch: 5, line: (c) => pickAns(c, 5, [
+            `Ancora arrabbiat${c.o}? Bene. Ma l'ombrello, almeno, te lo sei portato?`,
+            `Curios${c.o} come sempre? Allora te ne regalo una: il re rideva solo quando non c'era nessuno.`,
+            'Ti annoi ancora? Torna a sfidarmi. Io mi annoio da trecento anni, e guardami: un fiore.',
+        ]) },
+        { ch: 6, line: () => 'La Custode era la regina. Lo sapevo. Era il mio lavoro far finta di no.' },
+    ],
+    custode: [
+        { ch: 6, line: (c) => pickAns(c, 6, [
+            'Ascolto la nebbia anche per te. Prima o poi una voce dirà il tuo nome.',
+            'Il posto che cerchi ti aspetta. Io ho aspettato il mio volto per trecento anni: si può fare.',
+            'Quel sapore tornerà quando non lo chiami. Smetti di chiamarlo.',
+        ]) },
+        { ch: 7, line: (c) => c.ans[7] === 0
+            ? 'Hai indossato la corona. Lui la portava così: un po\' storta, come se pesasse da una parte sola.'
+            : 'La corona nel fango. Anch\'io l\'avrei lasciata lì, se qualcuno me l\'avesse chiesto.' },
+        { ch: 8, line: () => 'Il biglietto di ritorno si stacca qui, quando la carta ha finito di crescere. Non c\'è fretta. Qui nessuno ne ha.' },
+    ],
+    sarta: [
+        { ch: 1, line: () => 'Mastro Brace ti ha vestito di ferro. Quando vorrai vestirti di qualcos\'altro, sai dove trovarmi.' },
+        { ch: 4, line: () => 'Le pietre dicono che hai il loro modo di stare in piedi. Si corregge, con una buona giacca.' },
+        { ch: 7, line: () => 'Sette semi nella cornice. Ci vorrebbe un mantello all\'altezza. Ne ho uno. Costa.' },
+    ],
+    mercante: [
+        { ch: 2, line: () => 'Le pagine del naufrago: te le compro. No? Peccato, al Bazar varrebbero oro.' },
+        { ch: 6, line: () => 'Un volto nel cassetto, e l\'hai riportato gratis? Hai il cuore buono e il fiuto per gli affari pessimo.' },
+        { ch: 7, line: (c) => c.ans[7] === 0
+            ? 'Una corona vera! Se mai la vendi, il cinque per cento lo trattengo io. Anzi, il dieci: è una corona.'
+            : 'Hai buttato una corona nel fango. Gratis. Mi sento male solo a pensarci.' },
+    ],
+    ratto: [
+        { ch: 1, line: () => 'I Cronisti leggono il tuo libro. Io no. Quasi mai. La pagina della Brace, comunque, era bella.' },
+        { ch: 4, line: () => 'Nella Stanza Bianca si parla di te. Bene, quasi sempre.' },
+        { ch: 8, line: (c) => c.nome ? `«${c.nome}». L'ho scritto sulla porta della Stanza Bianca. A matita, nel caso cambi idea.` : null },
+    ],
+};
+// le battute di un abitante che ricordano la tua storia, dalla più recente
+export function npcMemory(id, c, ch) {
+    const out = [];
+    for (const m of MEMORY[id] || []) if (ch > m.ch) { const l = m.line(c); if (l) out.push(l); }
+    return out.reverse();
 }
