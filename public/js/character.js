@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { ITEMS, MATERIALS, HANDLES, GEMS, ELEMENTS, sanitizeAppearance } from './shared/catalog.js';
-import { Relief } from './realism.js';
+import { Relief, tileHeights } from './realism.js';
 
 // bagliore morbido per scie, infusioni e aure (una sola texture per tutti)
 let glowTex = null;
@@ -670,6 +670,280 @@ function faceTextures(a) {
     return res;
 }
 
+// --- MATERIALI DELLE ARMI ---
+// trame disegnate una volta sola: acciaio spazzolato lungo la lama, venatura del legno, scaglie dell'ossidiana, pori dell'osso, rune
+const wTex = new Map();
+function wTexture(name, make) { let t = wTex.get(name); if (!t) { t = make(); wTex.set(name, t); } return t; }
+const canvasTex = (c, rx, ry, cs = THREE.NoColorSpace) => {
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.colorSpace = cs; t.anisotropy = 4;
+    return t;
+};
+// ruvidità dell'acciaio: righe fini nel senso della lama, qualche graffio di traverso, piccoli pori
+function brushedTex() {
+    return wTexture('brushed', () => {
+        const n = 256, c = document.createElement('canvas'); c.width = c.height = n;
+        const g = c.getContext('2d'), r = rng(11);
+        g.fillStyle = 'rgb(150,150,150)'; g.fillRect(0, 0, n, n);
+        for (let x = 0; x < n; x++) { const v = 150 + (r() - 0.5) * 50 | 0; g.fillStyle = `rgba(${v},${v},${v},0.55)`; g.fillRect(x, 0, 1, n); }
+        g.lineCap = 'round';
+        for (let i = 0; i < 260; i++) {
+            const x = r() * n, y = r() * n, a = Math.PI / 2 + (r() - 0.5) * (r() < 0.8 ? 0.25 : 2.4), l = 6 + r() * 40, v = r() < 0.5 ? 95 + r() * 30 : 185 + r() * 40;
+            g.strokeStyle = `rgba(${v | 0},${v | 0},${v | 0},${0.25 + r() * 0.4})`; g.lineWidth = 0.4 + r() * 0.7;
+            g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+        }
+        for (let i = 0; i < 120; i++) { const v = 200 + r() * 40 | 0; g.fillStyle = `rgba(${v},${v},${v},0.6)`; g.beginPath(); g.arc(r() * n, r() * n, 0.6 + r() * 1.2, 0, 7); g.fill(); }
+        return canvasTex(c, 1 / 0.06, 1 / 0.25);
+    });
+}
+// venatura del legno: fibre lunghe nel senso dell'asta, con qualche nodo appena accennato
+function grainTex() {
+    return wTexture('grain', () => {
+        const n = 256, c = document.createElement('canvas'); c.width = c.height = n;
+        const g = c.getContext('2d'), r = rng(23), img = g.createImageData(n, n), d = img.data;
+        const ph = Array.from({ length: 8 }, () => r() * 6.28);
+        for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+            const w = x + 6 * Math.sin(y / n * 6.283 * 2 + ph[0]) + 3 * Math.sin(y / n * 6.283 * 5 + ph[1]);
+            const ring = 0.5 + 0.5 * Math.sin(w / n * 6.283 * 9 + 2 * Math.sin(w / n * 6.283 * 2 + ph[2]));
+            const fib = 0.5 + 0.5 * Math.sin(x * 2.1 + ph[3] + Math.sin(y * 0.05) * 2);
+            const v = 0.8 + 0.14 * ring ** 3 - 0.05 * fib + (r() - 0.5) * 0.04;
+            const i = (y * n + x) * 4; d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, v * 255)); d[i + 3] = 255;
+        }
+        g.putImageData(img, 0, 0);
+        return canvasTex(c, 1 / 0.05, 1 / 0.4);
+    });
+}
+// ossidiana scheggiata: ogni cella è una piccola conca, come i distacchi della pietra lavorata
+function flakesTex() {
+    return wTexture('flakes', () => {
+        const n = 256, r = rng(41), P = Array.from({ length: 34 }, () => [r() * n, r() * n, 0.6 + r() * 0.8]), H = new Float32Array(n * n);
+        for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+            let best = 1e9, k = 1;
+            for (const [px, py, s] of P) {          // distanza sul toro: la trama si ripete senza cuciture
+                let dx = Math.abs(x - px), dy = Math.abs(y - py); dx = Math.min(dx, n - dx); dy = Math.min(dy, n - dy);
+                const dd = Math.hypot(dx, dy) * s; if (dd < best) { best = dd; k = s; }
+            }
+            H[y * n + x] = (best / 34) ** 2 * 0.7 + 0.04 * Math.cos(best * 0.9 * k);
+        }
+        const rel = new Relief(2.6, n);
+        const t = rel.like({ wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, repeat: new THREE.Vector2(1 / 0.07, 1 / 0.07), anisotropy: 4 });
+        rel.bake(H);
+        return t;
+    });
+}
+// osso: grana porosa e qualche crepa sottile
+function boneTex() {
+    return wTexture('bone', () => {
+        const n = 256, r = rng(57), H = tileHeights(n, 9);
+        for (let i = 0; i < 400; i++) { const x = r() * n | 0, y = r() * n | 0; for (let a = -1; a <= 1; a++) for (let b = -2; b <= 2; b++) H[((y + b + n) % n) * n + (x + a + n) % n] -= 0.12; }
+        for (let k = 0; k < 7; k++) {
+            let x = r() * n, y = r() * n, a = Math.PI / 2 + (r() - 0.5) * 0.6;
+            for (let s = 0; s < 70; s++) { a += (r() - 0.5) * 0.5; x += Math.cos(a); y += Math.sin(a); H[((y | 0) % n + n) % n * n + (((x | 0) % n) + n) % n] -= 0.35; }
+        }
+        const rel = new Relief(1.6, n);
+        const t = rel.like({ wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, repeat: new THREE.Vector2(1 / 0.08, 1 / 0.08), anisotropy: 4 });
+        rel.bake(H);
+        // colore: ingiallito a chiazze, più scuro nei pori e nelle crepe
+        const c = document.createElement('canvas'); c.width = c.height = n;
+        const g = c.getContext('2d'), img = g.createImageData(n, n), d = img.data;
+        let lo = 1e9, hi = -1e9; for (const v of H) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+        for (let i = 0; i < n * n; i++) { const v = (H[i] - lo) / (hi - lo), k = 0.62 + 0.38 * v ** 0.6; d[i * 4] = 255 * k; d[i * 4 + 1] = 248 * k; d[i * 4 + 2] = 228 * k; d[i * 4 + 3] = 255; }
+        g.putImageData(img, 0, 0);
+        t.userData.col = canvasTex(c, 1 / 0.08, 1 / 0.08);
+        return t;
+    });
+}
+// rune dell'argento spettrale: una fila di segni al centro della lama, nero tutto attorno
+function runeTex() {
+    return wTexture('rune', () => {
+        const w = 64, h = 512, c = document.createElement('canvas'); c.width = w; c.height = h;
+        const g = c.getContext('2d'), r = rng(73);
+        g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+        g.strokeStyle = '#fff'; g.lineWidth = 2.6; g.lineCap = 'round'; g.shadowColor = '#fff'; g.shadowBlur = 5;
+        for (let y = 20; y < h - 20; y += 46) {
+            const cx = w / 2, top = y, bot = y + 32;
+            g.beginPath(); g.moveTo(cx, top); g.lineTo(cx, bot);
+            for (let k = 0; k < 2; k++) { const yy = top + r() * 28, s = r() < 0.5 ? -1 : 1; g.moveTo(cx, yy); g.lineTo(cx + s * (6 + r() * 6), yy + (r() - 0.5) * 16); }
+            g.stroke();
+        }
+        const t = canvasTex(c, 1 / 0.016, 1 / 0.26);
+        t.wrapS = THREE.ClampToEdgeWrapping; t.offset.x = 0.5;
+        return t;
+    });
+}
+function woodMat(color) {
+    if (!HQ) return stdMat(color, { r: 0.62 });
+    return accMat('wood' + color, () => {
+        const t = grainTex();
+        return new THREE.MeshPhysicalMaterial({ color, map: t, bumpMap: t, bumpScale: 1.2, roughness: 0.58, clearcoat: 0.18, clearcoatRoughness: 0.5 });
+    });
+}
+function boneMat(color) {
+    if (!HQ) return stdMat(color, { r: 0.55 });
+    return accMat('bone' + color, () => new THREE.MeshPhysicalMaterial({
+        color, roughness: 0.5, normalMap: boneTex(), map: boneTex().userData.col, normalScale: new THREE.Vector2(0.9, 0.9), clearcoat: 0.2, clearcoatRoughness: 0.45,
+        sheen: 0.35, sheenRoughness: 0.6, sheenColor: new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.4),
+    }));
+}
+// ogni materiale della Forgia dà quattro finiture: piatto della lama, filo affilato, parti forgiate (occhio, gorbia), decori
+const WFIN = {
+    legno: { flat: ['#8a5f38', 0, 0.58], edge: ['#9a6c42', 0, 0.5], forged: ['#7a5230', 0, 0.62] },
+    ferro: { flat: ['#c0c6cd', 1, 0.44], edge: ['#d9dde2', 1, 0.15], forged: ['#4d5055', 0.85, 0.58] },
+    osso: { flat: ['#e8dcbc', 0, 0.5], edge: ['#f4ecd6', 0, 0.42], forged: ['#d6c8a4', 0, 0.55] },
+    ossidiana: { flat: ['#0e0913', 0, 0.06], edge: ['#2b1342', 0, 0.05], forged: ['#140d1b', 0, 0.12] },
+    argento: { flat: ['#dce5f1', 1, 0.2], edge: ['#f3f7ff', 1, 0.1], forged: ['#c9d3e2', 1, 0.28] },
+    oro: { flat: ['#ffcf72', 1, 0.3], edge: ['#ffe4a6', 1, 0.14], forged: ['#ecb752', 1, 0.34] },
+};
+function weaponMat(kind, part, blade = false) {
+    const runes = blade && part === 'flat' && kind === 'argento';
+    const F = WFIN[kind] || WFIN.ferro, [color, metal, rough] = F[part] || F.flat, src = MATERIALS[kind] || MATERIALS.ferro;
+    const glow = kind === 'ossidiana' ? (part === 'edge' ? ['#7a2fd0', 0.7] : ['#2a0d45', 0.25]) : kind === 'argento' && part !== 'edge' ? ['#3d6bff', runes ? 3 : 0.1] : null;
+    if (!HQ) return stdMat(color, { m: metal, r: rough + 0.08, e: glow?.[0], ei: glow ? Math.min(glow[1], 0.8) : 1 });
+    return accMat(['arma', kind, part, blade].join('|'), () => {
+        if (kind === 'legno') return woodMat(color);
+        if (kind === 'osso') return boneMat(color);
+        const m = new THREE.MeshPhysicalMaterial({ color, metalness: metal, roughness: rough });
+        // il metallo prende più luce dal cielo: senza, il piatto riflette solo il terreno e sembra nero
+        if (metal) { m.roughnessMap = brushedTex(); m.roughness = Math.min(1, rough / 0.59); m.envMapIntensity = kind === 'oro' ? 1.7 : 1.5; }
+        // sulla lama il riflesso si allunga nel senso della spazzolatura, come sull'acciaio vero
+        if (metal && blade) { m.anisotropy = part === 'edge' ? 0.4 : 0.65; m.anisotropyRotation = Math.PI / 2; }
+        if (kind === 'ossidiana') {
+            Object.assign(m, { clearcoat: 1, clearcoatRoughness: 0.03, ior: 1.5, specularIntensity: 1, normalMap: flakesTex() });
+            m.normalScale.set(0.7, 0.7);
+        }
+        if (glow) { m.emissive.set(glow[0]); m.emissiveIntensity = glow[1]; if (runes) m.emissiveMap = runeTex(); }
+        return m;
+    });
+}
+// il manico scelto alla Forgia
+function handleMat(kind, color) {
+    if (kind === 'cuoio') return clothMat(color, 'cuoio');
+    if (kind === 'seta') return clothMat(color, 'velluto');
+    if (kind === 'osso') return boneMat(color);
+    if (kind === 'oro') return HQ ? accMat('filigrana', () => new THREE.MeshPhysicalMaterial({ color: '#e8b04a', metalness: 1, roughness: 0.3 })) : stdMat(color, { m: 0.9, r: 0.35 });
+    return woodMat(color);
+}
+
+// lama forgiata: f(s) dà per ogni stazione il centro (x,y), le mezze larghezze verso il filo (we) e verso il dorso (wb),
+// il mezzo spessore al centro (t), quello del dorso se a un filo solo (tb), quanto resta prima dello smusso (k) e lo sguscio (fd).
+// Le facce sono pezzi separati: lo smusso del filo e la costola centrale restano spigoli netti che prendono la luce.
+function bladeGeo(key, n, f, { m = 4, flip = false, eb = 0.75, ful = 0 } = {}) {
+    return geo('bl' + key, () => {
+        const st = [];
+        for (let i = 0; i <= n; i++) st.push({ k: 0.42, fd: 0, tb: 0, ...f(i / n) });
+        let L = 0;
+        st.forEach((d, i) => {
+            const a = st[Math.max(i - 1, 0)], b = st[Math.min(i + 1, n)];
+            let tx = b.x - a.x, ty = b.y - a.y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+            d.ax = flip ? -ty : ty; d.ay = flip ? tx : -tx;
+            if (i) L += Math.hypot(d.x - st[i - 1].x, d.y - st[i - 1].y);
+            d.v = L;
+        });
+        const prof = (d, u) => {
+            const a = Math.abs(u);
+            let z;
+            if (u < 0 && d.tb > 0) z = d.t + (d.tb - d.t) * a * a;
+            else { const tk = d.t * d.k; z = a < eb ? d.t - (d.t - tk) * a / eb : tk * (1 - (a - eb) / (1 - eb)); }
+            if (ful && a < ful && !(u < 0 && d.tb > 0)) z -= d.fd * 0.5 * (1 + Math.cos(Math.PI * a / ful));
+            return Math.max(z, 0.0004);
+        };
+        const pos = [], uv = [], idxF = [], idxE = [];
+        const patch = (pt, rows, cols, flipW, idx = idxF) => {
+            const base = pos.length / 3;
+            for (let i = 0; i <= rows; i++) for (let j = 0; j <= cols; j++) { const [p, q] = pt(i, j); pos.push(...p); uv.push(...q); }
+            for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+                const a = base + i * (cols + 1) + j, b = a + cols + 1;
+                if (flipW) idx.push(a, b, a + 1, a + 1, b, b + 1); else idx.push(a, a + 1, b, a + 1, b + 1, b);
+            }
+        };
+        const brk = [0, ...(ful ? [ful] : []), eb, 1];
+        const single = st.some(d => d.tb > 0);
+        for (const h of [1, -1]) {
+            const ivs = h < 0 && single ? [[0, 1]] : brk.slice(0, -1).map((u, i) => [u, brk[i + 1]]);
+            for (const [u0, u1] of ivs) for (const sg of [1, -1]) {
+                const cols = h < 0 && single ? m * 2 : m;
+                patch((i, j) => {
+                    const d = st[i], uu = u0 + (u1 - u0) * j / cols, ac = h * uu * (h > 0 ? d.we : d.wb);
+                    return [[d.x + d.ax * ac, d.y + d.ay * ac, sg * prof(d, h * uu)], [ac, d.v]];
+                }, n, cols, sg * h * (flip ? -1 : 1) < 0, u0 >= eb ? idxE : idxF);
+            }
+        }
+        if (single) {   // dorso arrotondato della lama a un filo solo
+            const K = 6;
+            patch((i, k) => {
+                const d = st[i], ph = Math.PI / 2 - k / K * Math.PI, ac = -d.wb - Math.cos(ph) * d.tb * 0.7;
+                return [[d.x + d.ax * ac, d.y + d.ay * ac, Math.sin(ph) * d.tb], [ac + k * 0.002, d.v]];
+            }, n, K, !!flip);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        g.setIndex([...idxF, ...idxE]); g.computeVertexNormals();
+        g.addGroup(0, idxF.length, 0); g.addGroup(idxF.length, idxE.length, 1);   // piatto e filo hanno finiture diverse
+        g.userData.metric = true;
+        return g;
+    });
+}
+// impugnatura o asta tornita: il tipo di manico decide il rilievo (cuoio a spirale, seta a rombi, filo d'oro, anelli d'osso)
+function gripGeo(key, y0, y1, r0, r1, kind, { ox = 1, bx = null, bz = null, seg = 18, swell = 0.06 } = {}) {
+    return geo('gr' + key + kind, () => {
+        const L = y1 - y0, dense = kind === 'oro' ? 900 : kind === 'legno' ? 50 : kind === 'nodoso' ? 160 : 420;
+        const rows = Math.max(6, Math.round(L * dense)), pos = [], uv = [], idx = [], TAU = Math.PI * 2;
+        const fr = x => ((x % 1) + 1) % 1;
+        for (let i = 0; i <= rows; i++) {
+            const s = i / rows, y = y0 + L * s, rb = (r0 + (r1 - r0) * s) * (1 + swell * Math.sin(Math.PI * s));
+            for (let j = 0; j <= seg; j++) {
+                const th = j / seg * TAU;
+                let d = 0;
+                if (kind === 'cuoio') d = 0.1 * Math.sqrt(Math.sin(Math.PI * fr(y / 0.017 + th / TAU))) - 0.05;
+                else if (kind === 'seta') d = 0.09 * Math.sqrt(Math.min(Math.sin(Math.PI * fr(y / 0.024 + th / Math.PI)), Math.sin(Math.PI * fr(y / 0.024 - th / Math.PI)))) - 0.04;
+                else if (kind === 'oro') d = 0.06 * Math.sin(Math.PI * fr(y / 0.0045 + th / TAU * 2)) - 0.02 + 0.05 * Math.sin(Math.PI * fr(y / 0.03));
+                else if (kind === 'osso') d = 0.12 * Math.min(1, Math.sin(Math.PI * fr(y / 0.028)) * 2.2) - 0.07;
+                else if (kind === 'nodoso') {
+                    d = 0.06 * Math.sin(7 * th + y * 22) + 0.03 * Math.sin(3 * th - y * 9);
+                    for (const [yk, tk] of [[0.12, 1], [0.55, 4], [0.86, 2.2], [1.02, 5.3]]) d += 0.3 * Math.exp(-(((y - yk) / 0.025) ** 2) - ((Math.atan2(Math.sin(th - tk), Math.cos(th - tk)) / 0.5) ** 2));
+                }
+                const r = rb * (1 + d);
+                pos.push(Math.sin(th) * r * ox + (bx ? bx(y) : 0), y, Math.cos(th) * r + (bz ? bz(y) : 0));
+                uv.push(th * rb, y);
+            }
+        }
+        for (let i = 0; i < rows; i++) for (let j = 0; j < seg; j++) {
+            const a = i * (seg + 1) + j, b = a + seg + 1;
+            idx.push(a, b, a + 1, a + 1, b, b + 1);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        g.setIndex(idx); g.computeVertexNormals();
+        const nr = g.attributes.normal;               // niente spigolo sulla cucitura
+        for (let i = 0; i <= rows; i++) {
+            const a = i * (seg + 1), b = a + seg;
+            _v1.fromBufferAttribute(nr, a).add(_v2.fromBufferAttribute(nr, b)).normalize();
+            nr.setXYZ(a, _v1.x, _v1.y, _v1.z); nr.setXYZ(b, _v1.x, _v1.y, _v1.z);
+        }
+        g.userData.metric = true;
+        return g;
+    });
+}
+// divide una geometria in due gruppi (0 e 1) secondo dove cade il centro di ogni triangolo: serve per dare il filo lucido
+function splitGroups(g, test) {
+    const ix = g.index.array, P = g.attributes.position, a = [], b = [], c = new THREE.Vector3();
+    for (let i = 0; i < ix.length; i += 3) {
+        c.set(0, 0, 0); for (let k = 0; k < 3; k++) c.x += P.getX(ix[i + k]) / 3, c.y += P.getY(ix[i + k]) / 3, c.z += P.getZ(ix[i + k]) / 3;
+        (test(c) ? b : a).push(ix[i], ix[i + 1], ix[i + 2]);
+    }
+    g.setIndex([...a, ...b]); g.clearGroups(); g.addGroup(0, a.length, 0); g.addGroup(a.length, b.length, 1);
+    return g;
+}
+// pietra tagliata a brillante, la tavola guarda verso +z
+const gemGeo = r => geo('gemcut' + r, () => {
+    let l = new THREE.LatheGeometry([[0.0001, -0.85], [0.6, -0.2], [1, -0.02], [1, 0.06], [0.62, 0.34], [0.0001, 0.34]].map(([a, b]) => new THREE.Vector2(a * r, b * r)), 8);
+    l = l.toNonIndexed(); l.computeVertexNormals(); l.rotateX(Math.PI / 2);
+    return l;
+});
+const v2 = pts => pts.map(([r, y]) => new THREE.Vector2(r, y));
+
 // =====================================================================
 //  ARMI (Forgia)
 // =====================================================================
@@ -679,67 +953,125 @@ export function buildWeapon(spec) {
     const mat = MATERIALS[spec.material] || MATERIALS.ferro;
     const han = HANDLES[spec.handle] || HANDLES.legno;
     const gem = GEMS[spec.gem] || GEMS.nessuna;
-    const mm = stdMat(mat.color, { m: mat.metal, r: mat.metal ? 0.32 : 0.7, e: mat.emissive, ei: mat.emissive ? 0.6 : 1 });
-    const hm = stdMat(han.color, { r: 0.6, m: spec.handle === 'oro' ? 0.9 : 0 });
-    const gm = gem.color ? stdMat(gem.color, { e: gem.color, ei: 1.6, r: 0.2, m: 0.3 }) : null;
+    const hk = HANDLES[spec.handle] ? spec.handle : 'legno';
+    const wood = spec.material === 'legno';
+    const mk = WFIN[spec.material] ? spec.material : 'ferro';
+    const mm = weaponMat(mk, 'flat'), fm = weaponMat(mk, 'forged');
+    const bladeM = [weaponMat(mk, 'flat', true), weaponMat(mk, 'edge', true)];   // piatto (con le rune) e filo affilato
+    const hm = handleMat(hk, han.color);
+    const shaftM = woodMat('#7a5634');                           // aste di frassino
+    const gm = gem.color ? gemMat(gem.color, 0.6) : null;
     const add = (gg, m, x, y, z, rx = 0, ry = 0, rz = 0) => { const me = M(gg, m, x, y, z); me.rotation.set(rx, ry, rz); g.add(me); return me; };
-    const gemAt = (x, y, z, r = 0.035) => { if (gm) add(geo('gem' + r, () => new THREE.OctahedronGeometry(r)), gm, x, y, z); };
+    // gemma incastonata con quattro griffe
+    const gemAt = (x, y, z, r = 0.02, ry = 0) => {
+        if (!gm) return;
+        const s = add(gemGeo(r), gm, x, y, z, 0, ry, 0);
+        for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + i * Math.PI / 2; s.add(M(sphere(r * 0.2, 8, 6), fm, Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95, r * 0.1)); }
+    };
+    // la parte dell'asta dove si impugna, rivestita col manico scelto
+    const wrap = (key, y0, y1, r, o = {}) => { if (hk !== 'legno') add(gripGeo(key, y0, y1, r * 1.12, r * 1.1, hk, { swell: 0, ...o }), hm, 0, 0, 0); };
+    const knob = (key, y, r) => add(lathe('knob' + key, [[0.0001, -0.022], [r * 0.9, -0.02], [r * 1.25, -0.008], [r * 1.15, 0.008], [r * 0.95, 0.03]], 18), mm, 0, y, 0);
     switch (spec.type) {
-        case 'spada':
-            add(cyl(0.022, 0.022, 0.24, 8), hm, 0, 0, 0);
-            add(sphere(0.035, 10, 8), hm, 0, -0.13, 0);
-            add(box(0.24, 0.035, 0.05), mm, 0, 0.13, 0);
-            add(box(0.065, 0.72, 0.018), mm, 0, 0.5, 0);
-            add(geo('swtip', () => new THREE.ConeGeometry(0.046, 0.12, 4)), mm, 0, 0.92, 0, 0, Math.PI / 4, 0).scale.set(1, 1, 0.28);
-            gemAt(0, 0.13, 0.03);
+        case 'spada': {
+            // spada da lato: pomo a ruota, manico fasciato, guardia appena curva, lama a rombo con sguscio
+            add(geo('pomoRuota', () => new THREE.LatheGeometry(v2([[0.0001, -0.013], [0.024, -0.013], [0.033, -0.007], [0.034, 0], [0.033, 0.007], [0.024, 0.013], [0.0001, 0.013]]), 28).rotateX(Math.PI / 2)), mm, 0, -0.152, 0);
+            add(sphere(0.0065, 10, 8), mm, 0, -0.187, 0);
+            add(gripGeo('spada', -0.125, 0.098, 0.0155, 0.0135, hk, { ox: 1.18 }), hm, 0, 0, 0);
+            add(cyl(0.017, 0.016, 0.012, 16), mm, 0, 0.1, 0);
+            add(sweep('guardiaSp', [new THREE.Vector3(-0.115, 0.136, 0), new THREE.Vector3(-0.055, 0.119, 0), new THREE.Vector3(0, 0.115, 0), new THREE.Vector3(0.055, 0.119, 0), new THREE.Vector3(0.115, 0.136, 0)], s => 0.0062 + 0.0042 * Math.sin(Math.PI * s), { n: 28, seg: 10, flat: 0.8 }), mm, 0, 0, 0);
+            for (const s of [-1, 1]) add(sphere(0.0095, 12, 10), mm, s * 0.117, 0.137, 0);
+            add(rbox(0.036, 0.03, 0.026, 0.005), mm, 0, 0.117, 0);
+            add(bladeGeo('spada' + (wood ? 'L' : ''), 44, s => {
+                let w = 0.0275 - 0.0065 * s, t = (wood ? 0.0095 : 0.0055) * (1 - 0.45 * s);
+                if (s > 0.8) w *= Math.sqrt(Math.max(0, 1 - ((s - 0.8) / 0.2) ** 2));
+                if (s > 0.86) t *= Math.max(0.12, 1 - (s - 0.86) / 0.14 * 0.88);
+                return { x: 0, y: 0.13 + 0.85 * s, we: w, wb: w, t, k: wood ? 0.8 : 0.42, fd: wood ? 0 : 0.0019 * Math.max(0, 1 - s / 0.66) };
+            }, { eb: wood ? 0.6 : 0.8, ful: wood ? 0 : 0.3 }), bladeM, 0, 0, 0);
+            gemAt(0, -0.152, 0.0135, 0.021);
             break;
-        case 'pugnale':
-            add(cyl(0.02, 0.02, 0.15, 8), hm, 0, 0, 0);
-            add(box(0.14, 0.03, 0.04), mm, 0, 0.09, 0);
-            add(box(0.05, 0.3, 0.014), mm, 0, 0.25, 0);
-            add(geo('dgtip', () => new THREE.ConeGeometry(0.035, 0.08, 4)), mm, 0, 0.44, 0, 0, Math.PI / 4, 0).scale.set(1, 1, 0.3);
-            gemAt(0, -0.09, 0, 0.03);
+        }
+        case 'pugnale': {
+            // daga a "H": due barrette curve chiudono il manico, lama triangolare con la costola al centro
+            add(gripGeo('pugnale', -0.07, 0.072, 0.0135, 0.0135, hk, { ox: 1.2 }), hm, 0, 0, 0);
+            add(sweep('dagaPomo', [new THREE.Vector3(-0.045, -0.066, 0), new THREE.Vector3(-0.022, -0.078, 0), new THREE.Vector3(0, -0.081, 0), new THREE.Vector3(0.022, -0.078, 0), new THREE.Vector3(0.045, -0.066, 0)], s => 0.0068 + 0.002 * Math.sin(Math.PI * s), { n: 20, seg: 10, flat: 0.8 }), mm, 0, 0, 0);
+            add(sweep('dagaGuard', [new THREE.Vector3(-0.05, 0.09, 0), new THREE.Vector3(-0.024, 0.079, 0), new THREE.Vector3(0, 0.076, 0), new THREE.Vector3(0.024, 0.079, 0), new THREE.Vector3(0.05, 0.09, 0)], s => 0.0068 + 0.002 * Math.sin(Math.PI * s), { n: 20, seg: 10, flat: 0.8 }), mm, 0, 0, 0);
+            for (const y of [-0.067, 0.091]) for (const s of [-1, 1]) add(sphere(0.008, 10, 8), mm, s * 0.047, y, 0);
+            add(bladeGeo('pugnale', 30, s => ({ x: 0, y: 0.08 + 0.4 * s, we: 0.0215 * (1 - s) ** 0.85 + 0.0003, wb: 0.0215 * (1 - s) ** 0.85 + 0.0003, t: 0.0068 * (1 - 0.8 * s) + 0.0004, k: 0.32 }), { eb: 0.86 }), bladeM, 0, 0, 0);
+            gemAt(0, -0.081, 0.01, 0.017);
             break;
+        }
         case 'ascia': {
-            add(cyl(0.024, 0.026, 0.95, 8), hm, 0, 0.3, 0);
-            const sh = new THREE.Shape();
-            sh.moveTo(0, -0.08); sh.quadraticCurveTo(0.2, -0.2, 0.26, -0.02); sh.quadraticCurveTo(0.3, 0.12, 0.24, 0.24);
-            sh.quadraticCurveTo(0.18, 0.12, 0, 0.12); sh.lineTo(0, -0.08);
-            const hg = geo('axehead', () => new THREE.ExtrudeGeometry(sh, { depth: 0.025, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.008, bevelSegments: 1 }));
-            add(hg, mm, 0.02, 0.62, -0.0125);
-            add(box(0.06, 0.12, 0.06), mm, 0, 0.66, 0);
-            gemAt(0, 0.66, 0.04);
+            // ascia barbuta: occhio forgiato attorno al manico, lama che si assottiglia fino al filo
+            const bend = y => 0.014 * Math.sin(Math.PI * (y + 0.17) / 0.85);
+            add(gripGeo('asciaManico', -0.17, 0.78, 0.0175, 0.0155, 'legno', { ox: 1.28, bx: bend, swell: 0.04 }), shaftM, 0, 0, 0);
+            wrap('ascia', -0.13, 0.13, 0.017, { ox: 1.28, bx: bend });
+            add(lathe('asciaPomo', [[0.0001, -0.02], [0.02, -0.018], [0.024, -0.005], [0.019, 0.02]], 18), shaftM, 0, -0.17, 0);
+            add(geo('asciaTesta', () => splitGroups(loft('axeblade', [
+                [-0.034, 0.013, 0.026, 0], [-0.016, 0.017, 0.034, 0], [0.02, 0.016, 0.045, 0], [0.055, 0.0095, 0.029, -0.001], [0.09, 0.0072, 0.038, -0.012],
+                [0.13, 0.0055, 0.065, -0.035], [0.17, 0.0042, 0.099, -0.061], [0.21, 0.003, 0.125, -0.075], [0.24, 0.002, 0.1385, -0.0765], [0.255, 0.0013, 0.139, -0.073],
+            ], { p: 3.6, seg: 28, capA: 0.5, capB: 0.4 }).clone().applyMatrix4(new THREE.Matrix4().set(0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1)), c => c.x > 0.224)), [mm, weaponMat(mk, 'edge')], 0, 0.68, 0);
+            add(loft('axeeye', [[0.07, 0.025, 0.021], [0.055, 0.028, 0.023], [-0.045, 0.028, 0.023], [-0.065, 0.025, 0.021]], { p: 2.6, seg: 24, capA: 0.4, capB: 0.4 }), fm, 0, 0.68, 0);
+            add(box(0.012, 0.012, 0.03), shaftM, 0, 0.752, 0);
+            gemAt(0, 0.68, 0.024, 0.022);
             break;
         }
-        case 'martello':
-            add(cyl(0.026, 0.028, 0.9, 8), hm, 0, 0.28, 0);
-            add(rbox(0.36, 0.2, 0.2, 0.03), mm, 0, 0.75, 0);
-            add(cyl(0.11, 0.11, 0.04, 12), mm, 0.19, 0.75, 0, 0, 0, Math.PI / 2);
-            add(cyl(0.11, 0.11, 0.04, 12), mm, -0.19, 0.75, 0, 0, 0, Math.PI / 2);
-            gemAt(0, 0.75, 0.11, 0.045);
+        case 'martello': {
+            // martello da guerra: faccia ottagonale da una parte, becco dall'altra, punta in cima, bande di ferro sul manico
+            add(gripGeo('martManico', -0.17, 0.74, 0.0185, 0.0165, 'legno', { ox: 1.15, swell: 0.03 }), shaftM, 0, 0, 0);
+            wrap('martello', -0.13, 0.13, 0.0185, { ox: 1.15 });
+            knob('mart', -0.165, 0.0185);
+            for (const s of [-1, 1]) add(box(0.005, 0.22, 0.013), fm, s * 0.021, 0.6, 0);
+            for (const y of [0.495, 0.71]) for (const s of [-1, 1]) add(sphere(0.004, 8, 6), fm, s * 0.0245, y, 0);
+            add(rbox(0.07, 0.11, 0.072, 0.012), fm, 0, 0.76, 0);
+            add(geo('martFaccia', () => splitGroups(new THREE.LatheGeometry(v2([[0.0001, 0], [0.04, 0], [0.044, 0.05], [0.055, 0.1], [0.06, 0.118], [0.06, 0.124], [0.053, 0.134], [0.0001, 0.134]]), 8).rotateY(Math.PI / 8).rotateZ(-Math.PI / 2), c => c.x > 0.117)), [mm, weaponMat(mk, 'edge')], 0.03, 0.76, 0);
+            add(sweep('martBecco', [new THREE.Vector3(-0.03, 0.765, 0), new THREE.Vector3(-0.1, 0.768, 0), new THREE.Vector3(-0.17, 0.752, 0), new THREE.Vector3(-0.235, 0.712, 0)], s => 0.028 * (1 - s) ** 0.85 + 0.0015, { n: 20, seg: 4, flat: 0.55 }), mm, 0, 0, 0);
+            add(cone(0.02, 0.12, 4), mm, 0, 0.87, 0, 0, Math.PI / 4, 0);
+            gemAt(0, 0.76, 0.037, 0.027);
             break;
-        case 'lancia':
-            add(cyl(0.02, 0.022, 1.7, 8), hm, 0, 0.5, 0);
-            add(cone(0.06, 0.3, 4), mm, 0, 1.48, 0);
-            add(torus(0.035, 0.012), mm, 0, 1.33, 0, Math.PI / 2);
-            gemAt(0, 1.3, 0, 0.04);
+        }
+        case 'lancia': {
+            // lancia: asta di frassino, gorbia conica inchiodata, punta a foglia con costola, puntale in fondo
+            add(gripGeo('lanciaAsta', -0.35, 1.32, 0.0185, 0.016, 'legno', { swell: 0.02 }), shaftM, 0, 0, 0);
+            wrap('lancia', -0.13, 0.13, 0.0182);
+            add(lathe('lanciaPuntale', [[0.0001, -0.43], [0.008, -0.41], [0.019, -0.36], [0.02, -0.34]], 16), fm, 0, 0, 0);
+            add(lathe('lanciaGorbia', [[0.0185, 1.29], [0.023, 1.3], [0.023, 1.314], [0.0195, 1.322], [0.0155, 1.39], [0.009, 1.425], [0.0001, 1.44]], 20), fm, 0, 0, 0);
+            add(cyl(0.0035, 0.0035, 0.046, 8), fm, 0, 1.345, 0, Math.PI / 2);
+            add(bladeGeo('lancia', 34, s => {
+                const w = 0.005 + 0.042 * Math.sin(Math.PI * Math.min(1, s ** 0.72)) * (1 - 0.1 * s);
+                return { x: 0, y: 1.415 + 0.27 * s, we: w, wb: w, t: 0.0095 * (1 - 0.8 * s) + 0.0005, k: 0.28 };
+            }, { eb: 0.84 }), bladeM, 0, 0, 0);
+            gemAt(0, 1.307, 0.024, 0.019);
             break;
+        }
         case 'falce': {
-            add(cyl(0.022, 0.024, 1.5, 8), hm, 0, 0.45, 0);
-            const bl = add(geo('scythe', () => new THREE.TorusGeometry(0.42, 0.03, 4, 20, Math.PI * 0.55)), mm, -0.42, 1.18, 0, 0, 0, -0.1);
-            bl.scale.set(1, 1, 0.35);
-            gemAt(0, 1.2, 0.03, 0.045);
+            // falce da guerra: manico curvo con la manopola, lama a un filo con il dorso rinforzato
+            const bend = y => 0.03 * Math.sin(Math.PI * (y + 0.3) / 1.52);
+            add(gripGeo('falceManico', -0.3, 1.22, 0.0175, 0.0155, 'legno', { bx: bend, swell: 0.02 }), shaftM, 0, 0, 0);
+            wrap('falce', -0.13, 0.13, 0.017, { bx: bend });
+            add(cyl(0.011, 0.013, 0.1, 10), shaftM, bend(0.55) + 0.055, 0.55, 0, 0, 0, Math.PI / 2);
+            add(torus(0.021, 0.0055), fm, bend(1.15), 1.15, 0, Math.PI / 2);
+            add(rbox(0.05, 0.05, 0.016, 0.005), fm, -0.012, 1.185, 0);
+            add(bladeGeo('falce', 44, s => {
+                const w = 0.058 * (1 - s) ** 0.7 + 0.0006;
+                return { x: -0.03 - 0.72 * s, y: 1.19 + 0.06 * Math.sin(Math.PI * s * 0.9) - 0.17 * s ** 3, we: w, wb: 0.004 * (1 - s) + 0.0008, t: 0.0032 * (1 - 0.5 * s) + 0.0004, tb: 0.0055 * (1 - 0.6 * s) + 0.0006, k: 0.5 };
+            }, { flip: true, eb: 0.72 }), bladeM, 0, 0, 0);
+            gemAt(bend(1.15), 1.15, 0.027, 0.02);
             break;
         }
-        case 'bastone':
-            add(cyl(0.025, 0.03, 1.5, 8), hm, 0, 0.45, 0);
-            for (let i = 0; i < 3; i++) {
-                const a = i / 3 * Math.PI * 2;
-                add(cone(0.018, 0.2, 5), mm, Math.cos(a) * 0.06, 1.25, Math.sin(a) * 0.06, Math.sin(a) * 0.3, 0, -Math.cos(a) * 0.3);
-            }
-            if (gm) add(sphere(0.075, 14, 10), gm, 0, 1.3, 0);
-            else add(sphere(0.06, 12, 8), mm, 0, 1.28, 0);
+        case 'bastone': {
+            // bastone: legno nodoso e ritorto, artigli di metallo che stringono la gemma, ghiere
+            const bx = y => 0.012 * Math.sin(y * 5.3) + 0.006 * Math.sin(y * 13), bz = y => 0.01 * Math.cos(y * 4.1);
+            add(gripGeo('bastone', -0.3, 1.19, 0.026, 0.021, 'nodoso', { bx, bz, swell: 0.05 }), woodMat(hk === 'legno' ? han.color : '#5a3a1e'), 0, 0, 0);
+            wrap('bastone', -0.13, 0.13, 0.026, { bx, bz });
+            const hx = bx(1.15), hz = bz(1.15);
+            for (const y of [1.0, 1.15]) add(torus(0.024, 0.0055), mm, bx(y), y, bz(y), Math.PI / 2);
+            add(cyl(0.024, 0.02, 0.05, 14), mm, bx(-0.28), -0.28, bz(-0.28));
+            const claw = sweep('artiglio', [new THREE.Vector3(0.022, 1.13, 0), new THREE.Vector3(0.05, 1.2, 0.006), new THREE.Vector3(0.07, 1.25, 0.012), new THREE.Vector3(0.058, 1.3, 0.01), new THREE.Vector3(0.044, 1.33, 0.004)], s => 0.0085 * (1 - s) + 0.0025, { n: 24, seg: 8, flat: 0.75 });
+            for (let i = 0; i < 4; i++) add(claw, mm, hx, 0, hz, 0, i * Math.PI / 2 + 0.3, 0);
+            if (gm) add(geo('sferaGemma', () => new THREE.IcosahedronGeometry(0.058, 1)), gm, hx, 1.28, hz);
+            else add(sphere(0.045, 24, 18), mm, hx, 1.28, hz);
             break;
+        }
     }
     g.userData.length = { spada: 1, pugnale: 0.5, ascia: 0.8, martello: 0.85, lancia: 1.6, falce: 1.5, bastone: 1.4 }[spec.type] || 1;
     return g;

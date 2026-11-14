@@ -971,7 +971,8 @@ export class World {
         for (const x of [-1.05, 1.05]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.7, 0.12), this.matWood); leg.position.set(x, 0.85, 0); rack.add(leg); }
         [['spada', 'ferro'], ['ascia', 'ferro'], ['lancia', 'ferro'], ['martello', 'ossidiana']].forEach(([type, material], i) => {
             const w = buildWeapon({ type, material, handle: 'cuoio', gem: 'nessuna', name: '' });
-            w.position.set(-0.75 + i * 0.5, 0.1, 0.08); w.rotation.set(0, 0, 0.06);
+            w.rotation.set(0, 0, 0.06); w.updateMatrixWorld(true);
+            w.position.set(-0.75 + i * 0.5, 0.03 - new THREE.Box3().setFromObject(w).min.y, 0.08);   // poggiata a terra, non dentro il pavimento
             rack.add(w);
         });
         F.solid(SW / 2 - 0.45, 1.0, 0.4, 2.2, 1.7);
