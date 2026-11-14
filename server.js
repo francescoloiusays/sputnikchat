@@ -1446,14 +1446,17 @@ io.on('connection', (socket) => {
     // --- IL PEDAGGIO DELLO SPETTRO (Ponte dei Sospiri) ---
     const tollNext = (T) => {
         const pool = INSULTS.map((_, i) => i).filter(i => !T.asked.includes(i));
-        T.q = pool[crypto.randomInt(pool.length)];
+        // metà delle volte lo Spettro sceglie un insulto di cui conosci la risposta: chi impara, vince
+        const known = pool.filter(i => T.known.includes(i));
+        const from = known.length && crypto.randomInt(2) === 0 ? known : pool;
+        T.q = from[crypto.randomInt(from.length)];
         T.asked.push(T.q);
         return T.q;
     };
     on('toll:start', (d, reply) => {
         if (!needLv(reply, TOLL.level, 'Lo Spettro del Pedaggio sfida chi è')) return;
         if (!near(TOLL.spot.x, TOLL.spot.z, TOLL.spot.r + 1.5)) return fail(reply, "Lo Spettro aspetta all'inizio del Ponte dei Sospiri");
-        me.toll = { w: 0, l: 0, asked: [], q: null };
+        me.toll = { w: 0, l: 0, asked: [], q: null, known: [...(me.p.comebacks || [])] };
         reply({ ok: true, q: tollNext(me.toll), known: me.p.comebacks });
     });
     on('toll:answer', (d, reply) => {

@@ -20,6 +20,12 @@ export const INSULTS = [
     ['Ho duellato con scope più pericolose di te.', 'E le scope ti hanno spazzato via, a quanto vedo.'],
     ['Sei così molle che ti useranno per tappare le botti.', 'E tu così vuoto che ti useranno come botte.'],
     ['La tua carta non vale neanche come segnalibro.', 'La tua invece la userei volentieri per accendere il camino.'],
+    ['Il Traghettatore ti ha portato qui per sbaglio.', 'E te per punizione: a chi tocca il ponte, a chi la barca.'],
+    ['Hai la grazia di un\'incudine che cade dalle scale.', 'Almeno l\'incudine cade una volta sola. Tu su questo ponte ci sei caduto per sempre.'],
+    ['Perfino le pietre del Cerchio cantano meglio di te.', 'Loro però stanno zitte quando parli tu. Chissà perché.'],
+    ['La Sarta non riuscirebbe a cucirti un briciolo di dignità.', 'Ha finito la stoffa: tutta usata per il tuo mantello da buffone.'],
+    ['Sei arrivato con la nebbia e te ne andrai col vento.', 'Meglio che restare su un ponte a parlare coi pesci.'],
+    ['Il re ti avrebbe fatto pulire le scuderie.', 'Il re ti ha fatto pulire il ponte. E guarda com\'è sporco.'],
 ];
 export const TOLL_START = [0, 1, 3];   // le risposte che conosce chi arriva sull'isola
 export const TOLL_LINES = {
@@ -131,6 +137,16 @@ export const ONDA_Q = [
     ['Preferiresti indossare per sempre la felpa o per sempre la Corona Spettrale?', 'La felpa', 'La corona'],
     ['Preferiresti volare a due metri da terra o diventare invisibile solo quando nessuno guarda?', 'Volare basso', 'Invisibile a vuoto'],
     ['Preferiresti un duello all\'ultimo colpo o una discussione all\'ultima parola?', 'L\'ultimo colpo', 'L\'ultima parola'],
+    ['Preferiresti sapere sempre l\'ora o sapere sempre che tempo farà fra un\'ora?', 'Sempre l\'ora', 'Il meteo fra un\'ora'],
+    ['Preferiresti che Mastro Brace ti forgiasse una chiave o una corona?', 'Una chiave', 'Una corona'],
+    ['Preferiresti che ti ricordassero tutti per una cosa sola o uno solo per tutto?', 'Da tutti, per una cosa', 'Da uno, per tutto'],
+    ['Preferiresti un Nome Vero lunghissimo o un soprannome che nessuno sa spiegare?', 'Il nome lungo', 'Il soprannome'],
+    ['Preferiresti scavare sempre la tomba sbagliata o leggere sempre l\'epitaffio al contrario?', 'La tomba sbagliata', 'L\'epitaffio al contrario'],
+    ['Preferiresti che i pesci ti rispondessero o che le bottiglie arrivassero vuote?', 'Pesci parlanti', 'Bottiglie vuote'],
+    ['Preferiresti ballare a ogni vittoria o piangere a ogni sconfitta?', 'Ballare', 'Piangere'],
+    ['Preferiresti che il telefono bianco squillasse ogni ora o mai più?', 'Ogni ora', 'Mai più'],
+    ['Preferiresti avere la faccia della Custode o la voce dello Spettro?', 'Nessuna faccia', 'La sua voce'],
+    ['Preferiresti un giorno di sole lungo una settimana o una notte lunga un mese?', 'Una settimana di sole', 'Un mese di notte'],
 ];
 export const ONDA_PLOT = [
     'Il Ratto del Bazar è in realtà tre ratti, uno sopra l\'altro, dentro un mantello.',
@@ -143,6 +159,10 @@ export const ONDA_PLOT = [
     'Il Re Annegato si è annegato apposta, per non pagare le tasse.',
     'Sotto il Cerchio di Pietre c\'è una cantina piena di spade di legno.',
     'La nebbia esce da una macchina nascosta nel mastio.',
+    'La chiave che forgia Mastro Brace apre il cassetto della Stanza Bianca.',
+    'Ossobuco il Becchino ha scavato la propria tomba e ci dorme dentro il martedì.',
+    'Lo Spettro del Pedaggio scrive gli insulti la notte, su un quaderno a righe.',
+    'Le bottiglie del Molo le butta in mare il Traghettatore, dall\'altra parte della laguna.',
 ];
 
 // --- LE TAVOLETTE DELLA CRONACA (una per seme, nascoste fra i muretti) ---
