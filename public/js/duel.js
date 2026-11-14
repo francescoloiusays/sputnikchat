@@ -6,7 +6,8 @@
 import * as THREE from 'three';
 import { Character } from './character.js';
 import { makeSky, makeWaterMaterial, glowTexture } from './world.js';
-import { FireSet, makeSconce, Gallery } from './decor.js';
+import { FireSet, Gallery } from './decor.js';
+import { buildColosseum } from './arena.js';
 import { applySky, Precipitation } from './sky.js';
 import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration, moveStart } from './shared/fight.js';
 import { ELEMENTS, ECONOMY, weaponStats, seedRelation, MATS } from './shared/catalog.js';
@@ -113,60 +114,16 @@ export class DuelView {
         moon.shadow.mapSize.set(1024, 1024);
         const sc = moon.shadow.camera; sc.left = -14; sc.right = 14; sc.top = 14; sc.bottom = -6;
         s.add(moon);
-        const L = new THREE.TextureLoader();
-        const wallT = L.load('./muro.jpg'); wallT.colorSpace = THREE.SRGBColorSpace; wallT.wrapS = wallT.wrapT = THREE.RepeatWrapping; wallT.repeat.set(6, 1);
-        const floorT = L.load('./pavimento.jpg'); floorT.colorSpace = THREE.SRGBColorSpace; floorT.wrapS = floorT.wrapT = THREE.RepeatWrapping; floorT.repeat.set(6, 1.6);
-        const wallM = new THREE.MeshStandardMaterial({ map: wallT, color: '#c9c0d6', roughness: 0.95 });
-        const floorM = new THREE.MeshStandardMaterial({ map: floorT, color: '#b8aec8', roughness: 0.85 });
-        const main = new THREE.Mesh(new THREE.BoxGeometry(18, 1.6, 5), [wallM, wallM, floorM, wallM, wallM, wallM]);
-        main.position.y = -0.8; main.receiveShadow = true; main.castShadow = true;
-        s.add(main);
-        const rockM = new THREE.MeshStandardMaterial({ color: '#2e2838', roughness: 0.95, flatShading: true });
-        for (let i = 0; i < 4; i++) {
-            const r = new THREE.Mesh(new THREE.CylinderGeometry(7 - i * 1.6, 6 - i * 1.6, 2.2, 7), rockM);
-            r.position.y = -2.6 - i * 2; r.scale.z = 0.45; s.add(r);
-        }
-        const runeM = new THREE.MeshBasicMaterial({ color: '#b37aff' });
-        for (const p of FIGHT.PLATFORMS.slice(1)) {
-            const w = p.x2 - p.x1;
-            const slab = new THREE.Mesh(new THREE.BoxGeometry(w, 0.35, 2.6), [wallM, wallM, floorM, wallM, wallM, wallM]);
-            slab.position.set((p.x1 + p.x2) / 2, p.y - 0.175, 0); slab.castShadow = slab.receiveShadow = true;
-            s.add(slab);
-            const glow = new THREE.Mesh(new THREE.BoxGeometry(w * 0.9, 0.06, 2.4), runeM);
-            glow.position.set((p.x1 + p.x2) / 2, p.y - 0.38, 0);
-            s.add(glow);
-        }
-        // mura del castello sullo sfondo
-        const backT = wallT.clone(); backT.needsUpdate = true; backT.repeat.set(14, 4);
-        const back = new THREE.Mesh(new THREE.BoxGeometry(48, 13, 1.5), new THREE.MeshStandardMaterial({ map: backT, color: '#9a90a8', roughness: 0.95 }));
-        back.position.set(0, 3.5, -8); back.receiveShadow = true; s.add(back);
-        const merlonG = new THREE.BoxGeometry(1, 1, 1.5);
-        for (let x = -23; x <= 23; x += 2) { const m = new THREE.Mesh(merlonG, back.material); m.position.set(x, 10.5, -8); s.add(m); }
-        const roofM = new THREE.MeshStandardMaterial({ color: '#2a2036', roughness: 0.85, flatShading: true });
-        for (const x of [-17, 17]) {
-            const tw = new THREE.Mesh(new THREE.CylinderGeometry(3, 3.3, 18, 14), back.material); tw.position.set(x, 6, -7); s.add(tw);
-            const rf = new THREE.Mesh(new THREE.ConeGeometry(3.8, 5, 14), roofM); rf.position.set(x, 17.5, -7); s.add(rf);
-        }
-        const keep = new THREE.Mesh(new THREE.BoxGeometry(12, 26, 8), new THREE.MeshStandardMaterial({ color: '#1e1828', roughness: 1 }));
-        keep.position.set(4, 8, -30); s.add(keep);
-        const kr = new THREE.Mesh(new THREE.ConeGeometry(9, 7, 4), roofM); kr.rotation.y = Math.PI / 4; kr.position.set(4, 24.5, -30); s.add(kr);
-        // quadri di Sputnik Homies e torce a muro sullo sfondo
+        // il Colosseo in rovina (arena.js): palco, piattaforme, gradinate, bracieri
         this.fires = new FireSet();
+        this.arena = buildColosseum(s, { alta: this.app.quality === 'alta', fires: this.fires });
+        this.lights = this.arena.lights;
+        // quadri di Sputnik Homies appesi al podio, dietro al palco
         this.gallery = new Gallery();
-        for (const [x, y, w] of [[-9.5, 3.9, 3.4], [0, 4.1, 3.8], [9.5, 3.9, 3.4]]) {
-            const p = this.gallery.make(w, { plaque: true, interval: 10, offset: x * 0.3 });
-            p.position.set(x, y, -7.22); s.add(p);
-        }
-        this.lights = [];
-        for (const x of [-5.3, 5.3, -15, 15]) {
-            const sc = makeSconce(this.fires);
-            sc.scale.setScalar(1.5);
-            sc.position.set(x, 2.6, -7.25); s.add(sc);
-            if (Math.abs(x) < 10) {
-                const l = new THREE.PointLight('#ff8a3a', 40, 22, 1.4); l.position.set(x, 4, -5.5); s.add(l);
-                this.lights.push(l);
-            }
-        }
+        this.arena.frames.forEach((f, i) => {
+            const p = this.gallery.make(f.w, { plaque: true, interval: 10, offset: i * 3 });
+            p.position.set(f.x, f.y, f.z); p.rotation.y = f.ry; s.add(p);
+        });
         const water = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), makeWaterMaterial(null));
         water.rotation.x = -Math.PI / 2; water.position.y = -10;
         this.water = water; s.add(water);
@@ -788,6 +745,7 @@ export class DuelView {
         this.mobileCleanup?.forEach(f => f());
         for (const F of Object.values(this.fighters)) F.ch.dispose();
         for (const t of this.gallery.tex) t?.dispose();
+        this.arena?.dispose();
         this.scene.traverse(o => { if (o.isMesh) o.geometry?.dispose(); }); // i personaggi sono già stati rimossi
         this.hud.classList.add('hidden');
         $('#dh-vs').classList.add('hidden');
