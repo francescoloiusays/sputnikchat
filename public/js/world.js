@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { ELEMENTS, GATHER, FISH_SPOT, STONES, GRAVES, GRAVES_LEVEL, BOUNTY_BOARD, FOUNTAIN, PHONE_SPOT, CANTO_SEEDS, WHITE_ROOM, TOLL } from './shared/catalog.js';
+import { buildChapel, buildCemetery as buildGraveyard } from './rovine.js';
 import { TABLETS } from './shared/lore.js';
 import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.js';
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
@@ -528,6 +529,7 @@ export class World {
             for (const s of Object.values(WORLD.SHOPS)) m *= smooth(6, 8.5, Math.hypot(x - s.x, z - s.z));
             m *= smooth(27, 32, Math.pow(Math.pow(Math.abs(x - C.x), 4) + Math.pow(Math.abs(z - C.z), 4), 0.25));
             m *= 1 - smooth(0.4, 0.75, Math.hypot(hx, hz) / this.cw);
+            if (Math.abs(x - 30) < 4.6 && Math.abs(z - 52) < 7) m *= 0.12;   // dentro la cappella: lastre, solo qualche ciuffo tra le fughe
             return m * (0.55 + 0.45 * smooth(-0.35, 0.3, fbm(x * 0.11 + 3, z * 0.11)));   // a chiazze, non un prato all'inglese
         };
         this.grass = new Grass(this.scene, { H: this.H, n, mask, minX: MIN_X, minZ: MIN_Z, cw: this.cw, cd: this.cd });
@@ -776,22 +778,10 @@ export class World {
             geos.push(place(wallBox(len, h + 0.3, th), x, y + (h + 0.3) / 2, z, ry));
             this.addBox(x, z, len, th, y, y + h + 0.3, ry);
         };
-        // cappella in rovina
+        // cappella in rovina (rovine.js): facciata, abside, fianchi, pilastri, altare coi Sette Semi
         const cx = 30, cz = 52;
-        const pieces = [
-            [cx - 4.5, cz, 9, 1.6, Math.PI / 2], [cx + 4.5, cz - 2.5, 4, 2.2, Math.PI / 2], [cx + 4.5, cz + 4, 2.5, 0.9, Math.PI / 2],
-            [cx - 2, cz - 6.5, 5, 1.2, 0], [cx + 3, cz - 6.5, 3, 0.7, 0], [cx, cz + 6.5, 9, 1.0, 0],
-        ];
-        for (const p of pieces) wall(...p);
-        for (const [dx, dz] of [[-2.5, -2], [2.5, -2], [-2.5, 2], [2.5, 2]]) {
-            const x = cx + dx, z = cz + dz, y = this.terrainAt(x, z), h = 1.2 + r() * 2.2;
-            geos.push(place(new THREE.CylinderGeometry(0.35, 0.42, h, 16), x, y + h / 2, z));
-            this.addCirc(x, z, 0.42, y, y + h);
-        }
-        const altarY = this.terrainAt(cx, cz + 4.5);
-        geos.push(place(wallBox(2.2, 0.9, 1), cx, altarY + 0.45, cz + 4.5));
-        this.addBox(cx, cz + 4.5, 2.2, 1, altarY - 0.5, altarY + 0.9);
-        this.addTorch(cx, altarY + 1.3, cz + 4.5, true, 0.9, { cup: true });
+        buildChapel(this, cx, cz);
+        for (let i = 0; i < 4; i++) r();   // le vecchie colonne consumavano 4 numeri: i muretti sparsi restano dov'erano
         this.interactables.push({ id: 'altare', x: cx, z: cz + 2.8, r: 2.8, label: 'Altare dei Sette Semi: risveglia la carta, incanta, infondi' });
         // muretti sparsi
         for (let i = 0; i < 26; i++) {
@@ -823,43 +813,7 @@ export class World {
 
     // --- CIMITERO ---
     buildCemetery() {
-        const C = WORLD.CEMETERY, r = rng(5);
-        const stoneG = mergeGeometries([new THREE.BoxGeometry(0.7, 0.9, 0.18).translate(0, 0.45, 0), new THREE.CylinderGeometry(0.35, 0.35, 0.18, 20, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 0.9, 0)]);
-        const crossG = mergeGeometries([new THREE.BoxGeometry(0.12, 1.2, 0.12).translate(0, 0.6, 0), new THREE.BoxGeometry(0.6, 0.12, 0.12).translate(0, 0.88, 0)]);
-        const graves = GRAVES.map(g => [g.x, g.z, g.cross]);
-        const m4 = new THREE.Matrix4();
-        const stones = graves.filter(g => !g[2]), crosses = graves.filter(g => g[2]);
-        const mk = (geo_, mat, list) => {
-            const im = new THREE.InstancedMesh(geo_, mat, list.length);
-            list.forEach(([x, z], i) => {
-                const y = this.terrainAt(x, z) - 0.05;
-                im.setMatrixAt(i, m4.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler((r() - 0.5) * 0.25, (r() - 0.5) * 0.4, (r() - 0.5) * 0.25)), new THREE.Vector3(1, 0.8 + r() * 0.4, 1)));
-                this.addBox(x, z, 0.7, 0.3, y - 0.5, y + 1);
-            });
-            im.castShadow = true; im.receiveShadow = true;
-            this.scene.add(im);
-        };
-        mk(stoneG, this.matStone, stones);
-        mk(crossG, new THREE.MeshStandardMaterial({ color: '#3a3438', roughness: 0.9 }), crosses);
-        // recinzione di ferro
-        const posts = [];
-        for (let i = 0; i <= 20; i++) {
-            const t = i / 20;
-            posts.push([C.x - 10 + t * 20, C.z - 7], [C.x - 10 + t * 20, C.z + 7]);
-            if (i % 2 === 0 && i > 0 && i < 20) { posts.push([C.x - 10, C.z - 7 + t * 14], [C.x + 10, C.z - 7 + t * 14]); }
-        }
-        const pg = new THREE.ConeGeometry(0.04, 1.3, 4); pg.translate(0, 0.65, 0);
-        const pim = new THREE.InstancedMesh(pg, new THREE.MeshStandardMaterial({ color: '#1a1a1e', metalness: 0.7, roughness: 0.5 }), posts.length);
-        posts.forEach(([x, z], i) => {
-            if (Math.abs(x - C.x) < 1.6 && z > C.z) return pim.setMatrixAt(i, m4.makeScale(0, 0, 0));
-            pim.setMatrixAt(i, m4.makeTranslation(x, this.terrainAt(x, z), z));
-        });
-        this.scene.add(pim);
-        const fence = (x, z, w, d) => this.addBox(x, z, w, d, this.terrainAt(x, z) - 1, this.terrainAt(x, z) + 1.2, 0, { noWalk: true });
-        fence(C.x, C.z - 7, 20, 0.15); fence(C.x - 10, C.z, 0.15, 14); fence(C.x + 10, C.z, 0.15, 14);
-        fence(C.x - 5.8, C.z + 7, 8.4, 0.15); fence(C.x + 5.8, C.z + 7, 8.4, 0.15);
-        this.addTorchPost(C.x - 2, C.z + 8, true, 1.8);
-        this.addTorchPost(C.x + 2, C.z + 8, false, 1.8);
+        buildGraveyard(this, WORLD.CEMETERY);   // rovine.js
     }
 
     // --- BOTTEGHE ---
