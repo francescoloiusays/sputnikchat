@@ -111,7 +111,7 @@ export class DuelView {
         s.add(this.hemi = new THREE.HemisphereLight('#7a5aaa', '#1a1022', 1.0));
         const moon = this.moonL = new THREE.DirectionalLight('#c8c0ff', 1.3);
         moon.position.set(-6, 14, 10); moon.castShadow = !IS_MOBILE;
-        moon.shadow.mapSize.set(1024, 1024);
+        moon.shadow.mapSize.set(1024, 1024); moon.shadow.bias = -0.0006; moon.shadow.normalBias = 0.03;
         const sc = moon.shadow.camera; sc.left = -14; sc.right = 14; sc.top = 14; sc.bottom = -6;
         s.add(moon);
         // il Colosseo in rovina (arena.js): palco, piattaforme, gradinate, bracieri
