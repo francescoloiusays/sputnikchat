@@ -430,7 +430,7 @@ export class World {
             this.flames.push({ glow, sp: 2 + Math.random() * 3 });
         }
         // poche luci vere (costano), il resto è solo bagliore
-        if (light && this.lights.length < (this.quality === 'alta' ? 12 : 5)) {
+        if (light) {   // tutte le torce hanno una luce: la rotazione in engine/stream.js accende solo le più vicine
             const l = new THREE.PointLight('#ff7a2a', 26, 18, 1.5);
             const out = opts.wall != null ? 0.7 : 0;
             l.position.set(x + Math.sin(opts.wall || 0) * out, y + 0.3, z + Math.cos(opts.wall || 0) * out);
@@ -1230,7 +1230,6 @@ export class World {
         this.interactables.push({ id: 'arena', x: A.x, z: A.z, r: A.r + 1.5, label: "Arena: sfida un giocatore o allenati col Fantasma" });
     }
     addFireLight(x, y, z, intensity) {
-        if (this.lights.length >= (this.quality === 'alta' ? 12 : 5)) return;
         const l = new THREE.PointLight('#ff8a3a', intensity, 16, 1.5);
         l.position.set(x, y, z);
         this.scene.add(l);

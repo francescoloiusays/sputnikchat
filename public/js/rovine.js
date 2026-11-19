@@ -63,9 +63,8 @@ const glowSprite = (color, size, opacity) => {
     s.scale.set(size, size, 1);
     return s;
 };
-// luce vera solo se c'è posto nel bilancio delle luci del mondo
+// luce vera: la rotazione in engine/stream.js accende solo le più vicine
 function budgetLight(W, color, base, dist, x, y, z) {
-    if (W.lights.length >= (W.quality === 'alta' ? 12 : 5)) return null;
     const l = new THREE.PointLight(color, base, dist, 1.5); l.position.set(x, y, z); W.scene.add(l);
     W.lights.push({ l, base, sp: 3 + Math.random() * 3, out: true });
     return l;

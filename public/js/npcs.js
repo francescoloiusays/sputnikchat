@@ -6,6 +6,7 @@
 // =====================================================================
 import { Character } from './character.js';
 import { NPCS } from './shared/lore.js';
+import { characterLod } from './engine/stream.js';
 
 const lerpAngle = (a, b, t) => { const d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * t; };
 
@@ -33,7 +34,10 @@ export class Npcs {
     update(dt, player, camPos) {
         for (const n of this.list) {
             const p = n.ch.root.position, d = camPos.distanceTo(p);
-            if (d > 90) { if (n.ch.tag) n.ch.tag.visible = false; continue; }
+            // lontani: non si disegnano nemmeno (ogni personaggio sono ~30 pezzi)
+            n.ch.root.visible = d < 70;
+            characterLod(n.ch, d);
+            if (d > 70) { if (n.ch.tag) n.ch.tag.visible = false; continue; }
             const dp = Math.hypot(player.x - p.x, player.z - p.z);
             const want = dp < 6 ? Math.atan2(player.x - p.x, player.z - p.z) : n.N.ry;
             n.ry = lerpAngle(n.ry, want, Math.min(1, dt * 3));

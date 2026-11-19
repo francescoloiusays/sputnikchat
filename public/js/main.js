@@ -9,6 +9,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { World, WORLD, makeSky } from './world.js';
+import { Streamer, characterLod } from './engine/stream.js';
+import { registerRegions } from './regions/index.js';
 import { Character, setCharacterQuality } from './character.js';
 import { Studio } from './studio.js';
 import { Creator, randomAppearance } from './creator.js';
@@ -89,6 +91,8 @@ class RemotePlayer {
             if (this.stepT <= 0) { this.stepT = 2.2; this.app.audio.step(this.app.world.surfaceAt(r.position.x, r.position.z, r.position.y), { x: r.position.x, z: r.position.z, vol: 0.7, run: this.speed > 6 }); }
         }
         if (this.ch.tag) this.ch.tag.visible = d < 40;
+        r.visible = d < 120;   // oltre la nebbia non si disegna
+        characterLod(this.ch, d);
         if (d < 120) this.ch.update(dt);
     }
     dispose() { this.ch.dispose(); }
@@ -297,7 +301,13 @@ class Game {
         $('#loading').classList.remove('hidden');
         await new Promise(r => setTimeout(r, 30));
         this.setupRenderer();
+        const before = new Set(this.scene.children);
         this.world = new World(this.scene, { quality: this.quality });
+        // streaming: si disegna solo ciò che è nel campo visivo (vedi engine/stream.js)
+        this.stream = new Streamer(this, { quality: this.quality });
+        const W = this.world, moving = new Set([...(W.mist || []).map(m => m.s), ...(W.wisps || []).map(w => w.s), W.moonLight, W.moonLight.target]);
+        this.stream.adopt(this.scene.children.filter(o => !before.has(o)), moving);
+        registerRegions(this.stream, this);
         this.precip = new Precipitation(this.scene, { count: this.quality === 'alta' ? 1600 : 700 });
         if (!this.me) this.me = this.offlineMe();
         const S = WORLD.SPAWN;
@@ -1377,6 +1387,7 @@ class Game {
             this.storySpots?.update(dt, this.world.t);
             this.world.update(dt, this.camera.position);
             for (const p of this.players.values()) p.update(dt, this.camera.position);
+            this.stream?.update(dt, this.camera, this.camera.position);
             if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
             return;
         }
@@ -1401,6 +1412,7 @@ class Game {
             else if (!this.zoneShown && performance.now() - this.zoneSince > 700) { this.zoneShown = true; this.showZoneBanner(zone); }
             this.updatePrompt();
         }
+        this.stream?.update(dt, this.camera, this.player.pos);
         if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera);
     }
 
