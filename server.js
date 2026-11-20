@@ -26,6 +26,7 @@ import {
 import { INSULTS, TOLL_START, TOLL_LINES, NPCS, ONDA_Q, ONDA_PLOT, TABLETS, MISSIONS, PHONE_LINES, QUADRI } from './public/js/shared/lore.js';
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
 import { STORY, STORY_END, STORY_SPOTS, WAYS, newStory, chapterReady, nomeVero } from './public/js/shared/story.js';
+import { L2, COCCI, newL2 } from './public/js/shared/libro2.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
@@ -112,6 +113,7 @@ function migrate(p) {
         changed = true;
     }
     if (!p.story) { p.story = newStory(true); changed = true; }
+    if (!p.libro2) { p.libro2 = newL2(); changed = true; }
     updateSeason(p);
     return changed;
 }
@@ -308,7 +310,7 @@ function privateView(p) {
         cantoLeft: Math.max(0, CANTO.daily - (dayc(p).canto || 0)), cantoBest: p.cantoBest || 0, wishedToday: p.wishDay === d,
         fountainUntil: p.fountain?.until || 0, tollToday: p.tollDay === d, ondaToday: p.ondaDay === d,
         veglia: p.veglia || null, kingWeek: p.kingWeek || null, watched: Object.keys(p.watched || {}), account: p.account?.user || null,
-        story: storyOf(p),
+        story: storyOf(p), libro2: p.libro2 || newL2(),
         friends: p.friends.map(id => ({ id, name: byPid(id)?.name || '???', online: sidByPid.has(id) })),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
         collectionCount: p.collection.length,
@@ -1632,6 +1634,42 @@ io.on('connection', (socket) => {
             storyStep(p, 'fango');
         } else return fail(reply, 'Non c\'è niente qui');
         storyReply(reply, { k });
+    });
+
+    // --- LIBRO II · LA PORTA CHIUSA: la chiave del Faro Spento ---
+    on('l2:act', (d, reply) => {
+        const p = me.p, st = (p.libro2 ||= newL2()), a = String(d.a), out = {};
+        const nearNpc = (id) => near(NPCS[id].x, NPCS[id].z, 6);
+        if (a === 'start') {
+            if (st.s !== 0) return fail(reply, 'Hai già promesso');
+            if (levelOf(p) < L2.lv) return fail(reply, `La Guardiana ti parlerà dal livello ${L2.lv}`);
+            if (!nearNpc('guardiana')) return fail(reply, 'Troppo lontano');
+            st.s = 1;
+        } else if (a === 'ask') {
+            if (st.s !== 1) return fail(reply, 'Non adesso');
+            if (!nearNpc('brace')) return fail(reply, 'Troppo lontano');
+            st.s = 2;
+        } else if (a === 'coccio') {
+            const k = String(d.k), C = L2.cocci[k];
+            if (st.s !== 2 || !C) return fail(reply, "Non c'è niente qui");
+            if (!near(C.x, C.z, 4)) return fail(reply, 'Troppo lontano');
+            if (st.cocci.includes(k)) return fail(reply, "Questo l'hai già raccolto");
+            st.cocci.push(k);
+            out.xp = grantXp(p, L2.coccioXp);
+            if (COCCI.every(c => st.cocci.includes(c))) st.s = 3;
+        } else if (a === 'forge') {
+            if (st.s !== 3) return fail(reply, 'Ti mancano ancora dei cocci');
+            if (!nearNpc('brace')) return fail(reply, 'Troppo lontano');
+            st.s = 4;
+        } else if (a === 'door') {
+            if (st.s !== 4) return fail(reply, 'Ti serve la chiave');
+            if (!near(L2.door.x, L2.door.z, L2.door.r + 1.5)) return fail(reply, 'Troppo lontano');
+            st.s = 5; st.done = Date.now();
+            out.xp = grantXp(p, L2.xp); p.coins += L2.coins; out.coins = L2.coins;
+            out.title = award(p, L2.title_id) ? L2.title_id : null;
+        } else return fail(reply, "Non c'è niente qui");
+        save(p); sendMe(me);
+        reply({ ok: true, libro2: st, ...out });
     });
 
     // --- CASTONI E PAROLE DI RUNA (Mastro Brace) ---

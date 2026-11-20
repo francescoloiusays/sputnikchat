@@ -16,6 +16,7 @@ import { cardEditor } from './creator.js';
 import { composeCard, printCard, downloadCard, CARD_W, holoTrack } from './cards.js';
 import { icon, iconSVG, elIcon, itemIconName, rarityOf, tierOf } from './icons.js';
 import { storyBox, bookContent, storyCtx, npcLine } from './story-ui.js';
+import { l2Box } from './libro2-ui.js';
 import { STORY_SPOTS } from './shared/story.js';
 import { ritratto } from './story-text.js';
 
@@ -566,6 +567,7 @@ export class Panels {
             h('div', { class: 'npc-box' },
                 h('div', { class: 'npc-left' }, portrait, h('div', { class: 'muted small center' }, N.where)),
                 h('div', { class: 'npc-right' },
+                    l2Box(app, id),
                     storyBox(app, id),
                     h('div', { class: 'npc-say' }, `«${line}»`),
                     arg.learned != null ? h('div', { class: 'npc-learn', html: iconSVG('quill') }, h('b', {}, 'Ti ha insegnato una risposta per il Pedaggio dello Spettro: '), `«${INSULTS[arg.learned][1]}»`) : null,

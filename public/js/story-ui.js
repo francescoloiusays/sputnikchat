@@ -13,6 +13,7 @@ import { islandHour } from './sky.js';
 import { Character } from './character.js';
 import { h, toast, $ } from './util.js';
 import { iconSVG } from './icons.js';
+import { l2Thread } from './libro2-ui.js';
 
 const SEED_COL = { fuoco: '#ff6a2f', ghiaccio: '#7fd8ff', palude: '#6fcf5a', pietra: '#c4bcb2', tempesta: '#ffe14a', spettro: '#c49aff', fango: '#c89660' };
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
@@ -128,7 +129,7 @@ export function storyThread(app) {
 export function updateThread(app) {
     const el = $('#story-thread');
     if (!el) return;
-    const T = storyThread(app);
+    const T = l2Thread(app) || storyThread(app);
     el.classList.toggle('hidden', !T);
     if (!T) return;
     const txt = T.text;

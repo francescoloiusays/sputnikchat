@@ -151,14 +151,27 @@ export function buildFaro(app) {
     put(new THREE.Mesh(geo(new THREE.BoxGeometry(2.1, 0.36, 0.38)), stone), 0, PL + 2.72, FZ + 0.1);
     put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.34, 0.5, 0.42)), stone), 0, PL + 2.8, FZ + 0.12);
     put(new THREE.Mesh(geo(new THREE.BoxGeometry(1.42, 2.5, 0.2)), mat({ color: '#0c0a0e', roughness: 1 })), 0, PL + 1.25, FZ - 0.06);   // il buio dietro le assi
-    // la porta: cinque assi, due bandelle di ferro, l'anello e la serratura a corona
-    for (let i = 0; i < 5; i++) put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.26, 2.42, 0.07)), doorWood), -0.56 + i * 0.28, PL + 1.21, FZ - 0.02 + (i % 2) * 0.006);
-    for (const hh of [0.45, 1.95]) put(new THREE.Mesh(geo(new THREE.BoxGeometry(1.3, 0.09, 0.03)), iron), 0, PL + hh, FZ + 0.03);
-    for (const hh of [0.45, 1.95]) for (const s of [-1, 1]) put(new THREE.Mesh(geo(new THREE.SphereGeometry(0.035, 6, 4)), iron), s * 0.6, PL + hh, FZ + 0.05);
-    const ring = put(new THREE.Mesh(geo(new THREE.TorusGeometry(0.09, 0.016, 6, 16)), iron), 0.38, PL + 1.1, FZ + 0.06);
-    put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.2, 0.3, 0.025)), brass), -0.32, PL + 1.15, FZ + 0.04);
-    for (const s of [-1, 0, 1]) put(new THREE.Mesh(geo(new THREE.ConeGeometry(0.025, 0.08 + (s === 0 ? 0.03 : 0), 4)), brass), -0.32 + s * 0.06, PL + 1.35, FZ + 0.045);   // la corona spezzata
-    put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.03, 0.08, 0.03)), iron), -0.32, PL + 1.11, FZ + 0.055);   // il buco della chiave
+    // la porta: cinque assi, due bandelle di ferro, l'anello e la serratura a corona.
+    // Sta tutta su un cardine a sinistra, così può aprirsi (Libro II: la chiave del faro)
+    const doorG = new THREE.Group();
+    doorG.position.set(-0.7, 0, FZ);
+    T.add(doorG);
+    const dput = (mesh, x, y, z) => { mesh.position.set(x + 0.7, y, z - FZ); mesh.castShadow = mesh.receiveShadow = true; doorG.add(mesh); return mesh; };
+    for (let i = 0; i < 5; i++) dput(new THREE.Mesh(geo(new THREE.BoxGeometry(0.26, 2.42, 0.07)), doorWood), -0.56 + i * 0.28, PL + 1.21, FZ - 0.02 + (i % 2) * 0.006);
+    for (const hh of [0.45, 1.95]) dput(new THREE.Mesh(geo(new THREE.BoxGeometry(1.3, 0.09, 0.03)), iron), 0, PL + hh, FZ + 0.03);
+    for (const hh of [0.45, 1.95]) for (const s of [-1, 1]) dput(new THREE.Mesh(geo(new THREE.SphereGeometry(0.035, 6, 4)), iron), s * 0.6, PL + hh, FZ + 0.05);
+    const ring = dput(new THREE.Mesh(geo(new THREE.TorusGeometry(0.09, 0.016, 6, 16)), iron), 0.38, PL + 1.1, FZ + 0.06);
+    dput(new THREE.Mesh(geo(new THREE.BoxGeometry(0.2, 0.3, 0.025)), brass), -0.32, PL + 1.15, FZ + 0.04);
+    for (const s of [-1, 0, 1]) dput(new THREE.Mesh(geo(new THREE.ConeGeometry(0.025, 0.08 + (s === 0 ? 0.03 : 0), 4)), brass), -0.32 + s * 0.06, PL + 1.35, FZ + 0.045);   // la corona spezzata
+    dput(new THREE.Mesh(geo(new THREE.BoxGeometry(0.03, 0.08, 0.03)), iron), -0.32, PL + 1.11, FZ + 0.055);   // il buco della chiave
+    // quando la porta è aperta, dal buio filtra il verde della lanterna
+    const inGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: '#5affc8', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    disposables.push(inGlow.material);
+    inGlow.scale.set(1.6, 2.6, 1); inGlow.position.set(0, PL + 1.5, FZ + 0.06);
+    T.add(inGlow);
+    const doorOpen = () => (app.me?.libro2?.s ?? 0) >= 5;
+    let doorA = doorOpen() ? -1.75 : 0;
+    doorG.rotation.y = doorA;
     // due gradini di pietra davanti alla porta
     put(new THREE.Mesh(geo(new THREE.BoxGeometry(2.0, 0.3, 0.55)), stone), 0, 0.0, FZ + 0.35);
     put(new THREE.Mesh(geo(new THREE.BoxGeometry(2.3, 0.15, 0.5)), stone), 0, -0.05, FZ + 0.85);
@@ -173,7 +186,8 @@ export function buildFaro(app) {
     T.add(doorGlow);
 
     const [doorX, doorZ] = toW(0, FZ);
-    interactables.push({ id: 'faro_porta', x: X + dx * (FZ + 1.3), z: Z + dz * (FZ + 1.3), y: pad, r: 2.0, label: 'La porta del faro' });
+    interactables.push({ id: 'faro_porta', x: X + dx * (FZ + 1.3), z: Z + dz * (FZ + 1.3), y: pad, r: 2.0,
+        label: () => { const s = app.me?.libro2?.s ?? 0; return s === 4 ? 'Apri la porta con la chiave' : s >= 5 ? 'Guarda dentro il faro' : 'La porta del faro'; } });
 
     // il cuore della lanterna: un bagliore verde che respira
     const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: '#7affd8', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8, fog: false }));   // la luce di un faro buca la nebbia
@@ -361,6 +375,10 @@ export function buildFaro(app) {
         halo.material.opacity = (0.08 + b * 0.2) + flash * 0.6 * (0.3 + 0.7 * night);
         halo.scale.setScalar(26 + flash * 30);
         beacon.intensity = 2 + b * 7 + flash * 6;
+        // la porta si apre piano, come se pesasse trecento anni
+        const want = doorOpen() ? -1.75 : 0;
+        if (doorA !== want) { doorA += Math.sign(want - doorA) * Math.min(Math.abs(want - doorA), dt * 0.6); doorG.rotation.y = doorA; }
+        inGlow.material.opacity = (-doorA / 1.75) * (0.35 + b * 0.25);
         boat.position.y = 0.15 + Math.sin(t * 1.2) * 0.06;
         boat.rotation.z = Math.sin(t * 0.9) * 0.05;
         for (const gl of glows) gl.material.opacity = 0.38 + Math.sin(t * 3 + gl.position.x) * 0.06 + Math.random() * 0.04;

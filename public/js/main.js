@@ -33,6 +33,7 @@ import { Atlas } from './atlas.js';
 import { Prologue } from './prologue.js';
 import { SkyProbe, ContactShade } from './realism.js';
 import { buildStorySpots, storyBeat, storyInteract, storyVoice, updateThread } from './story-ui.js';
+import { Cocci, l2Door } from './libro2-ui.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
@@ -308,6 +309,7 @@ class Game {
         const W = this.world, moving = new Set([...(W.mist || []).map(m => m.s), ...(W.wisps || []).map(w => w.s), W.moonLight, W.moonLight.target]);
         this.stream.adopt(this.scene.children.filter(o => !before.has(o)), moving);
         registerRegions(this.stream, this);
+        this.l2 = new Cocci(this);   // Libro II: i Cocci di Lanterna (fuori dallo streaming: sono pochi e si accendono da soli)
         this.precip = new Precipitation(this.scene, { count: this.quality === 'alta' ? 1600 : 700 });
         if (!this.me) this.me = this.offlineMe();
         const S = WORLD.SPAWN;
@@ -528,6 +530,7 @@ class Game {
         const oldCoins = prev && !prev.offline ? prev.coins : null;
         const oldLook = prev ? JSON.stringify(this.look()) : '';
         this.me = p;
+        this.l2?.refresh();
         if (oldCoins != null && p.coins !== oldCoins) this.coinPop(p.coins - oldCoins);
         const newLook = JSON.stringify(this.look());
         this.local.look = this.look();
@@ -876,8 +879,9 @@ class Game {
             toast(h('div', {}, h('b', {}, 'Il Faro Spento'), h('div', {}, 'Il Traghettatore non ha detto una parola per tutto il viaggio. Solo, scendendo, ti è sembrato di sentirlo sussurrare: «Lei aspetta da più tempo di me».')), { icon: 'lantern', duration: 9000 });
         }
     }
-    faroDoor() {
-        this.audio.play('click');
+    async faroDoor() {
+        if (await l2Door(this) !== false) return;
+        this.audio.play('ui');
         toast(h('div', {}, h('b', {}, 'La porta del faro è chiusa'), h('div', {}, 'Dall\'altra parte qualcosa respira, piano. La serratura ha la forma di una corona spezzata: forse da qualche parte, sull\'isola, qualcuno sta ancora forgiando la chiave giusta.')), { icon: 'lock', duration: 9000 });
     }
 
@@ -1180,6 +1184,7 @@ class Game {
         else if (it.id === 'telefono') this.answerPhone();
         else if (it.id === 'barca') this.travel(it.dest);
         else if (it.id === 'faro_porta') this.faroDoor();
+        else if (it.id === 'coccio') this.l2?.pick(it.k);
         else if (it.id === 'siedi') this.player.sit === it.seat ? this.standUp() : this.sitDown(it.seat);
         else this.openPanel(it.id);
     }
