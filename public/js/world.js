@@ -1580,6 +1580,7 @@ export class World {
     setIndoor(on) { this.indoor = on; }
     // ora del giorno e meteo (vedi sky.js); boost = luce in più scelta nelle Opzioni
     applyEnv(S, boost = 0) {
+        this.envS = S;   // lo stato del cielo, per chi ne ha bisogno (regioni: onde e faro di notte)
         const ind = this.indoor;
         this.hemiLight.color.copy(S.hemiS); this.hemiLight.groundColor.copy(S.hemiG);
         // con il cielo riflesso (envOn) una parte della luce diffusa arriva da lì: la luce d'ambiente cala di pari passo

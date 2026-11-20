@@ -42,6 +42,7 @@ const PLACES = [
     { id: 'pietre', cat: 'luoghi', ic: 'runestone', p: 1, name: 'Cerchio di Pietre', x: STONES.x, z: STONES.z, desc: 'Frammenti di Runa da raccogliere e il Canto delle Pietre: ascolta la sequenza e ripetila.' },
     { id: 'molo', cat: 'luoghi', ic: 'rod', p: 1, name: 'Il Molo', x: FISH_SPOT.x, z: FISH_SPOT.z - 3, desc: 'Qui approdano i viandanti. In fondo alle assi si lancia la lenza: di notte abboccano i pesci della nebbia.' },
     { id: 'pedaggio', cat: 'luoghi', ic: 'ecto', p: 2, name: 'Pedaggio dello Spettro', x: TOLL.spot.x, z: TOLL.spot.z, desc: 'Sul Ponte dei Sospiri lo Spettro chiede il pedaggio: un duello a colpi di insulti e risposte.' },
+    { id: 'faro', cat: 'luoghi', ic: 'lantern', p: 1, name: 'Il Faro Spento', x: WORLD.FARO.x, z: WORLD.FARO.z, desc: 'Libro II. Uno scoglio a nord-est: ci porta la barca del Traghettatore. La Guardiana veglia una porta chiusa da trecento anni.' },
 ];
 const CATS = [['botteghe', 'Botteghe', 'anvil'], ['luoghi', 'Luoghi', 'castle'], ['abitanti', 'Abitanti', 'talk'], ['tavolette', 'Tavolette', 'runestone'], ['viandanti', 'Viandanti', 'friends']];
 const DIRS = ['nord', 'nord-est', 'est', 'sud-est', 'sud', 'sud-ovest', 'ovest', 'nord-ovest'];

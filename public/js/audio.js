@@ -71,6 +71,12 @@ const SFX = {
         this.nz(d, t, { buf: 'brown', type: 'lowpass', f0: 500, dur: 0.2, vol: 0.3 });
         this.osc(d, t + 0.02, { f0: 500, f1: 1100, dur: 0.06, vol: 0.05 });
     },
+    // un'onda che si rompe sugli scogli: sale piano, si schianta, si ritira
+    surf(d, t) {
+        this.nz(d, t, { buf: 'pink', type: 'lowpass', f0: 500, f1: 1400, dur: 1.1, vol: 0.22, a: 0.6 });
+        this.nz(d, t + 0.9, { buf: 'brown', type: 'lowpass', f0: 700, f1: 260, dur: 2.2, vol: 0.45, a: 0.05 });
+        this.nz(d, t + 1.0, { type: 'highpass', f0: 2200, dur: 1.4, vol: 0.08, a: 0.1 });
+    },
     throw(d, t) { this.nz(d, t, { buf: 'pink', f0: 900, f1: 2400, q: 1.6, dur: 0.16, vol: 0.25, a: 0.02 }); },
     mudhit(d, t) {
         this.nz(d, t, { buf: 'brown', type: 'lowpass', f0: 900, f1: 300, dur: 0.18, vol: 0.7 });

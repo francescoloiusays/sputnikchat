@@ -283,6 +283,12 @@ export class Streamer {
         this.stats.total = this.buckets.size;
     }
     place(o) {
+        // chi si piazza da solo nello shader (erba, nuvole, pioggia: frustumCulled = false e posizione
+        // calcolata dalla telecamera) non ha un posto vero: resta sempre acceso.
+        // Le fiamme no: anche loro hanno frustumCulled = false, ma stanno ferme dove sono.
+        let selfPlaced = false;
+        o.traverse(c => { if (c.frustumCulled === false && !c.material?.uniforms?.uPower) selfPlaced = true; });
+        if (selfPlaced) return;
         const s = sphereOf(o);
         if (s.radius > 70) return;                     // terreno, acqua, cupole: sempre visibili
         const glowy = isGlowy(o);
