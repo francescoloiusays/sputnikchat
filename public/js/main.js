@@ -1558,24 +1558,57 @@ class Game {
         }
         const terrainH = W.terrainAt(P.pos.x, P.pos.z);
         const inWater = terrainH < -0.05 && !W.onBridge(P.pos.x, P.pos.z);
+        // a nuoto: il fondo (o quello che c'è sotto) è più in basso di dove galleggiano i piedi
+        const SY = WORLD.SWIM_Y;
+        const swimming = P.pos.y < WORLD.WATER_Y - 0.25 && W.groundAt(P.pos.x, P.pos.z, P.pos.y) < SY - 0.05;
+        if (swimming && !P.swimming && P.vel.y < -2) this.audio.play('splash', { vol: 1.2 });   // il tuffo
+        P.swimming = swimming;
         const running = (K.ShiftLeft || K.ShiftRight || this.joy?.run) && !inWater;
-        const speed = (running ? 8.6 : 4.6) * (inWater ? 0.55 : 1) * len;
-        const accel = P.grounded ? 14 : 3.5;
+        const speed = swimming ? (K.ShiftLeft || K.ShiftRight ? 3.4 : 2.5) * len : (running ? 8.6 : 4.6) * (inWater ? 0.55 : 1) * len;
+        const accel = swimming ? 3 : P.grounded ? 14 : 3.5;
         P.vel.x += (wish.x * speed - P.vel.x) * Math.min(1, accel * dt);
         P.vel.z += (wish.z * speed - P.vel.z) * Math.min(1, accel * dt);
-        P.vel.y -= 24 * dt;
+        if (swimming) P.vel.y += ((SY - P.pos.y) * 5 - P.vel.y) * Math.min(1, dt * 4);   // si torna a galla piano
+        else P.vel.y -= 24 * dt;
+        // dall'acqua ci si arrampica su moli e rive, se non sono troppo alti
+        // (anche quando si tocca il fondo: accanto ai moli l'acqua è bassa ma le assi restano alte)
+        // e dalla spiaggia sulle assi di un molo (fino a 1,4 m più in alto)
+        const wading = !swimming && P.grounded && P.pos.y < WORLD.WATER_Y - 0.2;
+        if (len > 0.3 && (swimming || wading || P.grounded)) {
+            const px = P.pos.x + wish.x * 0.75, pz = P.pos.z + wish.z * 0.75;
+            const fromWater = swimming || wading, deck = !fromWater && W.onDeck(px, pz);
+            const up = fromWater || deck ? W.groundAt(px, pz, fromWater ? WORLD.WATER_Y + 1.6 : P.pos.y + 1.4) : -1e9;
+            if (up > P.pos.y + 0.5 && (fromWater ? up <= WORLD.WATER_Y + 1.6 && up - P.pos.y <= 2.8 : up - P.pos.y <= 1.4)) {
+                const probe = new THREE.Vector3(px, up, pz);
+                if (W.collide(probe, 0.35, up) && Math.hypot(probe.x - px, probe.z - pz) < 0.3) {
+                    P.pos.set(probe.x, up, probe.z); P.vel.set(0, 0, 0); P.grounded = true; P.swimming = false;
+                    this.audio.play('splash', { vol: 0.6 });
+                    this.myChar.root.position.copy(P.pos);
+                    return this.sendPos(dt, 0);
+                }
+            }
+        }
         const next = P.pos.clone();
         next.x += P.vel.x * dt; next.z += P.vel.z * dt;
-        if (!W.collide(next, 0.35, P.pos.y)) { next.x = P.pos.x; next.z = P.pos.z; P.vel.x = P.vel.z = 0; }
+        if (!W.collide(next, 0.35, P.pos.y)) {
+            next.x = P.pos.x; next.z = P.pos.z; P.vel.x = P.vel.z = 0;
+            // in mare aperto la corrente respinge: un avviso ogni tanto
+            if (W.lastBlock === 'mare' && !(this.seaWarnT > performance.now())) {
+                this.seaWarnT = performance.now() + 8000;
+                toast('La corrente ti respinge: in mare aperto si va solo in barca', { icon: 'wave', duration: 3500 });
+            }
+        }
         next.y += P.vel.y * dt;
         const ground = W.groundAt(next.x, next.z, P.pos.y);
-        if (next.y <= ground + 0.02 || (P.grounded && P.vel.y <= 0 && next.y - ground < 0.45)) {
+        if (next.y <= ground + 0.02 || (!swimming && P.grounded && P.vel.y <= 0 && next.y - ground < 0.45)) {
             next.y = ground;
             if (!P.grounded && P.vel.y < -6) this.audio.step(W.surfaceAt(next.x, next.z, next.y), { land: true });
             P.vel.y = 0; P.grounded = true;
         } else P.grounded = false;
         P.pos.copy(next);
         const hs = Math.hypot(P.vel.x, P.vel.z);
+        // bracciate: un po' d'acqua che si muove ogni tanto
+        if (swimming && hs > 0.5) { P.swimT = (P.swimT ?? 0) - dt * hs; if (P.swimT <= 0) { P.swimT = 2.4; this.audio.play('splash', { vol: 0.35 }); } }
         if (len > 0.05) {
             P.yaw = lerpAngle(P.yaw, Math.atan2(wish.x, wish.z), Math.min(1, dt * 12));
             if (this.myChar.action && ['saluta', 'balla', 'inchino', 'ride'].includes(this.myChar.action.name)) this.myChar.stop();
@@ -1584,12 +1617,12 @@ class Game {
         const ch = this.myChar;
         ch.root.position.copy(P.pos);
         ch.root.rotation.y = P.yaw;
-        ch.state = !P.grounded ? 'air' : hs > 6 ? 'run' : hs > 0.4 ? 'walk' : 'idle';
+        ch.state = swimming ? (hs > 0.4 ? 'walk' : 'idle') : !P.grounded ? 'air' : hs > 6 ? 'run' : hs > 0.4 ? 'walk' : 'idle';
         ch.speed = hs;
         ch.root.visible = !this.cam.first;
         this.updateFill(P);
         if (P.grounded && hs > 0.5) { P.stepT -= dt * hs; if (P.stepT <= 0) { P.stepT = 2.2; this.audio.step(W.surfaceAt(P.pos.x, P.pos.z, P.pos.y), { run: hs > 6 }); } }
-        this.sendPos(dt, !P.grounded ? 3 : hs > 6 ? 2 : hs > 0.4 ? 1 : 0);
+        this.sendPos(dt, swimming ? (hs > 0.4 ? 1 : 0) : !P.grounded ? 3 : hs > 6 ? 2 : hs > 0.4 ? 1 : 0);
     }
     // luce di riempimento: lilla all'aperto, bianca e calda nella Stanza Bianca
     updateFill(P) {

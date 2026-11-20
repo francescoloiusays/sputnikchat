@@ -30,44 +30,155 @@ export function buildFaro(app) {
 
     const pad = W.terrainAt(X, Z);
 
-    // --- la torre: fasce bianche e rosso scuro, come i fari veri, ma scrostate ---
-    const white = mat({ color: '#b9b2c4', roughness: 0.88 }), red = mat({ color: '#5a1f2a', roughness: 0.85 });
-    const stone = mat({ color: '#4a4552', roughness: 0.95, flatShading: true });
-    // basamento basso: ci si sale sopra (è un gradino) e si arriva alla porta
-    const PL = 0.3;
-    add(new THREE.Mesh(geo(new THREE.CylinderGeometry(3.4, 3.6, PL + 0.5, 14)), stone), X, pad + (PL - 0.5) / 2, Z);
-    circ(X, Z, 3.45, pad - 2, pad + PL);                  // il basamento: si cammina sopra
+    // =================================================================
+    //  LA TORRE: costruita in un sistema «locale» con l'ingresso verso +z,
+    //  poi girata verso il molo. y = 0 è il terreno ai piedi del faro.
+    // =================================================================
+    const T = new THREE.Group();
+    T.position.set(X, pad, Z);
+    T.rotation.y = Math.atan2(dx, dz);
+    g.add(T);
+    const put = (mesh, x, y, z, ry = 0) => { mesh.position.set(x, y, z); mesh.rotation.y = ry; mesh.castShadow = mesh.receiveShadow = true; T.add(mesh); return mesh; };
+    const toW = (lx, lz) => [X + lx * dz + lz * dx, Z - lx * dx + lz * dz];   // da locale a mondo
+    const colRy = Math.atan2(-dx, dz);
     const blockers = [];
-    let y = pad + PL;
-    for (let i = 0; i < 5; i++) {
-        const h = 3.2, r0 = 2.6 - i * 0.28, r1 = r0 - 0.28;
-        blockers.push(add(new THREE.Mesh(geo(new THREE.CylinderGeometry(r1, r0, h, 20)), i % 2 ? red : white), X, y + h / 2, Z));
-        y += h;
-    }
-    circ(X, Z, 2.75, pad + PL - 0.1, y + 5);              // la torre: non si attraversa
-    // porta, rivolta verso il molo, all'altezza del basamento
+
+    // intonaco a fasce bianche e rosso scuro, scrostato dal salmastro (texture disegnata qui)
+    const bandTex = (() => {
+        const c = document.createElement('canvas'); c.width = 128; c.height = 1024;
+        const q = c.getContext('2d');
+        q.fillStyle = '#d4cdd9'; q.fillRect(0, 0, 128, 1024);
+        for (const [a, b] of [[0.2, 0.36], [0.52, 0.68], [0.84, 1]]) { q.fillStyle = '#6b2230'; q.fillRect(0, 1024 * (1 - b), 128, 1024 * (b - a)); }
+        // colature e macchie
+        for (let i = 0; i < 260; i++) {
+            const x = Math.random() * 128, y0 = Math.random() * 1024, h = 20 + Math.random() * 140;
+            const gr = q.createLinearGradient(0, y0, 0, y0 + h);
+            gr.addColorStop(0, 'rgba(40,30,45,0.16)'); gr.addColorStop(1, 'rgba(40,30,45,0)');
+            q.fillStyle = gr; q.fillRect(x, y0, 1 + Math.random() * 2.5, h);
+        }
+        for (let i = 0; i < 900; i++) { q.fillStyle = `rgba(${Math.random() < 0.5 ? '255,250,255' : '20,15,25'},${0.04 + Math.random() * 0.08})`; q.fillRect(Math.random() * 128, Math.random() * 1024, 1 + Math.random() * 4, 1 + Math.random() * 3); }
+        const base = q.createLinearGradient(0, 1024, 0, 820); base.addColorStop(0, 'rgba(30,40,30,0.55)'); base.addColorStop(1, 'rgba(30,40,30,0)');
+        q.fillStyle = base; q.fillRect(0, 820, 128, 204);   // il verde dell'umido alla base
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4;
+        disposables.push(t);
+        return t;
+    })();
+    const plaster = mat({ map: bandTex, roughness: 0.9 });
+    const white = mat({ color: '#cfc8d6', roughness: 0.92 });
+    const stone = mat({ color: '#56505e', roughness: 0.95, flatShading: true });
     const iron = mat({ color: '#1c1a20', metalness: 0.8, roughness: 0.45 });
     const wood = mat({ color: '#3a281b', roughness: 0.9 });
-    const doorX = X + dx * 2.6, doorZ = Z + dz * 2.6, doorRy = Math.atan2(dx, dz), dy = pad + PL;
-    const door = add(new THREE.Mesh(geo(new THREE.BoxGeometry(1.25, 2.2, 0.2)), wood), doorX, dy + 1.1, doorZ);
-    door.rotation.y = doorRy;
-    const arch = add(new THREE.Mesh(geo(new THREE.TorusGeometry(0.72, 0.1, 6, 12, Math.PI)), stone), doorX + dx * 0.06, dy + 2.2, doorZ + dz * 0.06);
-    arch.rotation.y = doorRy;
-    const lock = add(new THREE.Mesh(geo(new THREE.TorusGeometry(0.11, 0.035, 6, 12)), iron), doorX + dx * 0.12, dy + 1.05, doorZ + dz * 0.12);
-    lock.rotation.y = doorRy;
-    interactables.push({ id: 'faro_porta', x: doorX + dx * 1.1, z: doorZ + dz * 1.1, y: dy, r: 2.2, label: 'La porta del faro' });
+    const doorWood = mat({ color: '#2e1f15', roughness: 0.85 });
+    const copper = mat({ color: '#3d5a52', metalness: 0.55, roughness: 0.5 });
+    const brass = mat({ color: '#8a7434', metalness: 0.85, roughness: 0.35 });
 
-    // ballatoio, gabbia e cupola
-    add(new THREE.Mesh(geo(new THREE.CylinderGeometry(2.2, 2.2, 0.3, 24)), iron), X, y + 0.15, Z);
-    const railing = add(new THREE.Mesh(geo(new THREE.TorusGeometry(2.1, 0.04, 4, 32)), iron), X, y + 1.0, Z);
-    railing.rotation.x = Math.PI / 2;
-    add(new THREE.Mesh(geo(new THREE.CylinderGeometry(1.15, 1.15, 2.2, 8, 1, true)), mat({ color: '#2a2630', metalness: 0.7, roughness: 0.5, wireframe: true })), X, y + 1.4, Z);
-    add(new THREE.Mesh(geo(new THREE.ConeGeometry(1.5, 1.4, 8)), iron), X, y + 3.2, Z);
+    // basamento di pietra: basso, ci si sale sopra
+    const PL = 0.3;
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(3.4, 3.6, PL + 0.5, 18)), stone), 0, (PL - 0.5) / 2, 0);
+    circ(X, Z, 3.45, pad - 2, pad + PL);
+
+    // fusto affusolato con un filo di curva, come i fari in muratura
+    const H = 15.6, R0 = 2.7, R1 = 1.72;
+    const rAt = (t) => R0 - (R0 - R1) * Math.pow(t, 0.85);
+    const prof = [];
+    for (let i = 0; i <= 16; i++) { const t = i / 16; prof.push(new THREE.Vector2(rAt(t), PL + t * H)); }
+    const shaft = put(new THREE.Mesh(geo(new THREE.LatheGeometry(prof, 40)), plaster), 0, 0, 0);
+    blockers.push(shaft);
+    circ(X, Z, 2.75, pad + PL - 0.1, pad + PL + H + 6);
+    // fascia di pietra al piede
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(R0 + 0.06, R0 + 0.1, 0.45, 40)), stone), 0, PL + 0.22, 0);
+
+    // finestrelle a spirale (la scala gira dentro): cornice di pietra e vetro scuro
+    const winGlass = mat({ color: '#0d1416', roughness: 0.2, metalness: 0.3, emissive: '#1f6b58', emissiveIntensity: 0.35 });
+    for (const [h, a] of [[3.6, 2.2], [6.6, -2.4], [9.6, 2.6], [12.4, -0.9]]) {
+        const t = (h - PL) / H, r = rAt(t);
+        const fx = Math.sin(a) * r, fz = Math.cos(a) * r;
+        put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.62, 1.0, 0.26)), white), fx, h, fz, a);
+        put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.42, 0.76, 0.06)), winGlass), Math.sin(a) * (r + 0.12), h, Math.cos(a) * (r + 0.12), a);
+        put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.7, 0.08, 0.36)), stone), Math.sin(a) * (r + 0.05), h - 0.54, Math.cos(a) * (r + 0.05), a);
+    }
+
+    // cornicione e mensole sotto il ballatoio
+    const top = PL + H;
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(2.1, R1 + 0.02, 0.5, 40)), white), 0, top - 0.25, 0);
+    for (let i = 0; i < 16; i++) {
+        const a = i / 16 * Math.PI * 2;
+        put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.18, 0.5, 0.5)), stone), Math.sin(a) * 2.05, top - 0.35, Math.cos(a) * 2.05, a);
+    }
+    // ballatoio con ringhiera
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(2.55, 2.55, 0.22, 40)), iron), 0, top + 0.11, 0);
+    const postG = geo(new THREE.CylinderGeometry(0.03, 0.03, 1.0, 6));
+    for (let i = 0; i < 32; i++) { const a = i / 32 * Math.PI * 2; put(new THREE.Mesh(postG, iron), Math.sin(a) * 2.45, top + 0.72, Math.cos(a) * 2.45); }
+    for (const hh of [0.62, 1.2]) { const ring = put(new THREE.Mesh(geo(new THREE.TorusGeometry(2.45, 0.035, 6, 48)), iron), 0, top + hh, 0); ring.rotation.x = Math.PI / 2; }
+
+    // la lanterna: zoccolo, vetri ottagonali con i montanti, cupola di rame e sfiato
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(1.4, 1.45, 0.7, 8)), white), 0, top + 0.57, 0);
+    const glassM = new THREE.MeshStandardMaterial({ color: '#bfeee0', transparent: true, opacity: 0.2, roughness: 0.05, metalness: 0.2, emissive: '#2a8a70', emissiveIntensity: 0.5, side: THREE.DoubleSide, depthWrite: false });
+    disposables.push(glassM);
+    const glass = put(new THREE.Mesh(geo(new THREE.CylinderGeometry(1.32, 1.32, 1.9, 8, 1, true)), glassM), 0, top + 1.87, 0);
+    glass.castShadow = false;
+    for (let i = 0; i < 8; i++) { const a = (i + 0.5) / 8 * Math.PI * 2; put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.07, 1.9, 0.07)), iron), Math.sin(a) * 1.3, top + 1.87, Math.cos(a) * 1.3, a); }
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(1.5, 1.5, 0.12, 8)), iron), 0, top + 2.86, 0);
+    const dome = put(new THREE.Mesh(geo(new THREE.SphereGeometry(1.45, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2)), copper), 0, top + 2.9, 0);
+    dome.scale.y = 0.8;
+    put(new THREE.Mesh(geo(new THREE.SphereGeometry(0.24, 12, 8)), copper), 0, top + 4.15, 0);
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(0.025, 0.025, 1.3, 5)), iron), 0, top + 4.9, 0);
+    put(new THREE.Mesh(geo(new THREE.ConeGeometry(0.06, 0.25, 5)), iron), 0, top + 5.65, 0);
+    const y = pad + top + 0.47;   // così y + 1.4 è il centro della lanterna (lo usano bagliore e fascio)
+
+    // =================================================================
+    //  LA CASA DEL GUARDIANO: l'ingresso, addossato alla torre
+    // =================================================================
+    const AW = 2.9, AD = 2.5, AH = 2.7, AZ0 = 2.0, AZ1 = AZ0 + AD;   // da z=2 (dentro la torre) a z=4.5
+    const annex = put(new THREE.Mesh(geo(new THREE.BoxGeometry(AW, AH + 0.4, AD)), white), 0, PL + AH / 2 - 0.2, (AZ0 + AZ1) / 2);
+    blockers.push(annex);
+    put(new THREE.Mesh(geo(new THREE.BoxGeometry(AW + 0.12, 0.4, AD + 0.12)), stone), 0, PL + 0.0, (AZ0 + AZ1) / 2);   // zoccolo
+    // tetto a due falde in lastre scure
+    const roofShape = new THREE.Shape([new THREE.Vector2(-AW / 2 - 0.3, 0), new THREE.Vector2(AW / 2 + 0.3, 0), new THREE.Vector2(0, 1.15)]);
+    const roofG = geo(new THREE.ExtrudeGeometry(roofShape, { depth: AD + 0.4, bevelEnabled: false }));
+    const slate = mat({ color: '#2b2732', roughness: 0.8, flatShading: true });
+    put(new THREE.Mesh(roofG, slate), 0, PL + AH, AZ0 - 0.1);
+    // il timpano davanti, intonacato, e una finestrella tonda
+    const gable = new THREE.Shape([new THREE.Vector2(-AW / 2, 0), new THREE.Vector2(AW / 2, 0), new THREE.Vector2(0, 0.95)]);
+    put(new THREE.Mesh(geo(new THREE.ShapeGeometry(gable)), white), 0, PL + AH, AZ1 + 0.005);
+    put(new THREE.Mesh(geo(new THREE.CircleGeometry(0.17, 16)), winGlass), 0, PL + AH + 0.38, AZ1 + 0.01);
+    const [ax, az] = toW(0, (AZ0 + AZ1) / 2);
+    box(ax, az, AW, AD, pad - 1, pad + PL + AH + 1.2, colRy);
+
+    // portale di pietra: stipiti, architrave e chiave di volta; la porta sta incassata dentro
+    const FZ = AZ1;
+    for (const s of [-1, 1]) put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.32, 2.55, 0.34)), stone), s * 0.86, PL + 1.27, FZ + 0.1);
+    put(new THREE.Mesh(geo(new THREE.BoxGeometry(2.1, 0.36, 0.38)), stone), 0, PL + 2.72, FZ + 0.1);
+    put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.34, 0.5, 0.42)), stone), 0, PL + 2.8, FZ + 0.12);
+    put(new THREE.Mesh(geo(new THREE.BoxGeometry(1.42, 2.5, 0.2)), mat({ color: '#0c0a0e', roughness: 1 })), 0, PL + 1.25, FZ - 0.06);   // il buio dietro le assi
+    // la porta: cinque assi, due bandelle di ferro, l'anello e la serratura a corona
+    for (let i = 0; i < 5; i++) put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.26, 2.42, 0.07)), doorWood), -0.56 + i * 0.28, PL + 1.21, FZ - 0.02 + (i % 2) * 0.006);
+    for (const hh of [0.45, 1.95]) put(new THREE.Mesh(geo(new THREE.BoxGeometry(1.3, 0.09, 0.03)), iron), 0, PL + hh, FZ + 0.03);
+    for (const hh of [0.45, 1.95]) for (const s of [-1, 1]) put(new THREE.Mesh(geo(new THREE.SphereGeometry(0.035, 6, 4)), iron), s * 0.6, PL + hh, FZ + 0.05);
+    const ring = put(new THREE.Mesh(geo(new THREE.TorusGeometry(0.09, 0.016, 6, 16)), iron), 0.38, PL + 1.1, FZ + 0.06);
+    put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.2, 0.3, 0.025)), brass), -0.32, PL + 1.15, FZ + 0.04);
+    for (const s of [-1, 0, 1]) put(new THREE.Mesh(geo(new THREE.ConeGeometry(0.025, 0.08 + (s === 0 ? 0.03 : 0), 4)), brass), -0.32 + s * 0.06, PL + 1.35, FZ + 0.045);   // la corona spezzata
+    put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.03, 0.08, 0.03)), iron), -0.32, PL + 1.11, FZ + 0.055);   // il buco della chiave
+    // due gradini di pietra davanti alla porta
+    put(new THREE.Mesh(geo(new THREE.BoxGeometry(2.0, 0.3, 0.55)), stone), 0, 0.0, FZ + 0.35);
+    put(new THREE.Mesh(geo(new THREE.BoxGeometry(2.3, 0.15, 0.5)), stone), 0, -0.05, FZ + 0.85);
+    const [sx, sz] = toW(0, FZ + 0.35);
+    box(sx, sz, 2.0, 0.55, pad - 1, pad + 0.15, colRy);
+    // un lanternino sopra la porta, con la stessa luce verde della cima
+    put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.06, 0.06, 0.4)), iron), 0, PL + 3.05, FZ + 0.3);
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(0.1, 0.13, 0.26, 6)), mat({ color: '#9affe0', emissive: '#4affc8', emissiveIntensity: 1.2, roughness: 0.4 })), 0, PL + 2.88, FZ + 0.48);
+    const doorGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: '#7affd8', transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+    disposables.push(doorGlow.material);
+    doorGlow.scale.set(1.3, 1.3, 1); doorGlow.position.set(0, PL + 2.88, FZ + 0.48);
+    T.add(doorGlow);
+
+    const [doorX, doorZ] = toW(0, FZ);
+    interactables.push({ id: 'faro_porta', x: X + dx * (FZ + 1.3), z: Z + dz * (FZ + 1.3), y: pad, r: 2.0, label: 'La porta del faro' });
 
     // il cuore della lanterna: un bagliore verde che respira
     const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: '#7affd8', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8, fog: false }));   // la luce di un faro buca la nebbia
     disposables.push(core.material);
-    core.position.set(X, y + 1.4, Z); core.scale.set(7, 7, 1);
+    core.position.set(X, y + 1.4, Z); core.scale.set(5, 5, 1);
     g.add(core);
     const halo = new THREE.Sprite(core.material.clone());
     disposables.push(halo.material);
@@ -131,7 +242,7 @@ export function buildFaro(app) {
     const tEnd = L(-w / 2 - 0.1, len);
     torch(tEnd.x, yd + 1.95, tEnd.z, 0.9, true);
     for (const s of [-1, 1]) {
-        const x = doorX + dx * 1.6 + px * s * 1.6, z = doorZ + dz * 1.6 + pz * s * 1.6, b = W.terrainAt(x, z);
+        const x = doorX + dx * 2.3 + px * s * 2.3, z = doorZ + dz * 2.3 + pz * s * 2.3, b = W.terrainAt(x, z);
         add(new THREE.Mesh(geo(new THREE.CylinderGeometry(0.06, 0.09, 2.2, 6)), wood), x, b + 1.1, z);
         add(new THREE.Mesh(geo(new THREE.CylinderGeometry(0.22, 0.12, 0.2, 8)), iron), x, b + 2.2, z);
         torch(x, b + 2.62, z, 1.1, false);

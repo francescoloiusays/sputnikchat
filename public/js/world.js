@@ -22,6 +22,7 @@ export const WORLD = {
     MAIN: { x: 0, z: 20, r: 74 },
     ISLET: { x: 0, z: -104, r: 34 },
     // Libro II: lo scoglio del Faro Spento, a nord-est nella laguna (ci si arriva in barca)
+    WATER_Y: 0, SWIM_Y: -1.15, SWIM_RANGE: 14,   // pelo dell'acqua, dove galleggiano i piedi a nuoto, quanti metri si nuota lontano dalla terra
     FARO: { x: 138, z: -150, r: 21, pad: 2.6, dock: { dir: [-0.495, 0.869], r0: 18, r1: 31, w: 2.6, y: 1.25 } },
     CASTLE: { x: 0, z: -104, half: 19, base: 3.2, wallH: 6.5 },
     ARENA: { x: 0, z: -100, r: 7.5, top: 3.55 },
@@ -389,10 +390,35 @@ export class World {
             pos.z = c.z + nlx * c.sin + nlz * c.cos;
         }
         // acqua profonda = confine invisibile
-        if (!this.onBridge(pos.x, pos.z) && this.terrainAt(pos.x, pos.z) < -1.1 && !this.onDeck(pos.x, pos.z)) return false;
+        // si nuota finché il fondale non scende oltre SWIM_LIMIT: più in là la corrente respinge (in mare aperto si va in barca)
+        this.lastBlock = null;
+        if (this.terrainAt(pos.x, pos.z) < -1.1 && this.shoreDistAt(pos.x, pos.z) > WORLD.SWIM_RANGE && !this.onBridge(pos.x, pos.z) && !this.onDeck(pos.x, pos.z)) { this.lastBlock = 'mare'; return false; }
         return true;
     }
     // moli e pontili: ci si cammina sopra anche dove l'acqua è profonda
+    // distanza dalla terra più vicina (per il nuoto): calcolata una volta sola sulla griglia delle altezze
+    buildShoreDist() {
+        const n = this.n, D = new Float32Array(n * n), a = this.cw, b = Math.hypot(this.cw, this.cd);
+        for (let i = 0; i < n * n; i++) D[i] = this.H[i] > 0 ? 0 : 1e9;
+        const relax = (i, j, c) => { if (D[j] + c < D[i]) D[i] = D[j] + c; };
+        for (let iz = 0; iz < n; iz++) for (let ix = 0; ix < n; ix++) {
+            const i = iz * n + ix;
+            if (ix > 0) relax(i, i - 1, a);
+            if (iz > 0) { relax(i, i - n, a); if (ix > 0) relax(i, i - n - 1, b); if (ix < n - 1) relax(i, i - n + 1, b); }
+        }
+        for (let iz = n - 1; iz >= 0; iz--) for (let ix = n - 1; ix >= 0; ix--) {
+            const i = iz * n + ix;
+            if (ix < n - 1) relax(i, i + 1, a);
+            if (iz < n - 1) { relax(i, i + n, a); if (ix < n - 1) relax(i, i + n + 1, b); if (ix > 0) relax(i, i + n - 1, b); }
+        }
+        this.shoreD = D;
+    }
+    shoreDistAt(x, z) {
+        if (!this.shoreD) this.buildShoreDist();
+        const n = this.n, ix = Math.round((x - WORLD.MIN_X) / this.cw), iz = Math.round((z - WORLD.MIN_Z) / this.cd);
+        if (ix < 0 || iz < 0 || ix >= n || iz >= n) return 1e9;
+        return this.shoreD[iz * n + ix];
+    }
     onDeck(x, z) { for (const c of this.colliders) if (c.deck && this.inside(c, x, z, 0.2)) return true; return false; }
     addBox(x, z, w, d, y0, y1, ry = 0, opts = {}) {
         this.colliders.push({ type: 'box', x, z, hw: w / 2, hd: d / 2, cos: Math.cos(ry), sin: Math.sin(ry), y0, y1, ...opts });
@@ -1262,7 +1288,7 @@ export class World {
         const dock = new THREE.Mesh(mergeGeometries(g), this.matWood);
         dock.castShadow = dock.receiveShadow = true;
         this.scene.add(dock);
-        this.addBox(x, (z0 + z1) / 2, w, z1 - z0 + 0.5, -3, y + 0.05);
+        this.addBox(x, (z0 + z1) / 2, w, z1 - z0 + 0.5, -3, y + 0.05, 0, { deck: true });
         // barchetta
         const boat = new THREE.Group();
         const hull = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.6, 3.6, 18, 1, true, 0, Math.PI), new THREE.MeshStandardMaterial({ color: '#3a2618', side: THREE.DoubleSide, roughness: 0.9 }));
