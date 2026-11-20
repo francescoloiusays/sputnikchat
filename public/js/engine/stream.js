@@ -306,18 +306,41 @@ export class Streamer {
     region(name, center, radius, load) {
         this.regions.push({ name, center: new THREE.Vector3(center.x, 0, center.z), radius, load, state: 'off', obj: null });
     }
+    loadRegion(R) {
+        if (R.promise) return R.promise;
+        R.state = 'loading';
+        return (R.promise = R.load().then(obj => {
+            R.obj = obj; R.state = 'on';
+            if (obj.group) {
+                this.scene.add(obj.group);
+                // le luci della regione entrano nella rotazione
+                R.lights = [];
+                obj.group.traverse(c => { if (c.isPointLight) R.lights.push(this.pool.capture(c)); });
+            }
+            return R;
+        }).catch(err => { console.warn('[stream] regione', R.name, err); R.state = 'off'; R.promise = null; }));
+    }
+    unloadRegion(R) {
+        if (R.obj.group) this.scene.remove(R.obj.group);
+        if (R.lights) {
+            this.pool.sources = this.pool.sources.filter(s => !R.lights.includes(s));
+            for (const sl of this.pool.slots) if (R.lights.includes(sl.src)) { sl.src = null; sl.w = 0; }
+            R.lights = null;
+        }
+        R.obj.dispose?.();
+        R.obj = null; R.state = 'off'; R.promise = null;
+    }
+    // per i viaggi: carica subito la regione che contiene (x, z) e aspetta che sia pronta
+    async ensureAt(x, z) {
+        const R = this.regions.find(r => Math.hypot(x - r.center.x, z - r.center.z) < r.radius + 20);
+        if (R && R.state !== 'on') await this.loadRegion(R);
+        return R;
+    }
     updateRegions(focus) {
         for (const R of this.regions) {
             const d = Math.hypot(focus.x - R.center.x, focus.z - R.center.z) - R.radius;
-            if (R.state === 'off' && d < this.dist.large) {
-                R.state = 'loading';
-                R.load().then(obj => { R.obj = obj; R.state = 'on'; if (obj.group) this.scene.add(obj.group); })
-                    .catch(err => { console.warn('[stream] regione', R.name, err); R.state = 'off'; });
-            } else if (R.state === 'on' && d > this.dist.large + 60) {
-                if (R.obj.group) this.scene.remove(R.obj.group);
-                R.obj.dispose?.();
-                R.obj = null; R.state = 'off';
-            }
+            if (R.state === 'off' && d < this.dist.large) this.loadRegion(R);
+            else if (R.state === 'on' && d > this.dist.large + 60) this.unloadRegion(R);
         }
     }
 

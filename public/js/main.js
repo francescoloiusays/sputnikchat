@@ -833,6 +833,54 @@ class Game {
     }
 
     // --- I LUOGHI DELL'ISOLA ---
+    // --- VIAGGI IN BARCA (Libro II): Molo ⇄ Faro Spento ---
+    async travel(dest) {
+        if (this.traveling || this.mode !== 'world') return;
+        this.traveling = true;
+        if (this.player.sit) this.standUp();
+        let veil = $('#travel-veil');
+        if (!veil) {
+            veil = h('div', { id: 'travel-veil' }, h('div', { class: 'tv-text' }));
+            veil.style.cssText = 'position:fixed;inset:0;z-index:55;background:#07030c;opacity:0;pointer-events:none;transition:opacity .8s ease;display:flex;align-items:center;justify-content:center;';
+            veil.firstChild.style.cssText = 'font-family:var(--display,serif);color:#d9c9a0;font-size:clamp(18px,3vw,28px);letter-spacing:.06em;text-shadow:0 2px 8px #000;opacity:.85;text-align:center;padding:0 24px;';
+            document.body.append(veil);
+        }
+        const toFaro = dest === 'faro';
+        veil.firstChild.textContent = toFaro ? 'Il remo entra nell\'acqua senza fare rumore…' : 'La nebbia si richiude dietro la barca…';
+        veil.style.pointerEvents = 'auto';
+        veil.style.opacity = '1';
+        this.audio.play?.('splash');
+        await new Promise(r => setTimeout(r, 900));
+        try {
+            let T;
+            if (toFaro) {
+                const { faroArrival } = await import('./regions/faro.js');
+                T = faroArrival();
+                await this.stream?.ensureAt(T.x, T.z);      // il molo del faro deve esserci prima di scendere
+            } else T = { x: 0.4, z: 93.5, yaw: Math.PI, camYaw: 0 };
+            const P = this.player;
+            P.pos.set(T.x, this.world.groundAt(T.x, T.z), T.z);
+            P.vel.set(0, 0, 0);
+            P.yaw = T.yaw; this.cam.yaw = T.camYaw;
+            P.lastSent = null; P.lastSend = 0;
+            this.myChar.root.position.copy(P.pos);
+            await new Promise(r => setTimeout(r, 900));
+        } finally {
+            veil.style.opacity = '0';
+            veil.style.pointerEvents = 'none';
+            this.traveling = false;
+        }
+        const first = !this.local.faroVisto && toFaro;
+        if (first) {
+            this.local.faroVisto = true; this.saveLocal();
+            toast(h('div', {}, h('b', {}, 'Il Faro Spento'), h('div', {}, 'Il Traghettatore non ha detto una parola per tutto il viaggio. Solo, scendendo, ti è sembrato di sentirlo sussurrare: «Lei aspetta da più tempo di me».')), { icon: 'lantern', duration: 9000 });
+        }
+    }
+    faroDoor() {
+        this.audio.play('click');
+        toast(h('div', {}, h('b', {}, 'La porta del faro è chiusa'), h('div', {}, 'Dall\'altra parte qualcosa respira, piano. La serratura ha la forma di una corona spezzata: forse da qualche parte, sull\'isola, qualcuno sta ancora forgiando la chiave giusta.')), { icon: 'lock', duration: 9000 });
+    }
+
     async talkTo(id) {
         if (!this.net.connected || !this.helloDone) return this.openPanel('npc', { id });
         const r = await this.net.request('npc:talk', { id });
@@ -1130,6 +1178,8 @@ class Game {
         else if (it.id === 'tomba') this.digGrave(it.k);
         else if (it.id === 'fontana') this.wish();
         else if (it.id === 'telefono') this.answerPhone();
+        else if (it.id === 'barca') this.travel(it.dest);
+        else if (it.id === 'faro_porta') this.faroDoor();
         else if (it.id === 'siedi') this.player.sit === it.seat ? this.standUp() : this.sitDown(it.seat);
         else this.openPanel(it.id);
     }

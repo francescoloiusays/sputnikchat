@@ -39,6 +39,9 @@ Client in HTML/JS con Three.js (GitHub Pages), server Node.js con socket.io (Ren
 - **Titoli e Rinascita**: undici titoli da conquistare (si scelgono nel Libro della Maestria e compaiono sotto il nome). Al livello 30 la Custode offre la Rinascita: si torna al livello 1 tenendo oggetti e carta, con una stella sulla carta e il 5% di esperienza in più per sempre (fino a tre volte).
 - **Interfaccia da gioco di ruolo**: finestre in legno scuro con filigrane d'oro, pergamene per registri e notifiche, slot degli oggetti colorati per rarità (comune, non comune, raro, epico, leggendario), barra delle azioni con le scorciatoie, ritratto in cornice dorata, titoli delle zone a tutto schermo e mappa grande su pergamena. Font: Almendra (titoli), Cinzel (etichette), Alegreya (testi); il Planewalker resta per il marchio "SputnikChat".
 
+- **Libro II: il Faro Spento**: uno scoglio a nord-est della laguna, raggiungibile con la barca del Traghettatore ("Portami al Faro Spento"). C'è la Guardiana del Faro e una porta chiusa da trecento anni. La regione si carica solo quando ti avvicini (`public/js/regions/faro.js`).
+- **Motore di streaming** (`public/js/engine/stream.js`): si disegna solo ciò che è nel campo visivo, da lontano gli edifici diventano blocchi fusi (HLOD), le torce accese davvero sono solo le più vicine, la risoluzione si adatta da sola. F3 mostra le prestazioni.
+
 ## Elementi
 
 | Texture | Elemento | Passiva | SUPER |

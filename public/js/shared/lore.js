@@ -46,7 +46,7 @@ export const NPCS = {
         lines: ['Tutti arrivano dal molo. Pochi ripartono. Nessuno, finora, ha chiesto il biglietto di ritorno.',
             'Di notte, sotto le assi, nuota qualcosa di fatto di nebbia. Usa la lenza, non le mani.',
             'Le bottiglie le porta il mare, non io. Io le leggo soltanto, prima di ributtarle.'],
-        actions: [['diario', 'Il Diario del Naufrago']],
+        actions: [['diario', 'Il Diario del Naufrago'], ['faro', 'Portami al Faro Spento']],
     },
     brace: {
         name: 'Mastro Brace', where: 'Forgia di Vulcano', x: -22.5, z: 9.2, ry: Math.PI / 2, teach: 2,
@@ -108,6 +108,17 @@ export const NPCS = {
             'Sali nella Stanza Bianca: se ti siedi in poltrona, si va In Onda! Se non c\'è nessun altro, ti faccio io da spalla.',
             'Il telefono bianco squilla quando vuole lui. Rispondi, se hai coraggio.'],
         actions: [],
+    },
+    // Libro II: sul molo del Faro Spento
+    guardiana: {
+        name: 'La Guardiana del Faro', where: 'Il Faro Spento', x: 126.87, z: -132.17, y: 1.25, ry: -0.5176, teach: null,
+        app: { sex: 'f', species: 'umano', build: 'snello', height: 1.02, skin: '#a9b2c0', eyes: 'assonnati', eyeColor: '#7affd8', mouth: 'neutro', hair: 'lunghi', hairColor: '#dcdce6', beard: 'nessuna', topStyle: 'veste', top: '#22303a', bottom: '#151a20', shoes: '#0e0c10' },
+        look: { head: 'cappuccio', cape: 'mantello_nero' },
+        lines: ['Il faro non guidava le navi. Guidava fuori dalla nebbia chi era pronto ad andarsene. Da quando si è spento, nessuno se ne va più.',
+            'La porta l\'ho chiusa io, la notte in cui la corona si è spezzata. La chiave l\'ho affidata a un fabbro. Non ricordo più quale.',
+            'Lassù qualcosa respira. Io lo sento ogni notte. Tu, adesso, lo vedi.',
+            'Il Traghettatore passa una volta al giorno. Non mi porta mai niente: solo gente che chiede dov\'è il ritorno.'],
+        actions: [['molo', 'Torna al Molo in barca']],
     },
 };
 

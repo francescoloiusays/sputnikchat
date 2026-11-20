@@ -21,6 +21,8 @@ export const WORLD = {
     MIN_X: -180, MAX_X: 180, MIN_Z: -200, MAX_Z: 160, SEG: 200,
     MAIN: { x: 0, z: 20, r: 74 },
     ISLET: { x: 0, z: -104, r: 34 },
+    // Libro II: lo scoglio del Faro Spento, a nord-est nella laguna (ci si arriva in barca)
+    FARO: { x: 138, z: -150, r: 21, pad: 2.6, dock: { dir: [-0.495, 0.869], r0: 18, r1: 31, w: 2.6, y: 1.25 } },
     CASTLE: { x: 0, z: -104, half: 19, base: 3.2, wallH: 6.5 },
     ARENA: { x: 0, z: -100, r: 7.5, top: 3.55 },
     KEEP: { x: 0, z: -118.8, w: 12, d: 10, h: 15, t: 1 },          // mastio, addossato al muro nord
@@ -76,7 +78,9 @@ function islandMask(x, z) {
     const rM = M.r * (1 + 0.12 * Math.sin(a * 3 + 1.3) + 0.08 * Math.sin(a * 5 + 0.4) + 0.05 * Math.sin(a * 9));
     const bx = x - I.x, bz = z - I.z;
     const rI = I.r * (1 + 0.07 * Math.sin(Math.atan2(bz, bx) * 4 + 0.7));
-    return Math.max(1 - Math.hypot(ax, az) / rM, 1 - Math.hypot(bx, bz) / rI);
+    const F = WORLD.FARO, fx = x - F.x, fz = z - F.z, fa = Math.atan2(fz, fx);
+    const rF = F.r * (1 + 0.1 * Math.sin(fa * 3 + 2.1) + 0.05 * Math.sin(fa * 7));
+    return Math.max(1 - Math.hypot(ax, az) / rM, 1 - Math.hypot(bx, bz) / rI, 1 - Math.hypot(fx, fz) / rF);
 }
 
 function computeHeight(x, z) {
@@ -99,6 +103,9 @@ function computeHeight(x, z) {
     const C = WORLD.CASTLE;
     const dq = Math.pow(Math.pow(Math.abs(x - C.x), 4) + Math.pow(Math.abs(z - C.z), 4), 0.25);
     h = lerp(h, C.base, 1 - smooth(25, 31, dq));
+    // spiazzo piano ai piedi del faro
+    const F = WORLD.FARO;
+    h = lerp(h, F.pad, 1 - smooth(5.5, 10, Math.hypot(x - F.x, z - F.z)));
     return h;
 }
 
@@ -375,9 +382,11 @@ export class World {
             pos.z = c.z + nlx * c.sin + nlz * c.cos;
         }
         // acqua profonda = confine invisibile
-        if (!this.onBridge(pos.x, pos.z) && this.terrainAt(pos.x, pos.z) < -1.1) return false;
+        if (!this.onBridge(pos.x, pos.z) && this.terrainAt(pos.x, pos.z) < -1.1 && !this.onDeck(pos.x, pos.z)) return false;
         return true;
     }
+    // moli e pontili: ci si cammina sopra anche dove l'acqua è profonda
+    onDeck(x, z) { for (const c of this.colliders) if (c.deck && this.inside(c, x, z, 0.2)) return true; return false; }
     addBox(x, z, w, d, y0, y1, ry = 0, opts = {}) {
         this.colliders.push({ type: 'box', x, z, hw: w / 2, hd: d / 2, cos: Math.cos(ry), sin: Math.sin(ry), y0, y1, ...opts });
     }
@@ -1535,10 +1544,12 @@ export class World {
             { x: BOUNTY_BOARD.x, z: BOUNTY_BOARD.z, ic: 'scroll', label: 'Bacheca delle Taglie' },
             { x: TOLL.spot.x, z: TOLL.spot.z, ic: 'ecto', label: 'Pedaggio dello Spettro' },
             { x: FOUNTAIN.x, z: FOUNTAIN.z, ic: 'wave', label: 'Fontana dei Desideri' },
+            { x: WORLD.FARO.x, z: WORLD.FARO.z, ic: 'lantern', label: 'Il Faro Spento' },
         ];
     }
 
     zoneName(x, z) {
+        if (Math.hypot(x - WORLD.FARO.x, z - WORLD.FARO.z) < WORLD.FARO.r + 10) return 'Il Faro Spento';
         const C = WORLD.CASTLE;
         if (Math.abs(x - C.x) < C.half && Math.abs(z - C.z) < C.half) {
             const K = WORLD.KEEP;

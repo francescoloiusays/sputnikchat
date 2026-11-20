@@ -174,6 +174,7 @@ const VOICES = {
     spettro: { f: 410, type: 'sine', rate: 0.16, vib: 14, verb: 0.85, wail: 1, gain: 0.6 },                 // lamento
     ratto: { f: 520, type: 'square', rate: 0.055, form: 1.45, gain: 0.55 },                                  // squittii veloci
     re: { f: 60, type: 'sawtooth', rate: 0.17, form: 0.6, verb: 0.55, bubbles: 1, growl: 1, gain: 1.7 },    // gorgoglio dal fondo
+    guardiana: { f: 262, type: 'sine', rate: 0.12, form: 1.0, verb: 0.55, breath: 1, gain: 0.95 },          // stanca, lontana, col vento
     telefono: { f: 250, type: 'square', rate: 0.08, form: 1.2, lofi: 1 },
     default: { f: 200, type: 'triangle', rate: 0.08, form: 1 },
 };
