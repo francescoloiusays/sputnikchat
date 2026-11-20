@@ -13,7 +13,7 @@ import { islandHour } from './sky.js';
 import { Character } from './character.js';
 import { h, toast, $ } from './util.js';
 import { iconSVG } from './icons.js';
-import { l2Thread } from './libro2-ui.js';
+import { l2Thread, l2Book } from './libro2-ui.js';
 
 const SEED_COL = { fuoco: '#ff6a2f', ghiaccio: '#7fd8ff', palude: '#6fcf5a', pietra: '#c4bcb2', tempesta: '#ffe14a', spettro: '#c49aff', fango: '#c89660' };
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
@@ -225,6 +225,7 @@ export function bookContent(app, panels) {
         })) : null,
         showName ? h('div', { class: 'bk-name' }, h('small', {}, 'Il tuo Nome Vero'), h('b', {}, st.name), h('p', {}, ritratto(c)),
             h('button', { class: 'btn btn-sm', html: iconSVG('quill'), onclick: () => panels.open('nomevero', { name: st.name }) }, 'Cambia il Nome Vero')) : null,
+        l2Book(app),
     ];
 }
 

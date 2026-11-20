@@ -26,7 +26,7 @@ import {
 import { INSULTS, TOLL_START, TOLL_LINES, NPCS, ONDA_Q, ONDA_PLOT, TABLETS, MISSIONS, PHONE_LINES, QUADRI } from './public/js/shared/lore.js';
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
 import { STORY, STORY_END, STORY_SPOTS, WAYS, newStory, chapterReady, nomeVero } from './public/js/shared/story.js';
-import { L2, COCCI, newL2 } from './public/js/shared/libro2.js';
+import { L2_CHAPTERS, L2_SPOTS, newL2, fixL2, l2Step } from './public/js/shared/libro2.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
@@ -113,7 +113,7 @@ function migrate(p) {
         changed = true;
     }
     if (!p.story) { p.story = newStory(true); changed = true; }
-    if (!p.libro2) { p.libro2 = newL2(); changed = true; }
+    if (!p.libro2 || p.libro2.ch == null) { p.libro2 = fixL2(p.libro2); changed = true; }
     updateSeason(p);
     return changed;
 }
@@ -171,6 +171,7 @@ function progress(p, ev, amt = 1, data = {}) {
     // gli stessi eventi fanno andare avanti anche la storia
     const SE = { fish: 'fish', dig: 'dig', canto: 'canto', toll: 'toll' }[ev];
     if (SE) storyStep(p, SE, amt);
+    l2Count(p, ev, amt);
     const B = ensureBounties(p), S = sessionOf(p.id);
     const step = (b, kind, max) => {
         if (!b || b.done || !bountyMatch(b, kind, ev, data)) return false;
@@ -188,6 +189,29 @@ function progress(p, ev, amt = 1, data = {}) {
     }
 }
 // --- IL ROMANZO DELLA NEBBIA ---
+// Libro II: si passa al passo dopo; finito l'ultimo passo, il capitolo si chiude e paga
+const l2Of = p => (p.libro2 = fixL2(p.libro2));
+function l2Advance(p, out) {
+    const st = l2Of(p), C = L2_CHAPTERS[st.ch];
+    st.i++; st.got = []; st.cnt = 0;
+    if (st.i < C.steps.length) return;
+    out.chapter = st.ch;
+    out.xp = (out.xp || 0) + grantXp(p, C.xp);
+    p.coins += C.coins; out.coins = C.coins;
+    if (C.title_id && award(p, C.title_id)) out.title = C.title_id;
+    st.done = { ...(st.done || {}), [st.ch]: Date.now() };
+    st.ch++; st.i = 0;
+}
+// i passi «conta» (pesca, scava…) vanno avanti da soli
+function l2Count(p, ev, amt) {
+    const st = l2Of(p), S = l2Step(st);
+    if (!S || S.k !== 'count' || S.ev !== ev) return;
+    st.cnt += amt;
+    const out = {};
+    if (st.cnt >= S.n) l2Advance(p, out);
+    const sess = sessionOf(p.id);
+    if (sess) sess.socket.emit('l2:step', { libro2: st, ...out });
+}
 const storyOf = p => (p.story ||= newStory(true));
 // un passo del capitolo aperto: si conta solo da quando il capitolo è cominciato
 function storyStep(p, k, amt = 1) {
@@ -1635,38 +1659,47 @@ io.on('connection', (socket) => {
         } else return fail(reply, 'Non c\'è niente qui');
         storyReply(reply, { k });
     });
-
-    // --- LIBRO II · LA PORTA CHIUSA: la chiave del Faro Spento ---
+    // --- LIBRO II · IL FARO SPENTO: un passo alla volta, controllato qui ---
     on('l2:act', (d, reply) => {
-        const p = me.p, st = (p.libro2 ||= newL2()), a = String(d.a), out = {};
-        const nearNpc = (id) => near(NPCS[id].x, NPCS[id].z, 6);
-        if (a === 'start') {
-            if (st.s !== 0) return fail(reply, 'Hai già promesso');
-            if (levelOf(p) < L2.lv) return fail(reply, `La Guardiana ti parlerà dal livello ${L2.lv}`);
-            if (!nearNpc('guardiana')) return fail(reply, 'Troppo lontano');
-            st.s = 1;
-        } else if (a === 'ask') {
-            if (st.s !== 1) return fail(reply, 'Non adesso');
-            if (!nearNpc('brace')) return fail(reply, 'Troppo lontano');
-            st.s = 2;
-        } else if (a === 'coccio') {
-            const k = String(d.k), C = L2.cocci[k];
-            if (st.s !== 2 || !C) return fail(reply, "Non c'è niente qui");
-            if (!near(C.x, C.z, 4)) return fail(reply, 'Troppo lontano');
-            if (st.cocci.includes(k)) return fail(reply, "Questo l'hai già raccolto");
-            st.cocci.push(k);
-            out.xp = grantXp(p, L2.coccioXp);
-            if (COCCI.every(c => st.cocci.includes(c))) st.s = 3;
-        } else if (a === 'forge') {
-            if (st.s !== 3) return fail(reply, 'Ti mancano ancora dei cocci');
-            if (!nearNpc('brace')) return fail(reply, 'Troppo lontano');
-            st.s = 4;
-        } else if (a === 'door') {
-            if (st.s !== 4) return fail(reply, 'Ti serve la chiave');
-            if (!near(L2.door.x, L2.door.z, L2.door.r + 1.5)) return fail(reply, 'Troppo lontano');
-            st.s = 5; st.done = Date.now();
-            out.xp = grantXp(p, L2.xp); p.coins += L2.coins; out.coins = L2.coins;
-            out.title = award(p, L2.title_id) ? L2.title_id : null;
+        const p = me.p, st = l2Of(p), C = L2_CHAPTERS[st.ch], S = l2Step(st), a = String(d.a), out = {};
+        if (!S) return fail(reply, 'Il Libro II è finito: il faro è acceso');
+        if (a !== S.k) return fail(reply, 'Non adesso');
+        if (st.i === 0 && levelOf(p) < C.lv) return fail(reply, `Questo capitolo si apre dal livello ${C.lv}`);
+        const nearNpc = (id) => !!NPCS[id] && near(NPCS[id].x, NPCS[id].z, 6);
+        const spotErr = (k) => {
+            const P = L2_SPOTS[k];
+            if (!P) return "Non c'è niente qui";
+            if (!near(P.x, P.z, (P.r || 3) + 1.5)) return 'Troppo lontano';
+            if (P.y != null && (me.pos[1] || 0) < P.y - 2) return 'Devi salire in cima al faro';
+            if (P.night && !isNight() && process.env.SPUTNIK_NOTTE !== '1') return 'Torna di notte: di giorno qui non succede niente';   // SPUTNIK_NOTTE=1: solo per le prove in locale
+            return null;
+        };
+        if (a === 'talk' || a === 'answer') {
+            if (!nearNpc(S.who)) return fail(reply, 'Troppo lontano');
+            if (a === 'answer') {
+                if (d.n == null) return fail(reply, 'Scegli una risposta');
+                (st.ans ||= [])[st.ch] = int(d.n, 0, S.a.length - 1);
+            }
+            l2Advance(p, out);
+        } else if (a === 'give') {
+            if (!nearNpc(S.who)) return fail(reply, 'Troppo lontano');
+            if ((p.mats[S.mat] || 0) < S.n) return fail(reply, `Ti servono ${S.n} × ${MATS[S.mat].name}`);
+            p.mats[S.mat] -= S.n;
+            l2Advance(p, out);
+        } else if (a === 'find') {
+            const k = String(d.k);
+            if (!S.spots.includes(k)) return fail(reply, "Non c'è niente qui");
+            const err = spotErr(k);
+            if (err) return fail(reply, err);
+            if (st.got.includes(k)) return fail(reply, "Questo l'hai già preso");
+            st.got.push(k); out.got = k;
+            if (S.spots.length > 1) out.xp = grantXp(p, 25);
+            if (S.spots.every(s => st.got.includes(s))) l2Advance(p, out);
+        } else if (a === 'boss') {
+            if (Date.now() - (me.lastBoss || 0) < 20000) return fail(reply, 'Riprendi fiato');
+            me.lastBoss = Date.now();
+            out.won = !!d.won;
+            if (d.won) l2Advance(p, out);
         } else return fail(reply, "Non c'è niente qui");
         save(p); sendMe(me);
         reply({ ok: true, libro2: st, ...out });

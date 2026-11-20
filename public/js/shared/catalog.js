@@ -785,6 +785,7 @@ export const TITLES = {
     rinato: { name: 'Rinato', how: 'Compi la Rinascita al livello 30' },
     spettrale: { name: 'Spettro della Stagione', how: 'Chiudi una stagione in lega Spettro' },
     portinaio: { name: 'Chi Apre il Faro', how: 'Apri la porta del Faro Spento (Libro II)' },
+    lucefaro: { name: 'Luce del Faro', how: 'Riaccendi il Faro Spento (fine del Libro II)' },
     // il Romanzo della Nebbia: un titolo per capitolo
     scintilla: { name: 'Scintilla', how: 'Chiudi il capitolo della Brace' },
     brina: { name: 'Brina', how: 'Chiudi il capitolo della Brina' },

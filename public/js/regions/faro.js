@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WORLD } from '../world.js';
+import { l2At, L2AT } from '../shared/libro2.js';
 
 // dove si scende dalla barca, e da che parte si guarda
 export function faroArrival() {
@@ -84,7 +85,7 @@ export function buildFaro(app) {
     for (let i = 0; i <= 16; i++) { const t = i / 16; prof.push(new THREE.Vector2(rAt(t), PL + t * H)); }
     const shaft = put(new THREE.Mesh(geo(new THREE.LatheGeometry(prof, 40)), plaster), 0, 0, 0);
     blockers.push(shaft);
-    circ(X, Z, 2.75, pad + PL - 0.1, pad + PL + H + 6);
+    circ(X, Z, 2.75, pad + PL - 0.1, pad + PL + H - 0.35);
     // fascia di pietra al piede
     put(new THREE.Mesh(geo(new THREE.CylinderGeometry(R0 + 0.06, R0 + 0.1, 0.45, 40)), stone), 0, PL + 0.22, 0);
 
@@ -100,16 +101,22 @@ export function buildFaro(app) {
 
     // cornicione e mensole sotto il ballatoio
     const top = PL + H;
-    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(2.1, R1 + 0.02, 0.5, 40)), white), 0, top - 0.25, 0);
-    for (let i = 0; i < 16; i++) {
-        const a = i / 16 * Math.PI * 2;
-        put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.18, 0.5, 0.5)), stone), Math.sin(a) * 2.05, top - 0.35, Math.cos(a) * 2.05, a);
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(2.5, R1 + 0.02, 0.55, 40)), white), 0, top - 0.27, 0);
+    for (let i = 0; i < 20; i++) {
+        const a = i / 20 * Math.PI * 2;
+        put(new THREE.Mesh(geo(new THREE.BoxGeometry(0.2, 0.6, 0.9)), stone), Math.sin(a) * 2.4, top - 0.4, Math.cos(a) * 2.4, a);
     }
     // ballatoio con ringhiera
-    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(2.55, 2.55, 0.22, 40)), iron), 0, top + 0.11, 0);
+    // ballatoio con ringhiera: largo abbastanza da camminarci (Libro II: si sale fin quassù)
+    const GR = 3.0;
+    put(new THREE.Mesh(geo(new THREE.CylinderGeometry(GR + 0.05, GR + 0.05, 0.22, 48)), iron), 0, top + 0.11, 0);
     const postG = geo(new THREE.CylinderGeometry(0.03, 0.03, 1.0, 6));
-    for (let i = 0; i < 32; i++) { const a = i / 32 * Math.PI * 2; put(new THREE.Mesh(postG, iron), Math.sin(a) * 2.45, top + 0.72, Math.cos(a) * 2.45); }
-    for (const hh of [0.62, 1.2]) { const ring = put(new THREE.Mesh(geo(new THREE.TorusGeometry(2.45, 0.035, 6, 48)), iron), 0, top + hh, 0); ring.rotation.x = Math.PI / 2; }
+    for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2; put(new THREE.Mesh(postG, iron), Math.sin(a) * (GR - 0.08), top + 0.72, Math.cos(a) * (GR - 0.08)); }
+    for (const hh of [0.62, 1.2]) { const ring = put(new THREE.Mesh(geo(new THREE.TorusGeometry(GR - 0.08, 0.035, 6, 64)), iron), 0, top + hh, 0); ring.rotation.x = Math.PI / 2; }
+    // il pavimento del ballatoio, la lanterna che non si attraversa, la ringhiera che non si scavalca
+    circ(X, Z, GR, pad + top - 0.35, pad + top + 0.22);
+    circ(X, Z, 1.2, pad + top + 0.2, pad + top + 4.5);
+    for (let i = 0; i < 40; i++) { const a = i / 40 * Math.PI * 2; circ(X + Math.sin(a) * (GR + 0.12), Z + Math.cos(a) * (GR + 0.12), 0.22, pad + top, pad + top + 1.4); }
 
     // la lanterna: zoccolo, vetri ottagonali con i montanti, cupola di rame e sfiato
     put(new THREE.Mesh(geo(new THREE.CylinderGeometry(1.4, 1.45, 0.7, 8)), white), 0, top + 0.57, 0);
@@ -169,8 +176,7 @@ export function buildFaro(app) {
     disposables.push(inGlow.material);
     inGlow.scale.set(1.6, 2.6, 1); inGlow.position.set(0, PL + 1.5, FZ + 0.06);
     T.add(inGlow);
-    const doorOpen = () => (app.me?.libro2?.s ?? 0) >= 5;
-    let doorA = doorOpen() ? -1.75 : 0;
+    let doorA = l2At(app.me?.libro2) >= L2AT(1) ? -1.75 : 0;
     doorG.rotation.y = doorA;
     // due gradini di pietra davanti alla porta
     put(new THREE.Mesh(geo(new THREE.BoxGeometry(2.0, 0.3, 0.55)), stone), 0, 0.0, FZ + 0.35);
@@ -186,8 +192,15 @@ export function buildFaro(app) {
     T.add(doorGlow);
 
     const [doorX, doorZ] = toW(0, FZ);
+    const at = () => l2At(app.me?.libro2);
     interactables.push({ id: 'faro_porta', x: X + dx * (FZ + 1.3), z: Z + dz * (FZ + 1.3), y: pad, r: 2.0,
-        label: () => { const s = app.me?.libro2?.s ?? 0; return s === 4 ? 'Apri la porta con la chiave' : s >= 5 ? 'Guarda dentro il faro' : 'La porta del faro'; } });
+        label: () => { const s = at(); return s === L2AT(0, 4) ? 'Apri la porta con la chiave' : s >= L2AT(1) ? 'Sali le scale del faro' : 'La porta del faro'; } });
+    // in cima: dove si arriva, la lanterna e la scala per tornare giù
+    const gy = pad + top + 0.22;
+    app.faroInfo = { gallery: { x: X + dx * 2.15, z: Z + dz * 2.15, y: gy, yaw: Math.atan2(dx, dz) }, door: { x: X + dx * (FZ + 1.6), z: Z + dz * (FZ + 1.6), y: pad, yaw: Math.atan2(dx, dz) } };
+    interactables.push({ id: 'l2spot', k: 'lanterna', x: X + dx * 1.9, z: Z + dz * 1.9, y: gy, r: 1.4,
+        label: () => app.l2?.lanternLabel() || 'La lanterna del faro' });
+    interactables.push({ id: 'faro_scendi', x: X - dx * 2.1, z: Z - dz * 2.1, y: gy, r: 1.3, label: 'Scendi le scale' });
 
     // il cuore della lanterna: un bagliore verde che respira
     const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: '#7affd8', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8, fog: false }));   // la luce di un faro buca la nebbia
@@ -201,6 +214,12 @@ export function buildFaro(app) {
     const beacon = new THREE.PointLight('#7affd8', 6, 26, 1.6);
     beacon.position.set(X, y + 1.4, Z);
     g.add(beacon);
+    // la Fiammella: si sveglia nel capitolo II, cresce mangiando i lumi; quando il faro si riaccende diventa d'oro
+    const fiamma = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: '#b8ffe8', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0, fog: false }));
+    disposables.push(fiamma.material);
+    fiamma.position.set(X, y + 1.35, Z);
+    g.add(fiamma);
+    const GOLD = new THREE.Color('#ffd27a'), GREEN = new THREE.Color('#c8fff0'), GOLD_CORE = new THREE.Color('#ffc861'), GREEN_CORE = new THREE.Color('#7affd8');
 
     // --- il molo: lo stesso del Molo dell'isola grande (world.js, buildDock) ---
     // costruito «dritto» lungo z e poi girato verso la laguna: assi da 48 cm ogni 55, pali ogni 3,5 m
@@ -364,8 +383,16 @@ export function buildFaro(app) {
         t += dt;
         const night = 1 - (W.envS?.day ?? 0);
         const b = 0.5 + 0.5 * Math.sin(t * 0.9) * Math.sin(t * 0.37 + 1);
-        spin.rotation.y = t * 0.45;
-        beamMat.uniforms.uI.value = (0.12 + 1.1 * night) * (0.85 + 0.15 * b);
+        // il punto del Libro II cambia la luce: spenta e verde, poi la Fiammella, poi l'oro
+        const s2 = at(), lit = s2 >= L2AT(4, 3);
+        const fz = s2 >= L2AT(4, 3) ? 1.6 : s2 >= L2AT(2) ? 1 : s2 >= L2AT(1, 2) ? 0.5 : 0;
+        fiamma.material.opacity = fz ? 0.55 + 0.35 * Math.sin(t * 5.3) * Math.sin(t * 2.1) : 0;
+        fiamma.scale.setScalar(fz * (0.9 + 0.12 * Math.sin(t * 7)));
+        fiamma.material.color.copy(lit ? GOLD_CORE : GREEN_CORE);
+        beamMat.uniforms.uCol.value.copy(lit ? GOLD : GREEN);
+        core.material.color.copy(lit ? GOLD_CORE : GREEN_CORE); halo.material.color.copy(core.material.color); beacon.color.copy(core.material.color);
+        spin.rotation.y = t * (lit ? 0.6 : 0.45);
+        beamMat.uniforms.uI.value = (0.12 + 1.1 * night) * (0.85 + 0.15 * b) * (lit ? 1.5 : 1);
         // quando il fascio punta verso di te, la lanterna abbaglia
         const cam = app.camera.position;
         toCam.set(cam.x - X, 0, cam.z - Z).normalize();
@@ -376,7 +403,7 @@ export function buildFaro(app) {
         halo.scale.setScalar(26 + flash * 30);
         beacon.intensity = 2 + b * 7 + flash * 6;
         // la porta si apre piano, come se pesasse trecento anni
-        const want = doorOpen() ? -1.75 : 0;
+        const want = s2 >= L2AT(1) ? -1.75 : 0;
         if (doorA !== want) { doorA += Math.sign(want - doorA) * Math.min(Math.abs(want - doorA), dt * 0.6); doorG.rotation.y = doorA; }
         inGlow.material.opacity = (-doorA / 1.75) * (0.35 + b * 0.25);
         boat.position.y = 0.15 + Math.sin(t * 1.2) * 0.06;

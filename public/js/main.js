@@ -33,7 +33,7 @@ import { Atlas } from './atlas.js';
 import { Prologue } from './prologue.js';
 import { SkyProbe, ContactShade } from './realism.js';
 import { buildStorySpots, storyBeat, storyInteract, storyVoice, updateThread } from './story-ui.js';
-import { Cocci, l2Door } from './libro2-ui.js';
+import { L2World, l2Door } from './libro2-ui.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
@@ -309,7 +309,7 @@ class Game {
         const W = this.world, moving = new Set([...(W.mist || []).map(m => m.s), ...(W.wisps || []).map(w => w.s), W.moonLight, W.moonLight.target]);
         this.stream.adopt(this.scene.children.filter(o => !before.has(o)), moving);
         registerRegions(this.stream, this);
-        this.l2 = new Cocci(this);   // Libro II: i Cocci di Lanterna (fuori dallo streaming: sono pochi e si accendono da soli)
+        this.l2 = new L2World(this);   // Libro II: cocci, lumi e lapide (fuori dallo streaming: sono pochi e si accendono da soli)
         this.precip = new Precipitation(this.scene, { count: this.quality === 'alta' ? 1600 : 700 });
         if (!this.me) this.me = this.offlineMe();
         const S = WORLD.SPAWN;
@@ -848,21 +848,22 @@ class Game {
             veil.firstChild.style.cssText = 'font-family:var(--display,serif);color:#d9c9a0;font-size:clamp(18px,3vw,28px);letter-spacing:.06em;text-shadow:0 2px 8px #000;opacity:.85;text-align:center;padding:0 24px;';
             document.body.append(veil);
         }
-        const toFaro = dest === 'faro';
-        veil.firstChild.textContent = toFaro ? 'Il remo entra nell\'acqua senza fare rumore…' : 'La nebbia si richiude dietro la barca…';
+        const toFaro = dest === 'faro', spot = typeof dest === 'object' ? dest : null;
+        veil.firstChild.textContent = spot ? spot.text : toFaro ? 'Il remo entra nell\'acqua senza fare rumore…' : 'La nebbia si richiude dietro la barca…';
         veil.style.pointerEvents = 'auto';
         veil.style.opacity = '1';
-        this.audio.play?.('splash');
+        this.audio.play?.(spot ? 'wood' : 'splash');
         await new Promise(r => setTimeout(r, 900));
         try {
             let T;
-            if (toFaro) {
+            if (spot) T = spot;
+            else if (toFaro) {
                 const { faroArrival } = await import('./regions/faro.js');
                 T = faroArrival();
                 await this.stream?.ensureAt(T.x, T.z);      // il molo del faro deve esserci prima di scendere
             } else T = { x: 0.4, z: 93.5, yaw: Math.PI, camYaw: 0 };
             const P = this.player;
-            P.pos.set(T.x, this.world.groundAt(T.x, T.z, 3), T.z);
+            P.pos.set(T.x, this.world.groundAt(T.x, T.z, T.feet ?? 3), T.z);
             P.vel.set(0, 0, 0);
             P.yaw = T.yaw; this.cam.yaw = T.camYaw;
             P.lastSent = null; P.lastSend = 0;
@@ -878,6 +879,15 @@ class Game {
             this.local.faroVisto = true; this.saveLocal();
             toast(h('div', {}, h('b', {}, 'Il Faro Spento'), h('div', {}, 'Il Traghettatore non ha detto una parola per tutto il viaggio. Solo, scendendo, ti è sembrato di sentirlo sussurrare: «Lei aspetta da più tempo di me».')), { icon: 'lantern', duration: 9000 });
         }
+    }
+    updateThreadNow() { updateThread(this); }
+    // la scala del faro: centotredici gradini, raccontati in un respiro
+    climbFaro(up) {
+        const F = this.faroInfo;
+        if (!F) return;
+        const T = up ? F.gallery : F.door;
+        this.travel({ ...T, feet: T.y + 0.5, camYaw: T.yaw + Math.PI,
+            text: up ? 'Centotredici gradini, al buio. A metà, qualcosa ti respira sul collo…' : 'Giù per la scala a chiocciola, contando i gradini al contrario…' });
     }
     async faroDoor() {
         if (await l2Door(this) !== false) return;
@@ -998,6 +1008,7 @@ class Game {
         if (kind === 'skeleton') return this.foeDone('graves:skeleton', { won });
         if (kind === 'veglia' || kind === 'king') return this.foeDone('veglia:end', { won });
         if (kind === 'cripta') return this.storyBoss(won);
+        if (kind === 'faro') return this.l2?.bossDone(won);
         const tier = this.practiceLevel < 0.8 ? 1 : this.practiceLevel < 1.3 ? 2 : 3;
         const r = await this.net.request('practice:done', { tier, won, el: this.practiceEl });
         if (r.ok && r.xp) toast(`+${r.xp} esperienza dall'allenamento${r.ess ? ` e un'${MATS[r.ess].name}` : ''}`, { kind: 'ok', icon: r.ess ? 'vial' : 'star', duration: 3500 });
@@ -1184,7 +1195,8 @@ class Game {
         else if (it.id === 'telefono') this.answerPhone();
         else if (it.id === 'barca') this.travel(it.dest);
         else if (it.id === 'faro_porta') this.faroDoor();
-        else if (it.id === 'coccio') this.l2?.pick(it.k);
+        else if (it.id === 'l2spot') this.l2?.find(it.k);
+        else if (it.id === 'faro_scendi') this.climbFaro(false);
         else if (it.id === 'siedi') this.player.sit === it.seat ? this.standUp() : this.sitDown(it.seat);
         else this.openPanel(it.id);
     }
