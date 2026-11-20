@@ -12,6 +12,7 @@ import { TABLETS } from './shared/lore.js';
 import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.js';
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
 import { addSkyExtras, addSnowCover, SNOW_COVER } from './sky.js';
+import { rivaHeight, rivaShore, nearRiva } from './shared/riva.js';
 import { Relief, tileHeights, roughRock } from './realism.js';
 import { Grass } from './grass.js';
 import { buildWeapon } from './character.js';
@@ -347,7 +348,8 @@ export class World {
     terrainAt(x, z) {
         const { MIN_X, MIN_Z } = WORLD, n = this.n;
         const fx = (x - MIN_X) / this.cw, fz = (z - MIN_Z) / this.cd;
-        if (fx < 0 || fz < 0 || fx >= n - 1 || fz >= n - 1) return -9;
+        // fuori dalla griglia c'è solo mare, e la Riva di Là (Libro III) che porta il suo suolo
+        if (fx < 0 || fz < 0 || fx >= n - 1 || fz >= n - 1) return nearRiva(x, z) ? rivaHeight(x, z) : -9;
         const ix = Math.floor(fx), iz = Math.floor(fz), u = fx - ix, v = fz - iz;
         const a = this.H[iz * n + ix], d = this.H[iz * n + ix + 1], b = this.H[(iz + 1) * n + ix], c = this.H[(iz + 1) * n + ix + 1];
         return u + v <= 1 ? a + (d - a) * u + (b - a) * v : c + (b - c) * (1 - u) + (d - c) * (1 - v);
@@ -430,7 +432,7 @@ export class World {
     shoreDistAt(x, z) {
         if (!this.shoreD) this.buildShoreDist();
         const n = this.n, ix = Math.round((x - WORLD.MIN_X) / this.cw), iz = Math.round((z - WORLD.MIN_Z) / this.cd);
-        if (ix < 0 || iz < 0 || ix >= n || iz >= n) return 1e9;
+        if (ix < 0 || iz < 0 || ix >= n || iz >= n) return nearRiva(x, z) ? rivaShore(x, z) : 1e9;
         return this.shoreD[iz * n + ix];
     }
     onDeck(x, z) { for (const c of this.colliders) if (c.deck && this.inside(c, x, z, 0.2)) return true; return false; }
@@ -1600,6 +1602,7 @@ export class World {
     zoneName(x, z) {
         if (Math.hypot(x - WORLD.FARO.x, z - WORLD.FARO.z) < WORLD.FARO.r + 10) return 'Il Faro Spento';
         if (Math.hypot(x - WORLD.RELITTO.x, z - WORLD.RELITTO.z) < WORLD.RELITTO.r + 14) return 'La Secca del Relitto';
+        if (nearRiva(x, z)) return 'La Riva di Là';
         const C = WORLD.CASTLE;
         if (Math.abs(x - C.x) < C.half && Math.abs(z - C.z) < C.half) {
             const K = WORLD.KEEP;
@@ -1642,6 +1645,7 @@ export class World {
         this.wispDim = 0.3 + 0.7 * (1 - S.day);
         SNOW_COVER.value = S.cover;
         this.grass?.applyEnv(S, ind);
+        for (const gr of this.grassX || []) gr.applyEnv(S, ind);   // l'erba delle regioni lontane (la Riva di Là)
         // i colori del terreno sono nati per la notte: di giorno si schiariscono un poco
         this.terrain.material.color.setScalar(1 + 0.2 * S.day);
         // al sole le torce quasi non illuminano: tenerle piene di giorno lava via tutte le ombre
@@ -1700,6 +1704,7 @@ export class World {
         const t = this.t;
         this.waterMat.uniforms.uTime.value = t;
         this.grass?.update(t, focus);
+        for (const gr of this.grassX || []) gr.update(t, focus);
         for (const L of this.lights) L.l.intensity = L.base * (L.out ? this.torchK ?? 1 : 1) * (0.85 + Math.sin(t * L.sp) * 0.08 + Math.random() * 0.07);
         for (const f of this.flames) f.glow.material.opacity = 0.38 + Math.sin(t * f.sp) * 0.06 + Math.random() * 0.04;
         for (const w of this.wisps) {

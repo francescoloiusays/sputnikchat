@@ -207,6 +207,7 @@ export class Atlas {
         const narrow = this.cw < 600;
         for (const p of PLACES) if (F[p.cat] && (p.p === 1 || (p.p === 2 && (!narrow || z >= 1.4)) || z >= (narrow ? 2.2 : 1.5))) out.push({ ...p, kind: 'poi' });
         if (F.abitanti && z >= 1.7) for (const [id, n] of Object.entries(NPCS)) {
+            if (n.where === 'La Riva di Là' || n.where === 'Il villaggio dei Senza Nome') continue;   // fuori dalla carta dell'isola
             out.push({ kind: 'poi', id: 'npc:' + id, cat: 'abitanti', ic: 'talk', p: 3, small: true, name: n.name, x: n.x, z: n.z, where: n.where, desc: `«${n.lines[0]}»` });
         }
         if (F.tavolette) {

@@ -3,6 +3,8 @@
 //  Gli abitanti, il Pedaggio dello Spettro, le puntate di In Onda!,
 //  le Tavolette della Cronaca, le missioni del telefono bianco.
 // =====================================================================
+import { RP, RIVA, RIVA_YAW, rivaPt } from './riva.js';
+const [CAR_X, CAR_Z] = rivaPt(RIVA.r - 13.5, 5.5), [FOR_X, FOR_Z] = rivaPt(RP.village[0] + 3, RP.village[1] + 3);
 
 // --- IL PEDAGGIO DELLO SPETTRO: a ogni insulto la sua risposta (stesso indice) ---
 export const INSULTS = [
@@ -46,7 +48,7 @@ export const NPCS = {
         lines: ['Tutti arrivano dal molo. Pochi ripartono. Nessuno, finora, ha chiesto il biglietto di ritorno.',
             'Di notte, sotto le assi, nuota qualcosa di fatto di nebbia. Usa la lenza, non le mani.',
             'Le bottiglie le porta il mare, non io. Io le leggo soltanto, prima di ributtarle.'],
-        actions: [['diario', 'Il Diario del Naufrago'], ['faro', 'Portami al Faro Spento'], ['relitto', 'Portami alla Secca del Relitto']],
+        actions: [['diario', 'Il Diario del Naufrago'], ['faro', 'Portami al Faro Spento'], ['relitto', 'Portami alla Secca del Relitto'], ['riva', 'Remiamo fino alla Riva di Là']],
     },
     brace: {
         name: 'Mastro Brace', where: 'Forgia di Vulcano', x: -22.5, z: 9.2, ry: Math.PI / 2, teach: 2,
@@ -119,6 +121,24 @@ export const NPCS = {
             'Lassù qualcosa respira. Io lo sento ogni notte. Tu, adesso, lo vedi.',
             'Il Traghettatore passa una volta al giorno. Non mi porta mai niente: solo gente che chiede dov\'è il ritorno.'],
         actions: [['molo', 'Torna al Molo in barca']],
+    },
+    // Libro III: sulla Riva di Là, oltre il mare aperto
+    cartografa: {
+        name: 'La Cartografa', where: 'La Riva di Là', x: CAR_X, z: CAR_Z, y: RIVA.deckY - 0.05, ry: RIVA_YAW, teach: null,
+        app: { sex: 'f', species: 'umano', build: 'snello', height: 1.0, skin: '#b8b2c4', eyes: 'assonnati', eyeColor: '#ffd27a', mouth: 'neutro', hair: 'codino', hairColor: '#eeeef4', beard: 'nessuna', topStyle: 'giacca', top: '#3a2f22', bottom: '#1e1a16', shoes: '#120e0c' },
+        look: { cape: 'mantello_viola' },
+        lines: ['Disegno l\'isola da cui venite, a memoria. La nebbia me la cancella ogni mattina. Io la ridisegno ogni sera. Siamo pari.',
+            'La lanterna l\'ho accesa appena ho visto il fascio d\'oro. Lo stoppino lo tenevo asciutto da trecento anni: non si sa mai.',
+            'Sulla Riva il giorno e la notte si somigliano. Si capisce che è notte perché il pozzo comincia a respirare.'],
+        actions: [['molo', 'Torna all\'isola in barca']],
+    },
+    fornaio: {
+        name: 'L\'Uomo Senza Nome', where: 'Il villaggio dei Senza Nome', x: FOR_X, z: FOR_Z, y: 2.2, ry: RIVA_YAW + 2.4, teach: null,
+        app: { species: 'umano', build: 'robusto', height: 1.0, skin: '#c2b4a6', eyes: 'assonnati', eyeColor: '#9fb0c8', mouth: 'neutro', hair: 'calvo', hairColor: '#8a8a8a', beard: 'folta', topStyle: 'tunica', top: '#d8d0c0', bottom: '#4a4038', shoes: '#1a1410' },
+        look: {},
+        lines: ['Impasto. Non c\'è farina, ma le mani se lo ricordano.', 'Qui siamo arrivati tutti con la luce. Poi la luce si è spenta, e abbiamo cominciato a perdere le cose. Prima le piccole.',
+            'Hai visto il pozzo? Non guardarci troppo dentro. Ti chiama.'],
+        actions: [],
     },
 };
 

@@ -5,6 +5,7 @@
 //  allontana. Qui si aggiungono le zone nuove del Libro II.
 // =====================================================================
 import { WORLD } from '../world.js';
+import { RIVA } from '../shared/riva.js';
 
 export function registerRegions(stream, app) {
     // Il Faro Spento: lo scoglio a nord-est, ci si arriva con la barca del Traghettatore
@@ -19,5 +20,10 @@ export function registerRegions(stream, app) {
     stream.region('Secca del Relitto', { x: R.x, z: R.z }, R.r + 60, async () => {
         const { buildRelitto } = await import('./relitto.js');
         return buildRelitto(app);
+    });
+    // Libro III · la Riva di Là: oltre il mare aperto, lungo il fascio del faro (ci si arriva solo in barca)
+    stream.region('Riva di Là', { x: RIVA.x, z: RIVA.z }, 85, async () => {
+        const { buildRiva } = await import('./riva.js');
+        return buildRiva(app);
     });
 }

@@ -1662,7 +1662,7 @@ io.on('connection', (socket) => {
     // --- LIBRO II · IL FARO SPENTO: un passo alla volta, controllato qui ---
     on('l2:act', (d, reply) => {
         const p = me.p, st = l2Of(p), C = L2_CHAPTERS[st.ch], S = l2Step(st), a = String(d.a), out = {};
-        if (!S) return fail(reply, 'Il Libro II è finito: il faro è acceso');
+        if (!S) return fail(reply, 'Il libro è finito, per ora: le pagine dopo sono ancora bianche');
         if (a !== S.k) return fail(reply, 'Non adesso');
         if (st.i === 0 && levelOf(p) < C.lv) return fail(reply, `Questo capitolo si apre dal livello ${C.lv}`);
         const nearNpc = (id) => !!NPCS[id] && near(NPCS[id].x, NPCS[id].z, 6);

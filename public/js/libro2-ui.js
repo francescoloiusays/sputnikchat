@@ -4,17 +4,21 @@
 //  - i luoghi da toccare: cocci, lumi, la lapide (brillano solo mentre servono)
 //  - la lanterna in cima al faro, l'Ombra della Nebbia, la scala
 //  - il filo sotto l'orologio, finché il libro è aperto
+//  Il Libro III (La Riva di Là) continua lo stesso stato, dal capitolo 5:
+//  stessi passi, stessi bagliori; la sua terra è in regions/riva.js.
 // =====================================================================
 import * as THREE from 'three';
-import { L2_CHAPTERS, L2_SPOTS, L2_END, l2Step, l2Next, l2At, L2AT, gx2 } from './shared/libro2.js';
+import { L2_CHAPTERS, L2_SPOTS, L2_END, L3_END, bookOf, chapterNo, l2Step, l2Next, l2At, L2AT, gx2 } from './shared/libro2.js';
+import { nearRiva } from './shared/riva.js';
 import { MATS } from './shared/catalog.js';
 import { h, toast } from './util.js';
 import { iconSVG } from './icons.js';
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
+const BOOK = { 2: ['II', 'Il Faro Spento'], 3: ['III', 'La Riva di Là'] };
 const stOf = (app) => app.me && !app.me.offline ? app.me.libro2 || { ch: 0, i: 0, got: [], cnt: 0 } : null;
 const sexOf = (app) => app.me?.appearance?.sex;
-const head = (ch) => `Libro II · Capitolo ${ROMAN[ch]} · ${L2_CHAPTERS[ch].title}`;
+const head = (ch) => `Libro ${BOOK[bookOf(ch)][0]} · Capitolo ${ROMAN[chapterNo(ch)]} · ${L2_CHAPTERS[ch].title}`;
 
 // --- un passo fatto: aggiorna, festeggia, racconta ---
 function applyL2(app, st) {
@@ -30,9 +34,9 @@ function celebrate(app, done, r) {
         const C = L2_CHAPTERS[r.chapter];
         setTimeout(() => {
             app.audio.play('saved');
-            toast(h('div', {}, h('b', {}, `Capitolo ${ROMAN[r.chapter]} chiuso: ${C.title}`),
+            toast(h('div', {}, h('b', {}, `Libro ${BOOK[bookOf(r.chapter)][0]}, capitolo ${ROMAN[chapterNo(r.chapter)]} chiuso: ${C.title}`),
                 h('div', {}, `+${r.xp} esperienza, +${r.coins} monete${r.title ? ' · nuovo titolo' : ''}`),
-                C.last ? h('div', {}, 'Fine del Libro II. Il faro è acceso, e la nebbia per la prima volta ha paura.') : null),
+                C.end ? h('div', {}, C.end) : null),
             { kind: 'ok', icon: 'openbook', duration: 10000 });
         }, done?.after ? 2600 : 200);
     } else if (r.xp && !done?.after) toast(`+${r.xp} esperienza`, { kind: 'ok', icon: 'star', duration: 3000 });
@@ -67,6 +71,14 @@ export function l2Box(app, who) {
             }
             if (S.k === 'answer') { q = S.q; buttons = S.a.map((txt, n) => ({ label: gx2(txt, sexOf(app)), answer: true, fn: () => act(app, 'answer', { n }) })); }
         }
+    } else if (who === 'cartografa' && st.ch >= L3_END) {
+        const a = st.ans?.[L3_END - 1];
+        lines = [['Ho dato i nomi a tutti. Qualcuno ha pianto tutta la notte. Al mattino, però, ha fatto colazione: non succedeva da trecento anni.',
+            'Il secchio è sulla porta. Chi vuole il suo nome viene a prenderselo. Ne vengono pochi alla volta, ma vengono.',
+            'I nomi li ha presi la lanterna. Di notte, se guardi bene, il filo d\'oro fra le due rive è fatto di lettere.'][a ?? 0] || '',
+            'Mia sorella mi ha mandato un messaggio, con il Traghettatore. Una riga sola: «Lo stoppino tienilo asciutto». Come se non lo sapessi.'];
+    } else if (who === 'fornaio' && l2At(st) >= L2AT(7, 5)) {
+        lines = ['Tobia. Mi chiamo Tobia. Lo dico ogni mattina appena sveglio, per sicurezza.', 'Ho rifatto il forno. Il pane della Riva sa di sale e di nebbia, ma si mangia. Prendine un pezzo, per il viaggio: come facevo con il barcaiolo.'];
     } else if (who === 'guardiana' && st.ch >= L2_END) {
         const a = st.ans?.[L2_END - 1];
         lines = ['Ilario dice che la luce è più calda di come la ricordava. Io dico che è uguale. Litighiamo così, adesso, ogni notte.',
@@ -76,7 +88,7 @@ export function l2Box(app, who) {
     }
     if (!lines) return null;
     return h('div', { class: 'st-box' + (ask ? ' ask' : '') },
-        h('div', { class: 'st-head', html: iconSVG('lantern') }, st.ch < L2_END ? head(st.ch) : 'Libro II · Il Faro Spento'),
+        h('div', { class: 'st-head', html: iconSVG('lantern') }, S && ask ? head(st.ch) : who === 'guardiana' ? 'Libro II · Il Faro Spento' : 'Libro III · La Riva di Là'),
         lines.map(l => h('p', { class: 'st-line' }, `«${l}»`)),
         q ? h('p', { class: 'st-q' }, q) : null,
         buttons.length ? h('div', { class: 'btn-row' + (q ? ' st-answers' : '') }, buttons.map(b => h('button', {
@@ -102,20 +114,30 @@ const PAGES = [
     'Il registro del Traghettatore, ritrovato fra le costole della sua vecchia barca arenata sulla Secca, diceva «partito con la luce»; una mano storta aveva aggiunto «tornato». La lapide senza nome, in fondo al Prato dei Morti, ha detto il resto: Ilario era tornato cercando una luce che lei aveva spento per non perderlo.',
     'La lente era incrinata dalla notte del lutto. Brace l\'ha rifusa con le schegge che cantano, la Sarta l\'ha lucidata con polvere di perla, e la Fiammella ha detto di essere pronta.',
     'La nebbia ha preso un volto per difendersi, e ha perso. Il faro si è riacceso d\'oro, e per la prima volta in trecento anni dall\'isola si vede il mare aperto. E oltre il mare una terra, con una luce piccola che ha risposto. La Guardiana resta. Ilario anche. Il Libro III comincia da quella luce.',
+    // Libro III · La Riva di Là
+    'Il Traghettatore ha remato dentro il fascio d\'oro, e la nebbia del mare aperto si è scostata come una tenda. Dall\'altra parte c\'era una riva, una lanterna di latta su un palo storto, e una donna che disegnava mappe e aspettava da trecento anni.',
+    'La Cartografa disegnava ogni giorno l\'isola a memoria, e ogni mattina la nebbia le cancellava la carta. Tre cippi ancora in piedi e tre fogli di Pergamena Benedetta sono bastati: per la prima volta la mappa ha tenuto.',
+    'Nel villaggio della Riva vivevano i Senza Nome. Uno impastava senza farina. Un nodo, una scarpa piccola e un odore di pane, più una riga del registro del Traghettatore, gli hanno restituito il suo nome: Tobia.',
+    'Ai piedi del Monte Storto c\'era il Pozzo dei Nomi: chi arrivava ci buttava il proprio nome, per non portarsi dietro il dolore. Ma i nomi buttati diventano nebbia. La Madre della Nebbia lo difendeva, e ha perso. Il secchio è tornato su pieno.',
+    'La Cartografa aveva una sorella che non era partita. La Guardiana del faro aveva una sorella che non era tornata. Si chiamava Nives. Fra le due rive, adesso, c\'è un filo di luce, e sulla mappa di Nives, in un angolo, è comparsa un\'isola che nessuno ha mai visto.',
 ];
+function bookSection(st, b) {
+    const [from, to] = b === 2 ? [0, L2_END] : [L2_END, L3_END];
+    if (st.ch < from) return null;
+    return [h('div', { class: 'st-head', html: iconSVG(b === 2 ? 'lantern' : 'wave') }, `Libro ${BOOK[b][0]} · ${BOOK[b][1]}`),
+        L2_CHAPTERS.slice(from, to).map((C, n) => {
+            const ch = from + n, done = ch < st.ch, now = ch === st.ch;
+            if (!done && !now) return h('p', { class: 'bk-empty' }, `${ROMAN[n]}. Ancora da scrivere.`);
+            return h('article', { class: 'bk-leaf' },
+                h('div', { class: 'bk-lh' }, h('b', {}, `${ROMAN[n]}. ${C.title}`), h('span', {}, done ? 'Scritto' : 'Si sta scrivendo')),
+                done ? h('p', {}, PAGES[ch]) : h('ul', { class: 'st-steps bk-steps' }, C.steps.map((s, i) => h('li', { class: i < st.i ? 'ok' : '' },
+                    h('span', { html: iconSVG(i < st.i ? 'seal' : 'scroll') }), i === st.i ? l2Next(st) : i < st.i ? s.t : '…'))));
+        })];
+}
 export function l2Book(app) {
     const st = stOf(app);
     if (!st || (st.ch === 0 && st.i === 0)) return null;
-    return h('div', { class: 'bk-l2' },
-        h('div', { class: 'st-head', html: iconSVG('lantern') }, 'Libro II · Il Faro Spento'),
-        L2_CHAPTERS.map((C, ch) => {
-            const done = ch < st.ch, now = ch === st.ch;
-            if (!done && !now) return h('p', { class: 'bk-empty' }, `${ROMAN[ch]}. Ancora da scrivere.`);
-            return h('article', { class: 'bk-leaf' },
-                h('div', { class: 'bk-lh' }, h('b', {}, `${ROMAN[ch]}. ${C.title}`), h('span', {}, done ? 'Scritto' : 'Si sta scrivendo')),
-                done ? h('p', {}, PAGES[ch]) : h('ul', { class: 'st-steps bk-steps' }, C.steps.map((s, i) => h('li', { class: i < st.i ? 'ok' : '' },
-                    h('span', { html: iconSVG(i < st.i ? 'seal' : 'scroll') }), i === st.i ? l2Next(st) : i < st.i ? s.t : '…'))));
-        }));
+    return h('div', { class: 'bk-l2' }, bookSection(st, 2), bookSection(st, 3));
 }
 
 // --- la porta del faro ---
@@ -176,17 +198,25 @@ export class L2World {
                 pg.computeVertexNormals();
                 g.add(new THREE.Mesh(pg, paper));
                 glowCol = '#ffe9a8';
+            } else if (P.glow === 'cippo') {
+                // il cippo di pietra lo costruisce la regione: qui solo il bagliore che lo segnala
+                spinner = null;
+            } else if (P.glow === 'ricordo') {
+                // un ricordo: una piccola luce calda che non si sa da dove viene
+                g.add(new THREE.Mesh(orbG, warm));
+                glowCol = '#ffcf8a';
             }
             const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: glowCol, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
             glow.scale.set(2.2, 2.2, 1);
             if (P.glow === 'lapide') glow.position.y = 0.6;
+            if (P.glow === 'cippo') { glow.position.y = 1.0; glow.scale.set(3.2, 3.2, 1); }
             g.add(glow);
             g.visible = false;
             W.scene.add(g);
             const it = { id: 'l2spot', k, x: P.x, z: P.z, r: 2.2, label: P.label, when: () => this.want(k) };
             if (!P.swim) it.y = ground;
             W.interactables.push(it);
-            this.items.push({ k, g, glow, y: ground, spinner, bob: P.glow !== 'lapide' && P.glow !== 'terra' });
+            this.items.push({ k, g, glow, y: ground, spinner, bob: !['lapide', 'terra', 'cippo'].includes(P.glow) });
         }
         this.tick = (dt, t) => {
             for (const c of this.items) {
@@ -215,7 +245,7 @@ export class L2World {
     }
     refresh() {
         for (const c of this.items) c.g.visible = this.want(c.k);
-        if (this.horizon) this.horizon.visible = l2At(stOf(this.app)) >= L2AT(4, 3);
+        this.horizonOn = l2At(stOf(this.app)) >= L2AT(4, 3);
     }
     // --- L'Orizzonte: quando il faro si riaccende, oltre la nebbia compare una terra (il Libro III) ---
     buildHorizon() {
@@ -248,11 +278,17 @@ export class L2World {
         g.visible = false;
         W.scene.add(g);
         this.horizon = g;
-        W.animated.push((dt, t) => { if (g.visible) spark.material.opacity = 0.5 + 0.45 * Math.max(0, Math.sin(t * 0.8)) ** 6; });
+        // da vicino la sagoma lontana sparisce: sulla Riva di Là ci sono le sue colline vere (regions/riva.js)
+        W.animated.push((dt, t) => {
+            const P = this.app.player?.pos;
+            g.visible = !!this.horizonOn && !(P && nearRiva(P.x, P.z, 160));
+            if (g.visible) spark.material.opacity = 0.5 + 0.45 * Math.max(0, Math.sin(t * 0.8)) ** 6;
+        });
     }
     // un luogo toccato (la lanterna ha il suo giro)
     async find(k) {
         if (k === 'lanterna') return this.lantern();
+        if (k === 'lume_riva' || k === 'pozzo') return this.rivaSpot(k);
         if (k === 'terra') this.app.audio.play('dig');
         const r = await act(this.app, 'find', { k });
         if (!r) return;
@@ -280,8 +316,32 @@ export class L2World {
         app.audio.play('ui');
         toast(h('div', {}, h('b', {}, 'La lanterna del faro'), h('div', {}, line)), { icon: 'lantern', duration: 7000 });
     }
-    startBoss() {
+    // --- la lanterna della riva e il Pozzo dei Nomi (Libro III) ---
+    rivaLabel(k) {
+        const st = stOf(this.app), S = l2Step(st), at = l2At(st);
+        if (S?.k === 'boss' && S.spot === k) return 'Affronta la Madre della Nebbia';
+        if (S?.k === 'find' && S.spots.includes(k)) return k === 'pozzo' ? (at >= L2AT(8, 4) ? 'Cala il secchio nel pozzo' : 'Guarda dentro il pozzo') : at >= L2AT(9) ? 'Versa i nomi nella lanterna' : 'Guarda la lanterna';
+        return k === 'pozzo' ? 'Il Pozzo dei Nomi' : 'La lanterna della riva';
+    }
+    async rivaSpot(k) {
+        const app = this.app, st = stOf(app), S = l2Step(st), at = l2At(st);
+        if (S?.k === 'boss' && S.spot === k) return this.startBoss(k);
+        if (S?.k === 'find' && S.spots.includes(k)) return act(app, 'find', { k });
+        const line = k === 'pozzo'
+            ? (at >= L2AT(8, 5) ? 'Il pozzo respira piano, adesso. Ne esce ancora un filo di nebbia, sottile come il fumo di una candela spenta.' : 'Dal fondo sale un sussurro di mille voci. Di giorno sembra solo un pozzo vecchio. Di notte, respira.')
+            : (at >= L2AT(9, 3) ? 'La lanterna di latta brucia d\'oro, come il faro. Fra le due fiamme, sopra il mare, corre un filo di luce.' : 'Una lanterna di latta, con una rosa dei venti incisa. Qualcuno la tiene accesa con molta cura.');
+        app.audio.play('ui');
+        toast(h('div', {}, h('b', {}, this.rivaLabel(k)), h('div', {}, line)), { icon: k === 'pozzo' ? 'ecto' : 'lantern', duration: 7000 });
+    }
+    startBoss(spot = 'lanterna') {
         const app = this.app;
+        if (spot === 'pozzo') {
+            app.audio.play('roar');
+            setTimeout(() => app.audio.voice?.('re', 'Sono la madre di tutti i nomi che avete buttato. Volete riprenderveli? Allora prendete anche il dolore.'), 900);
+            return app.startFoe({ kind: 'faro', name: 'La Madre della Nebbia', botLevel: 1.2, level: 20, element: 'spettro', boss: { hp: 1100, atk: 1.2 }, height: 1.25,
+                look: { cape: 'ali', head: 'cappuccio', weapon: { type: 'falce', material: 'argento', handle: 'osso', gem: 'zaffiro', name: 'Falce dei Nomi' } },
+                texts: ['La Madre della Nebbia si scioglie in mille voci, che per un attimo dicono tutte il tuo nome. Poi tacciono. Il pozzo è libero.', 'La Madre della Nebbia ti avvolge e ti dimentichi per un attimo chi sei. Riprendi fiato, e riprova.'] });
+        }
         app.audio.play('roar');
         setTimeout(() => app.audio.voice?.('re', 'Ti ricordi di me? No. Nessuno si ricorda di me. Per questo sono nebbia.'), 900);
         app.startFoe({ kind: 'faro', name: 'L\'Ombra della Nebbia', botLevel: 1.1, level: 16, element: 'spettro', boss: { hp: 900, atk: 1.15 }, height: 1.1,
@@ -289,7 +349,9 @@ export class L2World {
             texts: ['L\'Ombra si sfilaccia come fumo. Per un attimo ha il volto di un uomo che sorride, poi è solo nebbia che scappa giù per la scogliera.', 'L\'Ombra ti respinge contro la ringhiera. Riprendi fiato, e riprova.'] });
     }
     async bossDone(won) {
+        const spot = l2Step(stOf(this.app))?.spot;
         const r = await act(this.app, 'boss', { won });
+        if (r?.won && spot === 'pozzo') return toast(h('div', {}, h('b', {}, 'La Madre della Nebbia si ritira'), h('div', {}, 'Il pozzo tace. Adesso puoi calare il secchio.')), { kind: 'coin', icon: 'ecto', duration: 9000 });
         if (r?.won) toast(h('div', {}, h('b', {}, 'L\'Ombra della Nebbia si ritira'), h('div', {}, 'Adesso niente ti separa dalla lanterna. Accendila.')), { kind: 'coin', icon: 'lantern', duration: 9000 });
     }
 }
