@@ -182,12 +182,12 @@ class LightPool {
         this.t = 0;
     }
     // la luce originale resta nella scena come «segnaposto»: si muove col suo oggetto
-    // e il codice del gioco può continuare a cambiarne intensità e colore.
-    // Il renderer però la vede sempre spenta (visible = false).
+    // e il codice del gioco può continuare a cambiarne intensità, colore e visibilità.
+    // Il renderer però non la conta: sta su un livello (layer) che nessuna telecamera guarda.
+    // (Non si usa visible: le ombre di contatto lo salvano e lo ripristinano a ogni fotogramma.)
     capture(l) {
-        let want = l.visible;
-        Object.defineProperty(l, 'visible', { get: () => false, set: (v) => { want = v; }, configurable: true });
-        const src = { l, on: () => want, pos: new THREE.Vector3(), score: 0 };
+        l.layers.set(31);
+        const src = { l, on: () => l.visible, pos: new THREE.Vector3(), score: 0 };
         this.sources.push(src);
         return src;
     }
