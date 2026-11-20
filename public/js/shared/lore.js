@@ -46,7 +46,7 @@ export const NPCS = {
         lines: ['Tutti arrivano dal molo. Pochi ripartono. Nessuno, finora, ha chiesto il biglietto di ritorno.',
             'Di notte, sotto le assi, nuota qualcosa di fatto di nebbia. Usa la lenza, non le mani.',
             'Le bottiglie le porta il mare, non io. Io le leggo soltanto, prima di ributtarle.'],
-        actions: [['diario', 'Il Diario del Naufrago'], ['faro', 'Portami al Faro Spento']],
+        actions: [['diario', 'Il Diario del Naufrago'], ['faro', 'Portami al Faro Spento'], ['relitto', 'Portami alla Secca del Relitto']],
     },
     brace: {
         name: 'Mastro Brace', where: 'Forgia di Vulcano', x: -22.5, z: 9.2, ry: Math.PI / 2, teach: 2,

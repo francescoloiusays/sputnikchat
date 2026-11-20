@@ -99,9 +99,9 @@ export function l2Thread(app) {
 const PAGES = [
     'La Guardiana aveva chiuso la porta del faro la notte in cui la corona si spezzò, e la chiave era finita nel fuoco di Mastro Brace. Tre cocci della vecchia lanterna, ripescati fra scogli, sabbia e acqua scura, sono bastati a rifarla.',
     'Centotredici gradini al buio, e in cima una fiammella verde che non era mai morta del tutto. Aveva fame di luce ricordata: una brace, un fuoco fatuo, un raggio di luna. Mangiando, ha ricordato chi l\'aveva spenta.',
-    'Il registro del Traghettatore diceva «partito con la luce»; una mano storta aveva aggiunto «tornato». La lapide senza nome, in fondo al Prato dei Morti, ha detto il resto: Ilario era tornato cercando una luce che lei aveva spento per non perderlo.',
+    'Il registro del Traghettatore, ritrovato fra le costole della sua vecchia barca arenata sulla Secca, diceva «partito con la luce»; una mano storta aveva aggiunto «tornato». La lapide senza nome, in fondo al Prato dei Morti, ha detto il resto: Ilario era tornato cercando una luce che lei aveva spento per non perderlo.',
     'La lente era incrinata dalla notte del lutto. Brace l\'ha rifusa con le schegge che cantano, la Sarta l\'ha lucidata con polvere di perla, e la Fiammella ha detto di essere pronta.',
-    'La nebbia ha preso un volto per difendersi, e ha perso. Il faro si è riacceso d\'oro, e per la prima volta in trecento anni dall\'isola si vede il mare aperto. La Guardiana resta. Ilario anche.',
+    'La nebbia ha preso un volto per difendersi, e ha perso. Il faro si è riacceso d\'oro, e per la prima volta in trecento anni dall\'isola si vede il mare aperto. E oltre il mare una terra, con una luce piccola che ha risposto. La Guardiana resta. Ilario anche. Il Libro III comincia da quella luce.',
 ];
 export function l2Book(app) {
     const st = stOf(app);
@@ -138,6 +138,8 @@ export class L2World {
         const shardG = new THREE.OctahedronGeometry(0.22, 0);
         shardG.scale(0.6, 1.25, 0.25);
         const orbG = new THREE.IcosahedronGeometry(0.16, 1);
+        const dirt = new THREE.MeshStandardMaterial({ color: '#2e241c', roughness: 1, flatShading: true });
+        const paper = new THREE.MeshStandardMaterial({ color: '#d9cfae', emissive: '#4a3f20', emissiveIntensity: 0.6, roughness: 1, side: THREE.DoubleSide });
         for (const [k, P] of Object.entries(L2_SPOTS)) {
             if (!P.glow) continue;
             const g = new THREE.Group();
@@ -160,6 +162,20 @@ export class L2World {
                 s.position.y = 0.45; s.rotation.set(-0.12, 0.6, 0.05); s.castShadow = true;
                 g.add(s);
                 spinner = null;
+            } else if (P.glow === 'terra') {
+                const m = new THREE.Mesh(new THREE.SphereGeometry(0.7, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), dirt);
+                m.scale.y = 0.45; m.receiveShadow = true;
+                g.add(m);
+                spinner = null;
+                glowCol = '#7affd8';
+            } else if (P.glow === 'pagina') {
+                // un foglio gonfio d'acqua, un po' accartocciato
+                const pg = new THREE.PlaneGeometry(0.34, 0.46, 3, 3);
+                const pp = pg.attributes.position;
+                for (let i = 0; i < pp.count; i++) pp.setZ(i, Math.sin(pp.getX(i) * 9) * 0.03 + pp.getY(i) * pp.getY(i) * 0.3);
+                pg.computeVertexNormals();
+                g.add(new THREE.Mesh(pg, paper));
+                glowCol = '#ffe9a8';
             }
             const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: glowCol, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
             glow.scale.set(2.2, 2.2, 1);
@@ -170,7 +186,7 @@ export class L2World {
             const it = { id: 'l2spot', k, x: P.x, z: P.z, r: 2.2, label: P.label, when: () => this.want(k) };
             if (!P.swim) it.y = ground;
             W.interactables.push(it);
-            this.items.push({ k, g, glow, y: ground, spinner, bob: P.glow !== 'lapide' });
+            this.items.push({ k, g, glow, y: ground, spinner, bob: P.glow !== 'lapide' && P.glow !== 'terra' });
         }
         this.tick = (dt, t) => {
             for (const c of this.items) {
@@ -181,6 +197,7 @@ export class L2World {
             }
         };
         W.animated.push(this.tick);
+        this.buildHorizon();
         // i passi «conta» (pesca, scava) li chiude il server: qui arriva la notizia
         app.net.on('l2:step', (r) => {
             const before = stOf(app), done = l2Step(before);
@@ -196,10 +213,47 @@ export class L2World {
         const S = l2Step(stOf(this.app));
         return S?.k === 'find' && S.spots.includes(k) && !stOf(this.app).got.includes(k);
     }
-    refresh() { for (const c of this.items) c.g.visible = this.want(c.k); }
+    refresh() {
+        for (const c of this.items) c.g.visible = this.want(c.k);
+        if (this.horizon) this.horizon.visible = l2At(stOf(this.app)) >= L2AT(4, 3);
+    }
+    // --- L'Orizzonte: quando il faro si riaccende, oltre la nebbia compare una terra (il Libro III) ---
+    buildHorizon() {
+        const W = this.app.world, g = new THREE.Group();
+        g.name = 'orizzonte: la terra oltre la nebbia';
+        // dietro il faro, lontanissima: la luce del faro la indica
+        const dir = new THREE.Vector2(138, -170).normalize(), D = 720;
+        g.position.set(dir.x * D, -2, dir.y * D);
+        g.rotation.y = Math.atan2(dir.x, dir.y);
+        const land = new THREE.MeshBasicMaterial({ color: '#1b0d29', fog: false, transparent: true, opacity: 0.78, depthWrite: false });
+        const far = new THREE.MeshBasicMaterial({ color: '#25123a', fog: false, transparent: true, opacity: 0.55, depthWrite: false });
+        const r = (s) => { const x = Math.sin(s * 12.9898) * 43758.5453; return x - Math.floor(x); };
+        // due file di colline, e una montagna con la cima storta
+        for (let i = 0; i < 14; i++) {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), i < 7 ? land : far);
+            m.scale.set(40 + r(i) * 60, 14 + r(i + 9) * 26, 30);
+            m.position.set((i % 7 - 3) * 55 + r(i + 3) * 30, 0, i < 7 ? 0 : -60);
+            m.renderOrder = -2;
+            g.add(m);
+        }
+        const peak = new THREE.Mesh(new THREE.ConeGeometry(38, 95, 7), land);
+        peak.position.set(-40, 40, -20); peak.rotation.z = 0.12; peak.renderOrder = -2;
+        g.add(peak);
+        // una luce piccola che risponde al faro: qualcuno, laggiù, è sveglio
+        const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: '#ffd27a', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+        spark.position.set(60, 18, 2); spark.scale.set(16, 16, 1);
+        g.add(spark);
+        this.spark = spark;
+        g.traverse(o => { o.frustumCulled = false; });
+        g.visible = false;
+        W.scene.add(g);
+        this.horizon = g;
+        W.animated.push((dt, t) => { if (g.visible) spark.material.opacity = 0.5 + 0.45 * Math.max(0, Math.sin(t * 0.8)) ** 6; });
+    }
     // un luogo toccato (la lanterna ha il suo giro)
     async find(k) {
         if (k === 'lanterna') return this.lantern();
+        if (k === 'terra') this.app.audio.play('dig');
         const r = await act(this.app, 'find', { k });
         if (!r) return;
         // ancora qualcosa da trovare in questo passo: conta; altrimenti il passo è chiuso e ne parla celebrate()

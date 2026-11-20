@@ -848,8 +848,8 @@ class Game {
             veil.firstChild.style.cssText = 'font-family:var(--display,serif);color:#d9c9a0;font-size:clamp(18px,3vw,28px);letter-spacing:.06em;text-shadow:0 2px 8px #000;opacity:.85;text-align:center;padding:0 24px;';
             document.body.append(veil);
         }
-        const toFaro = dest === 'faro', spot = typeof dest === 'object' ? dest : null;
-        veil.firstChild.textContent = spot ? spot.text : toFaro ? 'Il remo entra nell\'acqua senza fare rumore…' : 'La nebbia si richiude dietro la barca…';
+        const toFaro = dest === 'faro', toRelitto = dest === 'relitto', spot = typeof dest === 'object' ? dest : null;
+        veil.firstChild.textContent = spot ? spot.text : toFaro ? 'Il remo entra nell\'acqua senza fare rumore…' : toRelitto ? 'Il Traghettatore rema verso sud-ovest, a testa bassa, come chi va a trovare un morto…' : 'La nebbia si richiude dietro la barca…';
         veil.style.pointerEvents = 'auto';
         veil.style.opacity = '1';
         this.audio.play?.(spot ? 'wood' : 'splash');
@@ -857,7 +857,11 @@ class Game {
         try {
             let T;
             if (spot) T = spot;
-            else if (toFaro) {
+            else if (toRelitto) {
+                const { relittoArrival } = await import('./regions/relitto.js');
+                T = relittoArrival();
+                await this.stream?.ensureAt(T.x, T.z);
+            } else if (toFaro) {
                 const { faroArrival } = await import('./regions/faro.js');
                 T = faroArrival();
                 await this.stream?.ensureAt(T.x, T.z);      // il molo del faro deve esserci prima di scendere

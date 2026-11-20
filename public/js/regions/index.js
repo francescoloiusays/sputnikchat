@@ -14,4 +14,10 @@ export function registerRegions(stream, app) {
         const { buildFaro } = await import('./faro.js');
         return buildFaro(app);
     });
+    // la Secca del Relitto: il banco di sabbia a sud-ovest, con la barca arenata del Traghettatore
+    const R = WORLD.RELITTO;
+    stream.region('Secca del Relitto', { x: R.x, z: R.z }, R.r + 60, async () => {
+        const { buildRelitto } = await import('./relitto.js');
+        return buildRelitto(app);
+    });
 }

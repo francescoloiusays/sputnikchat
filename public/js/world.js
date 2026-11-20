@@ -24,6 +24,8 @@ export const WORLD = {
     // Libro II: lo scoglio del Faro Spento, a nord-est nella laguna (ci si arriva in barca)
     WATER_Y: 0, SWIM_Y: -1.15, SWIM_RANGE: 14,   // pelo dell'acqua, dove galleggiano i piedi a nuoto, quanti metri si nuota lontano dalla terra
     FARO: { x: 138, z: -150, r: 21, pad: 2.6, dock: { dir: [-0.495, 0.869], r0: 18, r1: 31, w: 2.6, y: 1.25 } },
+    // Libro II, capitolo III: la secca dove si è arenata la vecchia barca del Traghettatore (sud-ovest, in barca)
+    RELITTO: { x: -148, z: 118, r: 17, dir: [0.834, -0.552] },
     CASTLE: { x: 0, z: -104, half: 19, base: 3.2, wallH: 6.5 },
     ARENA: { x: 0, z: -100, r: 7.5, top: 3.55 },
     KEEP: { x: 0, z: -118.8, w: 12, d: 10, h: 15, t: 1 },          // mastio, addossato al muro nord
@@ -47,6 +49,12 @@ export function nearFaroWay(x, z, m = 0) {
     const F = WORLD.FARO, ox = x - F.x, oz = z - F.z, [dx, dz] = F.dock.dir;
     const along = ox * dx + oz * dz, lat = Math.abs(-ox * dz + oz * dx);
     return Math.hypot(ox, oz) < 7.5 + m || (along > 0 && along < F.dock.r1 + 2 && lat < 3.4 + m);
+}
+
+// la Secca del Relitto è tutta sabbia: niente alberi, rocce o canne messe a caso (le sue le mette la regione)
+export function nearRelitto(x, z, m = 0) {
+    const R = WORLD.RELITTO;
+    return Math.hypot(x - R.x, z - R.z) < R.r + 12 + m;
 }
 
 // --- RUMORE ---
@@ -88,7 +96,10 @@ function islandMask(x, z) {
     const rI = I.r * (1 + 0.07 * Math.sin(Math.atan2(bz, bx) * 4 + 0.7));
     const F = WORLD.FARO, fx = x - F.x, fz = z - F.z, fa = Math.atan2(fz, fx);
     const rF = F.r * (1 + 0.1 * Math.sin(fa * 3 + 2.1) + 0.05 * Math.sin(fa * 7));
-    return Math.max(1 - Math.hypot(ax, az) / rM, 1 - Math.hypot(bx, bz) / rI, 1 - Math.hypot(fx, fz) / rF);
+    // la secca: lunga e storta, come un banco di sabbia lasciato dalla corrente
+    const R = WORLD.RELITTO, rx = x - R.x, rz = z - R.z, ra = Math.atan2(rz, rx);
+    const rR = R.r * (1 + 0.28 * Math.cos(2 * (ra - 0.5)) + 0.07 * Math.sin(ra * 5 + 1));
+    return Math.max(1 - Math.hypot(ax, az) / rM, 1 - Math.hypot(bx, bz) / rI, 1 - Math.hypot(fx, fz) / rF, 1 - Math.hypot(rx, rz) / rR);
 }
 
 function computeHeight(x, z) {
@@ -114,6 +125,9 @@ function computeHeight(x, z) {
     // spiazzo piano ai piedi del faro
     const F = WORLD.FARO;
     h = lerp(h, F.pad, 1 - smooth(5.5, 10, Math.hypot(x - F.x, z - F.z)));
+    // la secca resta bassa: dune di sabbia appena sopra l'acqua
+    const R = WORLD.RELITTO, dR = Math.hypot(x - R.x, z - R.z);
+    if (dR < R.r * 1.6) h = lerp(h, Math.min(base, 0.36 + fbm(x * 0.09, z * 0.09) * 0.22), 1 - smooth(R.r * 1.2, R.r * 1.55, dR));
     return h;
 }
 
@@ -708,7 +722,7 @@ export class World {
             const h = this.terrainAt(x, z);
             if (h < minH) return false;
             if (pathDist(x, z) < 4) return false;
-            if (nearFaroWay(x, z, 1)) return false;
+            if (nearFaroWay(x, z, 1) || nearRelitto(x, z)) return false;
             if (Math.hypot(x - WORLD.PLAZA.x, z - WORLD.PLAZA.z) < WORLD.PLAZA.r + 4) return false;
             for (const s of Object.values(WORLD.SHOPS)) if (Math.hypot(x - s.x, z - s.z) < 10) return false;
             if (Math.abs(x - WORLD.CASTLE.x) < 30 && Math.abs(z - WORLD.CASTLE.z) < 30) return false;
@@ -776,7 +790,7 @@ export class World {
             const x = WORLD.MIN_X + r() * (WORLD.MAX_X - WORLD.MIN_X), z = WORLD.MIN_Z + r() * (WORLD.MAX_Z - WORLD.MIN_Z);
             const h = this.terrainAt(x, z);
             if (h < -1.2 || h > 5) continue;
-            if (pathDist(x, z) < 3.5 || this.onBridge(x, z) || Math.abs(x) < 3 && z > 80 || nearFaroWay(x, z, 0.5)) continue;
+            if (pathDist(x, z) < 3.5 || this.onBridge(x, z) || Math.abs(x) < 3 && z > 80 || nearFaroWay(x, z, 0.5) || nearRelitto(x, z)) continue;
             if (Math.abs(x - WORLD.CASTLE.x) < 22 && Math.abs(z - WORLD.CASTLE.z) < 22) continue;
             if (h > 0.6 && !okSpot(x, z, 0.6)) continue;
             rocks.push([x, h, z, 0.3 + r() * (h < 0.4 ? 1.3 : 0.8)]);
@@ -803,7 +817,7 @@ export class World {
         while (reeds.length < 700 && tries++ < 20000) {
             const x = WORLD.MIN_X + r() * (WORLD.MAX_X - WORLD.MIN_X), z = WORLD.MIN_Z + r() * (WORLD.MAX_Z - WORLD.MIN_Z);
             const h = this.terrainAt(x, z);
-            if (h < -0.9 || h > 0.25 || this.onBridge(x, z) || Math.abs(x) < 4 && z > 84 || nearFaroWay(x, z)) continue;
+            if (h < -0.9 || h > 0.25 || this.onBridge(x, z) || Math.abs(x) < 4 && z > 84 || nearFaroWay(x, z) || nearRelitto(x, z)) continue;
             for (let k = 0; k < 4 && reeds.length < 700; k++) reeds.push([x + (r() - 0.5) * 1.2, h, z + (r() - 0.5) * 1.2, 0.7 + r() * 0.9]);
         }
         const reedG = new THREE.ConeGeometry(0.025, 1.4, 4); reedG.translate(0, 0.7, 0);
@@ -1579,11 +1593,13 @@ export class World {
             { x: TOLL.spot.x, z: TOLL.spot.z, ic: 'ecto', label: 'Pedaggio dello Spettro' },
             { x: FOUNTAIN.x, z: FOUNTAIN.z, ic: 'wave', label: 'Fontana dei Desideri' },
             { x: WORLD.FARO.x, z: WORLD.FARO.z, ic: 'lantern', label: 'Il Faro Spento' },
+            { x: WORLD.RELITTO.x, z: WORLD.RELITTO.z, ic: 'wave', label: 'La Secca del Relitto' },
         ];
     }
 
     zoneName(x, z) {
         if (Math.hypot(x - WORLD.FARO.x, z - WORLD.FARO.z) < WORLD.FARO.r + 10) return 'Il Faro Spento';
+        if (Math.hypot(x - WORLD.RELITTO.x, z - WORLD.RELITTO.z) < WORLD.RELITTO.r + 14) return 'La Secca del Relitto';
         const C = WORLD.CASTLE;
         if (Math.abs(x - C.x) < C.half && Math.abs(z - C.z) < C.half) {
             const K = WORLD.KEEP;
