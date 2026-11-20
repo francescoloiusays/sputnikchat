@@ -41,6 +41,13 @@ export const WORLD = {
     SIDE_PATHS: [[[0, 14], [-17, 10]], [[0, 14], [17, 10]], [[0, 32], [13, 36]], [[0, 32], [-26, 40]]],
 };
 
+// il faro e il sentiero dal molo alla porta restano sgombri (niente alberi, rocce o canne)
+export function nearFaroWay(x, z, m = 0) {
+    const F = WORLD.FARO, ox = x - F.x, oz = z - F.z, [dx, dz] = F.dock.dir;
+    const along = ox * dx + oz * dz, lat = Math.abs(-ox * dz + oz * dx);
+    return Math.hypot(ox, oz) < 7.5 + m || (along > 0 && along < F.dock.r1 + 2 && lat < 3.4 + m);
+}
+
 // --- RUMORE ---
 function hash(x, y) {
     let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0;
@@ -675,6 +682,7 @@ export class World {
             const h = this.terrainAt(x, z);
             if (h < minH) return false;
             if (pathDist(x, z) < 4) return false;
+            if (nearFaroWay(x, z, 1)) return false;
             if (Math.hypot(x - WORLD.PLAZA.x, z - WORLD.PLAZA.z) < WORLD.PLAZA.r + 4) return false;
             for (const s of Object.values(WORLD.SHOPS)) if (Math.hypot(x - s.x, z - s.z) < 10) return false;
             if (Math.abs(x - WORLD.CASTLE.x) < 30 && Math.abs(z - WORLD.CASTLE.z) < 30) return false;
@@ -742,7 +750,7 @@ export class World {
             const x = WORLD.MIN_X + r() * (WORLD.MAX_X - WORLD.MIN_X), z = WORLD.MIN_Z + r() * (WORLD.MAX_Z - WORLD.MIN_Z);
             const h = this.terrainAt(x, z);
             if (h < -1.2 || h > 5) continue;
-            if (pathDist(x, z) < 3.5 || this.onBridge(x, z) || Math.abs(x) < 3 && z > 80) continue;
+            if (pathDist(x, z) < 3.5 || this.onBridge(x, z) || Math.abs(x) < 3 && z > 80 || nearFaroWay(x, z, 0.5)) continue;
             if (Math.abs(x - WORLD.CASTLE.x) < 22 && Math.abs(z - WORLD.CASTLE.z) < 22) continue;
             if (h > 0.6 && !okSpot(x, z, 0.6)) continue;
             rocks.push([x, h, z, 0.3 + r() * (h < 0.4 ? 1.3 : 0.8)]);
@@ -769,7 +777,7 @@ export class World {
         while (reeds.length < 700 && tries++ < 20000) {
             const x = WORLD.MIN_X + r() * (WORLD.MAX_X - WORLD.MIN_X), z = WORLD.MIN_Z + r() * (WORLD.MAX_Z - WORLD.MIN_Z);
             const h = this.terrainAt(x, z);
-            if (h < -0.9 || h > 0.25 || this.onBridge(x, z) || Math.abs(x) < 4 && z > 84) continue;
+            if (h < -0.9 || h > 0.25 || this.onBridge(x, z) || Math.abs(x) < 4 && z > 84 || nearFaroWay(x, z)) continue;
             for (let k = 0; k < 4 && reeds.length < 700; k++) reeds.push([x + (r() - 0.5) * 1.2, h, z + (r() - 0.5) * 1.2, 0.7 + r() * 0.9]);
         }
         const reedG = new THREE.ConeGeometry(0.025, 1.4, 4); reedG.translate(0, 0.7, 0);

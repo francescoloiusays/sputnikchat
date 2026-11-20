@@ -1084,9 +1084,13 @@ export function makeNameTag(name, sub, color = '#ffff00') {
     const g = c.getContext('2d');
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.shadowColor = 'rgba(0,0,0,0.95)'; g.shadowBlur = 8;
-    g.font = '700 56px Almendra, serif';
+    // i nomi lunghi («La Guardiana del Faro») si rimpiccioliscono invece di essere tagliati
+    const text = String(name || '???').slice(0, 28);
+    let fs = 56;
+    g.font = `700 ${fs}px Almendra, serif`;
+    while (fs > 30 && g.measureText(text).width > 490) { fs -= 2; g.font = `700 ${fs}px Almendra, serif`; }
     g.fillStyle = color;
-    g.fillText(String(name || '???').slice(0, 16), 256, sub ? 52 : 70);
+    g.fillText(text, 256, sub ? 52 : 70);
     if (sub) { g.font = '600 28px Cinzel, serif'; g.fillStyle = '#d8cfe6'; g.fillText(sub, 256, 108); }
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;

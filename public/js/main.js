@@ -859,7 +859,7 @@ class Game {
                 await this.stream?.ensureAt(T.x, T.z);      // il molo del faro deve esserci prima di scendere
             } else T = { x: 0.4, z: 93.5, yaw: Math.PI, camYaw: 0 };
             const P = this.player;
-            P.pos.set(T.x, this.world.groundAt(T.x, T.z), T.z);
+            P.pos.set(T.x, this.world.groundAt(T.x, T.z, 3), T.z);
             P.vel.set(0, 0, 0);
             P.yaw = T.yaw; this.cam.yaw = T.camYaw;
             P.lastSent = null; P.lastSend = 0;

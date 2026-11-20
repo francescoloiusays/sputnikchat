@@ -32,25 +32,29 @@ export function buildFaro(app) {
     // --- la torre: fasce bianche e rosso scuro, come i fari veri, ma scrostate ---
     const white = mat({ color: '#b9b2c4', roughness: 0.88 }), red = mat({ color: '#5a1f2a', roughness: 0.85 });
     const stone = mat({ color: '#4a4552', roughness: 0.95, flatShading: true });
-    add(new THREE.Mesh(geo(new THREE.CylinderGeometry(3.3, 3.6, 1.2, 12)), stone), X, pad + 0.3, Z);
-    let y = pad + 0.9;
+    // basamento basso: ci si sale sopra (è un gradino) e si arriva alla porta
+    const PL = 0.3;
+    add(new THREE.Mesh(geo(new THREE.CylinderGeometry(3.4, 3.6, PL + 0.5, 14)), stone), X, pad + (PL - 0.5) / 2, Z);
+    circ(X, Z, 3.45, pad - 2, pad + PL);                  // il basamento: si cammina sopra
+    const blockers = [];
+    let y = pad + PL;
     for (let i = 0; i < 5; i++) {
         const h = 3.2, r0 = 2.6 - i * 0.28, r1 = r0 - 0.28;
-        add(new THREE.Mesh(geo(new THREE.CylinderGeometry(r1, r0, h, 20)), i % 2 ? red : white), X, y + h / 2, Z);
+        blockers.push(add(new THREE.Mesh(geo(new THREE.CylinderGeometry(r1, r0, h, 20)), i % 2 ? red : white), X, y + h / 2, Z));
         y += h;
     }
-    circ(X, Z, 3.0, pad - 2, y + 5);
-    // porta, rivolta verso il molo
+    circ(X, Z, 2.75, pad + PL - 0.1, y + 5);              // la torre: non si attraversa
+    // porta, rivolta verso il molo, all'altezza del basamento
     const iron = mat({ color: '#1c1a20', metalness: 0.8, roughness: 0.45 });
     const wood = mat({ color: '#3a281b', roughness: 0.9 });
-    const doorX = X + dx * 2.62, doorZ = Z + dz * 2.62, doorRy = Math.atan2(dx, dz);
-    const door = add(new THREE.Mesh(geo(new THREE.BoxGeometry(1.25, 2.2, 0.18)), wood), doorX, pad + 2.0, doorZ);
+    const doorX = X + dx * 2.6, doorZ = Z + dz * 2.6, doorRy = Math.atan2(dx, dz), dy = pad + PL;
+    const door = add(new THREE.Mesh(geo(new THREE.BoxGeometry(1.25, 2.2, 0.2)), wood), doorX, dy + 1.1, doorZ);
     door.rotation.y = doorRy;
-    const arch = add(new THREE.Mesh(geo(new THREE.TorusGeometry(0.72, 0.1, 6, 12, Math.PI)), stone), doorX + dx * 0.05, pad + 3.05, doorZ + dz * 0.05);
+    const arch = add(new THREE.Mesh(geo(new THREE.TorusGeometry(0.72, 0.1, 6, 12, Math.PI)), stone), doorX + dx * 0.06, dy + 2.2, doorZ + dz * 0.06);
     arch.rotation.y = doorRy;
-    const lock = add(new THREE.Mesh(geo(new THREE.TorusGeometry(0.11, 0.035, 6, 12)), iron), doorX + dx * 0.12, pad + 1.95, doorZ + dz * 0.12);
+    const lock = add(new THREE.Mesh(geo(new THREE.TorusGeometry(0.11, 0.035, 6, 12)), iron), doorX + dx * 0.12, dy + 1.05, doorZ + dz * 0.12);
     lock.rotation.y = doorRy;
-    interactables.push({ id: 'faro_porta', x: doorX + dx * 1.2, z: doorZ + dz * 1.2, y: pad, r: 2.2, label: 'La porta del faro' });
+    interactables.push({ id: 'faro_porta', x: doorX + dx * 1.1, z: doorZ + dz * 1.1, y: dy, r: 2.2, label: 'La porta del faro' });
 
     // ballatoio, gabbia e cupola
     add(new THREE.Mesh(geo(new THREE.CylinderGeometry(2.2, 2.2, 0.3, 24)), iron), X, y + 0.15, Z);
@@ -140,14 +144,17 @@ export function buildFaro(app) {
     };
     W.animated.push(tick);
     W.interactables.push(...interactables);
+    W.cameraBlockers.push(...blockers);          // la telecamera non entra nella torre
 
     return {
         group: g,
         dispose() {
             const i = W.animated.indexOf(tick);
             if (i >= 0) W.animated.splice(i, 1);
-            W.colliders = W.colliders.filter(c => !colliders.includes(c));
-            W.interactables = W.interactables.filter(c => !interactables.includes(c));
+            const drop = (arr, items) => { for (let k = arr.length - 1; k >= 0; k--) if (items.includes(arr[k])) arr.splice(k, 1); };
+            drop(W.colliders, colliders);
+            drop(W.interactables, interactables);
+            drop(W.cameraBlockers, blockers);
             for (const f of fires) { const k = W.fires.mats.indexOf(f.material); if (k >= 0) W.fires.mats.splice(k, 1); f.geometry.dispose(); f.material.dispose(); }
             for (const d of disposables) d.dispose();
         },
