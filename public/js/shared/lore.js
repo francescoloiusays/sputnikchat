@@ -122,6 +122,16 @@ export const NPCS = {
             'Il Traghettatore passa una volta al giorno. Non mi porta mai niente: solo gente che chiede dov\'è il ritorno.'],
         actions: [['molo', 'Torna al Molo in barca']],
     },
+    // la Stalla delle Nebbie (shared/pet.js, STALLA): cura gli SputnikPet. Porta con sé un seme che non è nessuno dei sette.
+    salvia: {
+        name: 'Sàlvia', where: 'La Stalla delle Nebbie', x: 29.05, z: 28.43, ry: -2.0, teach: null,
+        app: { species: 'elfo', build: 'snello', height: 1.05, skin: '#c8b8a0', eyes: 'sottili', eyeColor: '#c8a0ff', mouth: 'neutro', hair: 'lunghi', hairColor: '#4a5a3a', beard: 'nessuna', topStyle: 'veste', top: '#3a4a2e', bottom: '#2a2a22', shoes: '#1a1410' },
+        look: { head: 'cappuccio', face: 'monocolo' },
+        lines: ['La nebbia mi ha portato qui, come tutti. Solo che io il mio nome non l\'ho perso: l\'ho lasciato a un cane, perché me lo tenesse.',
+            'Le bestie dell\'isola ricordano più di noi. Un corvo ricorda ogni faccia. Un gatto ogni porta. Un fantasmino ricorda di essere stato qualcuno.',
+            'Ti chiedi cos\'è questo, appeso al collo? Un seme. No, non è nessuno dei sette. Quando vorrai sentire la storia dell\'ottavo, torna da me.'],
+        actions: [['pet', 'La Stalla delle Nebbie']],
+    },
     // la Barca Rovesciata, sulla spiaggia a ovest del Molo (shared/mare.js, BARCA: davanti alla bocca della barca)
     retaia: {
         name: 'La Retaia', where: 'La Barca Rovesciata', x: -10.72, z: 89.76, ry: 1.25, teach: null,

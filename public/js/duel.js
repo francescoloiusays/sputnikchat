@@ -24,6 +24,8 @@ export function matchText(A, B) {
 }
 import { h, $, coin, fmt, toast, IS_MOBILE } from './util.js';
 import { elIcon, iconSVG } from './icons.js';
+import { buildPet, animatePet } from './pets.js';
+import { PETS } from './shared/pet.js';
 
 const ACTION_OF = { light: 'light', heavy: 'heavy', air: 'air', up: 'up', sp: 'special' };
 const SPECIAL_SFX = { fiammata: 'fire', gelo: 'ice', saetta: 'thunder', frana: 'rock', fango: 'mudhit', miasma: 'ghost', passo: 'dash' };
@@ -74,6 +76,14 @@ export class DuelView {
             ch.root.position.set(s === 'a' ? -4 : 4, 0, 0);
             if (f.boss) ch.root.scale.setScalar(1.3);   // il Re Annegato
             this.scene.add(ch.root);
+            const sp = f.petSp || null;
+            if (sp && PETS[sp]) {
+                const pm = buildPet(sp, sp === 'fatuo' ? ELEMENTS[f.element]?.glow : null);
+                pm.scale.setScalar(1.4);
+                pm.position.set(s === 'a' ? -5.2 : 5.2, 0, -0.8);
+                this.scene.add(pm);
+                (this.pets ||= {})[s] = { m: pm, dash: 0, tx: 0, ty: 0, t: Math.random() * 5 };
+            }
             const ws = weaponStats(f.look?.weapon);
             this.fighters[s] = {
                 ch, info: f, aspd: ws.speed, special: ELEMENTS[f.element]?.special.id || 'fango',
@@ -91,7 +101,7 @@ export class DuelView {
         this.buildHud();
         this.bindInput();
         if (this.role === 'local') {
-            const setup = (x) => ({ id: x.id, name: x.name, element: x.element, weapon: x.look?.weapon, dur: x.dur, reserve: x.reserve, level: x.level || 1, talents: x.talents, gear: x.gear, gearPlus: x.gearPlus, seals: x.seals, boss: x.boss });
+            const setup = (x) => ({ id: x.id, name: x.name, element: x.element, weapon: x.look?.weapon, dur: x.dur, reserve: x.reserve, pet: x.pet, level: x.level || 1, talents: x.talents, gear: x.gear, gearPlus: x.gearPlus, seals: x.seals, boss: x.boss });
             this.sim = createDuel(setup(info.a), setup(info.b));
             this.bot = createBot(opts.botLevel || 1);
             this.acc = 0;
@@ -458,6 +468,18 @@ export class DuelView {
             }
             F.px = pos[side].x; F.py = pos[side].y; F.facing = f.facing;
             ch.root.position.set(pos[side].x, pos[side].y, 0);
+            const PT = this.pets?.[side];
+            if (PT) {
+                PT.t += dt;
+                const fly = PT.m.userData.fly, back = f.facing > 0 ? -1.1 : 1.1;
+                let tx = pos[side].x + back, ty = (fly ? pos[side].y + 1.3 : Math.max(0, pos[side].y)), tz = -0.8;
+                if (PT.dash > 0) { PT.dash -= dt; const k = Math.sin(Math.min(1, PT.dash / 0.6) * Math.PI); tx += (PT.tx - tx) * k; ty += (PT.ty - ty) * k; tz *= 1 - k; }
+                PT.m.position.x += (tx - PT.m.position.x) * Math.min(1, dt * (PT.dash > 0 ? 14 : 5));
+                PT.m.position.y += (ty - PT.m.position.y) * Math.min(1, dt * 6);
+                PT.m.position.z += (tz - PT.m.position.z) * Math.min(1, dt * 6);
+                PT.m.rotation.y = (PT.dash > 0 ? (PT.tx > PT.m.position.x ? 1 : -1) : f.facing) > 0 ? Math.PI / 2 : -Math.PI / 2;
+                animatePet(PT.m, PT.t, PT.dash > 0 ? 1 : Math.min(1, Math.abs(tx - PT.m.position.x)), false);
+            }
             if (this.hitstop > 0 && F.jit > 0) ch.root.position.x += (Math.random() - 0.5) * F.jit;   // trema sull'impatto
             const targetRy = f.facing > 0 ? Math.PI / 2 - 0.35 : -Math.PI / 2 + 0.35;
             ch.root.rotation.y += (targetRy - ch.root.rotation.y) * Math.min(1, dt * 18);
@@ -728,6 +750,15 @@ export class DuelView {
             case 'inf': this.burst(e.x, e.y, ELEMENTS[e.e]?.glow || '#fff', e.k > 1 ? 18 : 10, 4, 0.32); break;
             case 'heal': { const p = fpos(e.s); this.burst(p.x, p.y + 1, '#5aff5a', 14, 3, 0.4); this.floatText(`+${e.d}`, p.x, p.y + 1.5, '#7aff7a'); break; }
             case 'quake': this.shake = 0.8; break;
+            // lo SputnikPet attacca da solo
+            case 'pet': {
+                const PT = this.pets?.[e.s];
+                if (PT) { PT.dash = 0.6; PT.tx = e.x; PT.ty = e.y - 0.4; }
+                this.floatText(`${PETS[e.sp]?.assist?.name || 'Il pet'}!`, e.x, e.y + 0.5, PETS[e.sp]?.color || '#fff', 1.1);
+                this.burst(e.x, e.y - 0.2, PETS[e.sp]?.color || '#fff', 14, 5, 0.35);
+                A.play(e.sp === 'cane' ? 'heavy' : 'hit');
+                break;
+            }
             // due SUPER che si scontrano: il nome dello scontro, i due colori che si mescolano, e la spiegazione
             case 'clash': {
                 const C = clashOf(e.ea, e.eb), ca = ELEMENTS[e.ea]?.color || '#fff', cb = ELEMENTS[e.eb]?.color || '#fff';

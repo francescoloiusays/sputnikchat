@@ -1093,3 +1093,26 @@ details.mix .field { margin-top: 6px; }
 .wear-bar { height: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.35); overflow: hidden; margin-top: 3px; }
 .wear-bar i { display: block; height: 100%; background: linear-gradient(90deg, #c8501e, #e8c26a 45%, #5fd38a); }
 .wear-bar.broken i { background: #a2261a; }
+
+/* --- la Stalla delle Nebbie --- */
+.pet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-top: 10px; }
+.pet-card { display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid rgba(90, 60, 25, 0.35); border-radius: 8px; background: rgba(255, 248, 228, 0.35); color: #3a2410; }
+.pet-card.locked { opacity: 0.55; filter: grayscale(0.6); }
+.pet-card b { font-size: 16px; }
+.pet-ic svg { width: 34px; height: 34px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
+.pet-ic.big svg { width: 64px; height: 64px; }
+.pet-role { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b4c1a; }
+.pet-desc { margin: 4px 0; font-style: italic; color: #4a3418; font-size: 14.5px; }
+.pet-card .btn { margin-top: auto; align-self: flex-start; }
+.pet-sheet { display: flex; gap: 14px; align-items: center; }
+.pet-name { font-family: var(--display, serif); font-size: 22px; color: #2b1c0e; }
+.pet-ench { color: #8a2a14; }
+.pet-row { display: grid; grid-template-columns: 82px 1fr auto; gap: 8px; align-items: center; font-size: 14px; margin-top: 4px; }
+.pet-bar { height: 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.2); overflow: hidden; }
+.pet-bar i { display: block; height: 100%; }
+.pet-bar.hp i { background: linear-gradient(90deg, #c8501e, #5fd38a); }
+.pet-bar.hp.dead i { background: #a2261a; }
+.pet-bar.xp i { background: linear-gradient(90deg, #6a4ab8, #c8a0ff); }
+.pet-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+.pet-act { display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; border: 1px solid rgba(90, 60, 25, 0.3); border-radius: 8px; color: #3a2410; }
+.pet-act .btn { align-self: flex-start; }

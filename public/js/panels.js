@@ -20,6 +20,7 @@ import { l2Box } from './libro2-ui.js';
 import { l2At, L2AT } from './shared/libro2.js';
 import { RODS, TRADES, tonicXp, itemTradeValue } from './shared/mare.js';
 import { weaponDurability, weaponWearLeft, repairCost, RESERVE_WEAPON } from './shared/catalog.js';
+import { PETS, PET_IDS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENCH_LV, TRAIN, petXpToNext, petMaxHealth, petPower, petTired, petDuel, petFish, healCost } from './shared/pet.js';
 import { STORY_SPOTS } from './shared/story.js';
 import { ritratto } from './story-text.js';
 
@@ -89,7 +90,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('open');
@@ -564,7 +565,7 @@ export class Panels {
         const go = { diario: () => { this.tabs.bag = 'diario'; this.open('inventario'); }, forgia: () => { this.tabs.forge = 'crea'; this.open('forgia'); }, castoni: () => { this.tabs.forge = 'castoni'; this.open('forgia'); },
             sartoria: () => this.open('sartoria'), bazar: () => this.open('bazar'), bacheca: () => this.open('bacheca'), altare: () => this.open('altare'),
             tombe: () => { this.tabs.tombe = 'prato'; this.open('tombe'); }, veglia: () => { this.tabs.tombe = 'veglia'; this.open('tombe'); }, pedaggio: () => this.open('pedaggio'),
-            faro: () => { this.close(); app.travel('faro'); }, relitto: () => { this.close(); app.travel('relitto'); }, baratto: () => this.open('baratto'), canna: () => this.open('canna'), riva: () => { this.close(); app.travel('riva'); }, molo: () => { this.close(); app.travel('molo'); } };
+            faro: () => { this.close(); app.travel('faro'); }, relitto: () => { this.close(); app.travel('relitto'); }, baratto: () => this.open('baratto'), canna: () => this.open('canna'), pet: () => this.open('pet'), riva: () => { this.close(); app.travel('riva'); }, molo: () => { this.close(); app.travel('molo'); } };
         const portrait = h('canvas', { class: 'npc-portrait', width: 220, height: 220 });
         requestAnimationFrame(() => { try { portrait.getContext('2d').drawImage(app.studio.portrait(N.app, N.look || {}, 220, 'bust'), 0, 0); } catch { /* ok */ } });
         this.set('talk', N.name,
@@ -577,7 +578,7 @@ export class Panels {
                     arg.learned != null ? h('div', { class: 'npc-learn', html: iconSVG('quill') }, h('b', {}, 'Ti ha insegnato una risposta per il Pedaggio dello Spettro: '), `«${INSULTS[arg.learned][1]}»`) : null,
                     arg.first && arg.xp ? h('p', { class: 'muted small' }, `Prima chiacchierata: +${arg.xp} esperienza.`) : null,
                     h('div', { class: 'btn-row' },
-                        N.actions.filter(([k]) => k !== 'riva' || l2At(app.me?.libro2) >= L2AT(5, 2)).map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto', faro: 'lantern', relitto: 'wave', riva: 'lantern', molo: 'wave', baratto: 'handshake', canna: 'rod' }[k] })),
+                        N.actions.filter(([k]) => k !== 'riva' || l2At(app.me?.libro2) >= L2AT(5, 2)).map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto', faro: 'lantern', relitto: 'wave', riva: 'lantern', molo: 'wave', baratto: 'handshake', canna: 'rod', pet: 'raven' }[k] })),
                         btn('Altro?', () => { this.render(); app.npcSay(id); }, { ic: 'talk' }),
                         btn('Arrivederci', () => this.close(), { ic: 'close' })))));
     }
@@ -883,6 +884,76 @@ export class Panels {
                     `${SLOT_NAMES[itemInfo(l.entry).slot]} · venduto da ${l.sellerName}`);
             })) : h('div', { class: 'empty' }, tab === 'miei' ? 'Non hai merce sul banco.' : 'Il banco è vuoto. Sii il primo a vendere qualcosa!'),
             h('div', { class: 'btn-row end', style: { marginTop: '10px' } }, this.purse())));
+    }
+
+    // --- LA STALLA DELLE NEBBIE: Sàlvia e gli SputnikPet ---
+    p_pet() {
+        const app = this.app, me = app.me, lv = me.level || 1, T = 'La Stalla delle Nebbie';
+        if (!app.net.connected) return this.set('raven', T, this.needOnline());
+        const pet = me.pet;
+        const pct = (x) => `+${Math.round(x * 100)}%`;
+        const NAMES = { atk: 'Attacco', def: 'Difesa', hp: 'Vita', meter: 'Carica SUPER', spd: 'Velocità', zone: 'Zona chiara', fill: 'Lenza più veloce', luck: 'Pesci rari', window: 'Tempo per ferrare', coins: 'Monete dai pesci' };
+        if (!pet) {
+            if (lv < PET_LEVEL) return this.set('raven', T, h('div', { class: 'parchment' },
+                lore(`«Le bestie scelgono chi ha già camminato un po\' sull\'isola. Torna al livello ${PET_LEVEL}: ti presenterò i miei ospiti.»`),
+                h('div', { class: 'pet-grid' }, PET_IDS.map(id => h('div', { class: 'pet-card locked' }, h('span', { class: 'pet-ic', style: { color: PETS[id].color }, html: iconSVG(PETS[id].icon) }), h('b', {}, PETS[id].name), h('span', { class: 'muted small' }, PETS[id].role))))));
+            const name = h('input', { type: 'text', maxlength: 24, placeholder: 'Dagli un nome (facoltativo)' });
+            return this.set('raven', T, h('div', { class: 'parchment' },
+                lore('«Ognuno di loro aspetta qualcuno. Uno solo verrà con te, e te lo porterai dietro ovunque: scegli con il cuore, non con la testa.»'),
+                h('p', { class: 'muted small' }, `Adottarne uno costa ${PET_ADOPT} monete. Cresce con te: duelli, pesca e addestramento. Si stanca giocando: quando è sfinito non ti aiuta finché non lo fai curare qui.`),
+                h('label', { class: 'field' }, 'Il suo nome', name),
+                h('div', { class: 'pet-grid' }, PET_IDS.map(id => {
+                    const P = PETS[id];
+                    const bon = [...Object.entries(P.duel), ...Object.entries(P.fish)].map(([k, v]) => `${NAMES[k]} ${pct(v)}`).join(' · ');
+                    return h('div', { class: 'pet-card' }, h('span', { class: 'pet-ic', style: { color: P.color }, html: iconSVG(P.icon) }),
+                        h('b', {}, P.name), h('span', { class: 'pet-role' }, P.role), h('p', { class: 'pet-desc' }, P.desc),
+                        h('div', { class: 'muted small' }, bon + (P.assist ? ` · in duello: ${P.assist.name}` : '')),
+                        btn('Prendilo con te', async () => {
+                            const r = await this.act('pet:adopt', { sp: id, name: name.value.trim() });
+                            if (r.ok) { app.audio.play('special'); toast(h('div', {}, h('b', {}, `${r.pet.name} è con te`), h('div', {}, 'Ti seguirà ovunque. Trattalo bene.')), { kind: 'coin', icon: P.icon, duration: 8000 }); }
+                            this.render();
+                        }, { cls: 'btn-sm btn-primary', disabled: (me.coins || 0) < PET_ADOPT }));
+                }))));
+        }
+        const P = PETS[pet.sp], max = petMaxHealth(pet), hp = Math.max(0, pet.health ?? max), tired = petTired(pet), need = petXpToNext(pet.lv);
+        const D = petDuel({ ...pet, health: 1 }), Fh = petFish({ ...pet, health: 1 });
+        const bonus = [...Object.entries(D?.mods || {}), ...Object.entries(Fh)].map(([k, v]) => h('li', {}, NAMES[k], ' ', h('b', {}, pct(v))));
+        const e = pet.ench || 0, eCost = PET_ENCH[e], eLv = PET_ENCH_LV[e], hc = healCost(pet), tc = TRAIN.coins(pet.lv);
+        const bar = (v, m, cls) => h('div', { class: 'pet-bar ' + cls }, h('i', { style: { width: `${Math.round(Math.min(1, v / m) * 100)}%` } }));
+        this.set('raven', T, h('div', { class: 'parchment' },
+            lore(tired ? '«È sfinito, poverino. Lascialo qui un momento: ci penso io.»' : hp < max * 0.4 ? '«Comincia a essere stanco. Non tirare troppo la corda.»' : '«Sta bene. Si vede da come ti guarda.»'),
+            h('div', { class: 'pet-sheet' },
+                h('span', { class: 'pet-ic big', style: { color: P.color }, html: iconSVG(P.icon) }),
+                h('div', { class: 'grow' },
+                    h('div', { class: 'pet-name' }, pet.name, e ? h('span', { class: 'pet-ench' }, ' +' + e) : null),
+                    h('div', { class: 'muted small' }, `${P.name} · livello ${pet.lv}/${PET_MAX_LV} · ${P.role}`),
+                    h('div', { class: 'pet-row' }, h('span', {}, 'Forze'), bar(hp, max, tired ? 'hp dead' : 'hp'), h('b', {}, `${Math.round(hp)}/${max}`)),
+                    pet.lv < PET_MAX_LV ? h('div', { class: 'pet-row' }, h('span', {}, 'Esperienza'), bar(pet.xp || 0, need, 'xp'), h('b', {}, `${pet.xp || 0}/${need}`)) : null)),
+            h('p', { class: 'pet-desc' }, P.desc),
+            h('ul', { class: 'rod-stats' }, bonus, D?.assist ? h('li', {}, `In duello: ${D.assist.name}`, ' ', h('b', {}, `${D.assist.dmg} danni ogni ${D.assist.every.toFixed(1)} s`)) : null),
+            h('div', { class: 'pet-actions' },
+                h('div', { class: 'pet-act' }, h('b', {}, 'Curalo'), h('span', { class: 'muted small' }, 'Gli ridà tutte le forze.'),
+                    hc ? [this.costChips(hc), btn('Cura', async () => { const r = await this.act('pet:heal', {}, `${pet.name} è di nuovo in forze`); if (r.ok) app.audio.play('saved'); this.render(); }, { cls: 'btn-sm btn-primary', disabled: !this.canPay(hc) })] : h('span', { class: 'muted small' }, 'Sta benissimo')),
+                h('div', { class: 'pet-act' }, h('b', {}, 'Addestralo'), h('span', { class: 'muted small' }, `Esperienza in più (ancora ${me.petTrain ?? TRAIN.daily} volte oggi).`),
+                    pet.lv < PET_MAX_LV ? [this.costChips({ coins: tc }), btn('Addestra', async () => {
+                        const r = await this.act('pet:train', {});
+                        if (r.ok) { app.audio.play(r.up ? 'special' : 'ui'); toast(r.up ? `${pet.name} sale al livello ${r.lv}!` : `+${r.xp} esperienza per ${pet.name}`, { kind: 'ok', icon: P.icon }); }
+                        this.render();
+                    }, { cls: 'btn-sm btn-primary', disabled: tired || !(me.petTrain ?? 1) || (me.coins || 0) < tc })] : h('span', { class: 'muted small' }, 'Ha imparato tutto')),
+                h('div', { class: 'pet-act' }, h('b', {}, 'Incantalo'), h('span', { class: 'muted small' }, e < PET_MAX_ENCH ? `+10% di potenza e più forze. Dal livello ${eLv} del pet.` : 'Più di così brillerebbe al buio.'),
+                    e < PET_MAX_ENCH ? [this.costChips(eCost), btn(`Incanta a +${e + 1}`, async () => {
+                        const r = await this.act('pet:enchant', {}, `${pet.name} ora è +${e + 1}`);
+                        if (r.ok) app.audio.play('special');
+                        this.render();
+                    }, { cls: 'btn-sm btn-primary', disabled: pet.lv < eLv || !this.canPay(eCost) })] : null)),
+            h('div', { class: 'btn-row', style: { marginTop: '12px' } },
+                btn('Cambiagli nome', async () => { const n = prompt('Il nuovo nome', pet.name); if (n && n.trim()) { await this.act('pet:rename', { name: n.trim() }); this.render(); } }, { cls: 'btn-sm', ic: 'quill' }),
+                btn('Lascialo alla Stalla', async () => {
+                    if (!confirm(`Lasciare ${pet.name} alla Stalla? Perderai il suo livello e i suoi incanti, e potrai sceglierne un altro.`)) return;
+                    const r = await this.act('pet:release', {}, `${pet.name} resta con Sàlvia. Ti guarda andare via.`);
+                    this.render();
+                }, { cls: 'btn-sm btn-danger' }),
+                this.purse())));
     }
 
     // --- MASTRO BRACE AGGIUSTA LE ARMI ---

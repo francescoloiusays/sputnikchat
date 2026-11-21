@@ -9,6 +9,9 @@ import { FISH, FISH_RARITY, FISH_SPOT, FISH_DAILY, DIARY, MATS, SEALS } from './
 import { h, $, toast, IS_MOBILE } from './util.js';
 import { iconSVG, drawIcon } from './icons.js';
 import { rodOf } from './shared/mare.js';
+import { petFish } from './shared/pet.js';
+// la canna e il pet insieme: i bonus si sommano
+const gear = (me) => { const R = rodOf(me), F = petFish(me?.pet); return { ...R, zone: R.zone + (F.zone || 0), fill: R.fill + (F.fill || 0), window: R.window + (F.window || 0) }; };
 
 const BITE_WINDOW = IS_MOBILE ? 1.3 : 1.0;   // secondi per ferrare dopo l'abboccata
 
@@ -181,7 +184,7 @@ export class Fishing {
         this.app.audio.play('reel');
         this.bobGlow.material.opacity = 0;
         const d = this.diff;
-        const R = rodOf(this.app.me);
+        const R = gear(this.app.me);
         Object.assign(this, { zs: Math.min(0.55, (0.3 - d * 0.08) * (1 + R.zone)), zy: 0.3, zv: 0, fy: 0.45, fv: 0, ty: 0.5, tT: 0, prog: 0.3, reelT: 0 });
         this.setHint('Ha abboccato!', IS_MOBILE ? 'Tieni premuto sulla barra per alzare la zona chiara' : 'Tieni premuto Spazio o il tasto del mouse per alzare la zona chiara');
     }
@@ -206,6 +209,7 @@ export class Fishing {
     }
     showCatch(r) {
         const app = this.app, f = FISH[r.fish], R = FISH_RARITY[f.rar];
+        app.petNews?.(r.pet);
         app.audio.play('catch');
         app.audio.play(f.rar === 'epi' || r.page != null || r.seal ? 'special' : 'coin', { delay: 0.35 });
         const loot = [];
@@ -263,7 +267,7 @@ export class Fishing {
             this.biteT += dt;
             this.bob.position.y = -0.09 + Math.sin(t * 22) * 0.03;
             this.bobGlow.material.opacity = 0.9;
-            if (this.biteT > BITE_WINDOW + rodOf(app.me).window) { this.bobGlow.material.opacity = 0; this.lose('Ha mangiato l\'esca ed è scappato', 'escape'); }
+            if (this.biteT > BITE_WINDOW + gear(app.me).window) { this.bobGlow.material.opacity = 0; this.lose('Ha mangiato l\'esca ed è scappato', 'escape'); }
         }
         if (this.state === 'reel') this.reel(dt, t);
         // lenza dalla punta della canna al galleggiante
@@ -313,7 +317,7 @@ export class Fishing {
         this.fy = Math.max(0.03, Math.min(0.97, this.fy + this.fv * dt + Math.sin(t * 9) * 0.0015 * (1 + d * 3)));
         const inside = this.fy >= this.zy && this.fy <= this.zy + this.zs;
         this.inside = inside;
-        const R = rodOf(this.app.me);
+        const R = gear(this.app.me);
         this.prog += inside ? 0.22 * (1 + R.fill) * dt : -(0.12 + d * 0.15) / (1 + R.fill) * dt;
         // il galleggiante si agita
         this.bob.position.y = -0.06 + Math.sin(t * 14) * 0.04;

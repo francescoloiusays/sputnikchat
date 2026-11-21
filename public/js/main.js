@@ -22,6 +22,8 @@ import { Net, SOCKET_URL, IS_MOBILE, store, $, h, toast, fmt } from './util.js';
 import { installTheme, icon, iconSVG, drawIcon } from './icons.js';
 import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, sanitizeCard, sanitizeAppearance, STARTER_WEAPON, levelProgress, titleFor, talentPoints, TALENT_IDS, plusOf, MATS, SEALS, gradeOf } from './shared/catalog.js';
 import { Fishing } from './fishing.js';
+import { PetFollower } from './pets.js';
+import { PETS, petDuel } from './shared/pet.js';
 import { Npcs } from './npcs.js';
 import { Canto } from './canto.js';
 import { Onda } from './onda.js';
@@ -320,6 +322,7 @@ class Game {
         this.cam = { yaw: 0, pitch: 0.28, dist: 9, wantDist: innerWidth < innerHeight ? 6.2 : 4.6, first: false };
         this.buildMyCharacter();
         this.npcs = new Npcs(this);
+        this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
         this.storySpots = buildStorySpots(this);
         // luce di riempimento: il personaggio non resta mai in controluce
         this.fillLight = new THREE.PointLight('#d8c4ff', 9, 10, 1.4);
@@ -745,7 +748,7 @@ class Game {
         N.on('duel:start', (info) => this.enterDuel(info, 'fighter', info.side));
         N.on('duel:begin', ({ id, gear }) => { if (this.duel?.info.id === id) { this.duel.info.phase = 'fight'; this.duel.onBegin(gear); } });
         N.on('duel:state', (s) => this.duel?.pushSnap(s));
-        N.on('duel:end', (r) => { if (this.duel?.info.id === r.id) { this.duel.showResult(r); this.wearNews(r.wear?.[this.duel.side], r.rent?.[this.duel.side]); } });
+        N.on('duel:end', (r) => { if (this.duel?.info.id === r.id) { this.duel.showResult(r); this.wearNews(r.wear?.[this.duel.side], r.rent?.[this.duel.side]); this.petNews(r.pet?.[this.duel.side]); } });
         N.on('duel:cancel', (c) => { if (this.duel?.info.id === c.id) { toast(`Duello annullato: ${c.reason}`, { kind: 'bad' }); this.exitDuel(); } });
         N.on('bet:result', (b) => {
             if (b.won) { toast(h('div', {}, h('b', {}, 'Scommessa vinta!'), ` Avevi puntato ${b.amount} su ${b.name}: il banco te ne paga ${b.payout}.`), { kind: 'coin', duration: 8000 }); this.audio.play('coin'); }
@@ -781,6 +784,13 @@ class Game {
         if (w.broken) return { reserve, dur: null, weapon: reserve };
         return { reserve, dur: weaponWearLeft(w) };
     }
+    petNews(r) {
+        const pet = this.me?.pet;
+        if (!r || !pet) return;
+        const P = PETS[pet.sp];
+        if (r.up) toast(h('div', {}, h('b', {}, `${pet.name} sale al livello ${r.lv}!`), h('div', {}, 'Più forte, e si stanca un po\' meno.')), { kind: 'coin', icon: P.icon, duration: 7000 });
+        if (r.tired) toast(h('div', {}, h('b', {}, `${pet.name} è sfinito`), h('div', {}, 'Non ti aiuterà più finché Sàlvia non lo cura, alla Stalla delle Nebbie.')), { kind: 'bad', icon: P.icon, duration: 8000 });
+    }
     wearNews(w, rent) {
         if (w?.broken) toast(h('div', {}, h('b', {}, 'La tua arma si è spezzata'), h('div', {}, 'Portala da Mastro Brace, alla Forgia: finché non è aggiustata combatterai con la riserva.')), { kind: 'bad', icon: 'anvil', duration: 9000 });
         else if (w && w.left < 40) toast(`La tua arma è consumata: ancora ${w.left} colpi, poi si spezza. Mastro Brace la aggiusta.`, { icon: 'anvil', duration: 7000 });
@@ -788,7 +798,7 @@ class Game {
     }
     myFighterInfo() {
         const W = this.weaponLoad(), look = W.weapon ? { ...this.look(), weapon: W.weapon } : this.look();
-        return { dur: W.dur, reserve: W.reserve, ...this._fighterInfo(look) };
+        return { dur: W.dur, reserve: W.reserve, pet: this.me?.offline ? null : petDuel(this.me?.pet), petSp: this.me?.pet?.sp, ...this._fighterInfo(look) };
     }
     _fighterInfo(look) {
         return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look, element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), gearPlus: this.gearPlus(), seals: this.me.sealsOn || [], grade: this.me.grade || 0, cardImage: this.local.cardImage };
@@ -1036,7 +1046,7 @@ class Game {
     async practiceDone(won) {
         if (!this.net.connected || !this.helloDone) return;
         const F = this.duel?.sim?.f?.[this.duel.side || 'a'];
-        if (F?.dur != null && F.used > 0) this.net.request('weapon:wear', { used: F.used, broken: F.broken }).then(r => r.ok && this.wearNews(r.wear));
+        if (F && (F.used > 0 || this.me?.pet)) this.net.request('weapon:wear', { used: F.dur != null ? F.used : 0, broken: F.dur != null && F.broken, fought: true, won: !!won }).then(r => { if (r.ok) { this.wearNews(r.wear); this.petNews(r.pet); } });
         const kind = this.localKind || 'practice';
         if (kind === 'skeleton') return this.foeDone('graves:skeleton', { won });
         if (kind === 'veglia' || kind === 'king') return this.foeDone('veglia:end', { won });
@@ -1495,6 +1505,7 @@ class Game {
         else if (this.mode === 'fish') this.fishing.update(dt);
         else if (this.mode === 'canto') { const ch = this.myChar; ch.root.position.copy(this.player.pos); ch.state = 'idle'; ch.speed = 0; this.updateFill(this.player); }
         this.npcs?.update(dt, this.player.pos, this.camera.position);
+        this.petF?.update(dt);
         this.storySpots?.update(dt, this.world.t);
         this.onda?.update();
         this.updateCamera(dt);

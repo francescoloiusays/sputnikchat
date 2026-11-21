@@ -60,11 +60,19 @@ export function moveDuration(f, mv) {
 // setup: { id, name, element, weapon, level, talents, gear } (gear = id dei capi indossati)
 function makeFighter(setup, side) {
     const st = computeStats(setup);
+    // lo SputnikPet (shared/pet.js, petDuel): già pesato su livello e incantamento
+    const pm = setup.pet?.mods || {};
+    if (pm.atk) st.atk *= 1 + pm.atk;
+    if (pm.def) st.def = Math.min(0.75, st.def + pm.def);
+    if (pm.hp) st.hpMax = Math.round(st.hpMax * (1 + pm.hp));
+    if (pm.meter) st.meterGain *= 1 + pm.meter;
+    if (pm.spd) st.spd *= 1 + pm.spd;
     if (setup.boss) { st.hpMax = Math.round(st.hpMax * (setup.boss.hp || 1)); st.atk *= setup.boss.atk || 1; }
     // l'arma di riserva: se quella in mano si rompe, si continua con questa (stessa carta, stessi talenti)
     const rv = setup.dur != null ? computeStats({ ...setup, weapon: setup.reserve || RESERVE_WEAPON }) : null;
     return {
         dur: setup.dur ?? null, used: 0, broken: false,
+        pet: setup.pet?.assist ? { ...setup.pet.assist, name: setup.pet.name, sp: setup.pet.sp, t: setup.pet.assist.every } : null,
         rsv: rv && { atk: rv.atk, reach: rv.reach, aspd: rv.aspd, kbm: rv.kbm, weapon: setup.reserve || RESERVE_WEAPON },
         id: setup.id, name: setup.name, side, element: st.element, special: st.special,
         atk: st.atk, def: st.def, spd: st.spd, weight: st.weight,
@@ -180,6 +188,7 @@ export function stepDuel(S, inputs, dt = FIGHT.DT) {
         updateAttack(S, A, B, dt, ev); updateAttack(S, B, A, dt, ev);
         updateProjectiles(S, dt, ev);
         status(S, A, dt, ev); status(S, B, dt, ev);
+        petAssist(S, A, B, dt, ev); petAssist(S, B, A, dt, ev);
         checkRoundEnd(S, ev);
         return ev;
     }
@@ -303,6 +312,19 @@ function control(S, f, o, inp, dt, ev) {
     const maxV = 7.2 * f.spd * slow;
     f.vx = approach(f.vx, dir * maxV, (f.grounded ? 60 : 32) * dt);
     f.st = f.grounded ? (dir ? 'run' : 'idle') : 'air';
+}
+
+// lo SputnikPet ogni tanto attacca da solo: un colpo piccolo che non si para
+function petAssist(S, f, o, dt, ev) {
+    const P = f.pet;
+    if (!P || f.st === 'ko') return;
+    P.t -= dt;
+    if (P.t > 0) return;
+    P.t = P.every;
+    if (o.st === 'ko' || o.inv > 0) { P.t = 0.5; return; }
+    ev.push({ t: 'pet', s: f.side, k: P.kind, sp: P.sp, name: P.name, x: o.x, y: o.y + 1.5 });
+    applyHit(S, f, o, { dmg: P.dmg, kb: P.kb || 1.5, grow: 1, stun: P.stun || 0.15, meter: 3, dir: o.x >= f.x ? 1 : -1, unblockable: true, src: 'pet' }, ev);
+    if (P.burn) o.burn = Math.max(o.burn, P.burn);
 }
 
 function superClash(S, f, o, ev) {

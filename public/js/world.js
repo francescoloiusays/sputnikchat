@@ -13,7 +13,7 @@ import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.j
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
 import { addSkyExtras, addSnowCover, SNOW_COVER } from './sky.js';
 import { rivaHeight, rivaShore, nearRiva } from './shared/riva.js';
-import { buildBazar, buildBarca } from './bancarelle.js';
+import { buildBazar, buildBarca, buildStalla } from './bancarelle.js';
 import { Relief, tileHeights, roughRock } from './realism.js';
 import { Grass } from './grass.js';
 import { buildWeapon } from './character.js';
@@ -1044,6 +1044,7 @@ export class World {
         // Bazar del Ratto e Barca Rovesciata della Retaia (bancarelle.js)
         buildBazar(this);
         buildBarca(this);
+        buildStalla(this);
         // lanterne lungo il sentiero
         const P = WORLD.PATH;
         for (let i = 0; i < P.length - 1; i++) {
@@ -1565,6 +1566,7 @@ export class World {
             { x: WORLD.SHOPS.sartoria.x, z: WORLD.SHOPS.sartoria.z, ic: 'needle', label: 'Sartoria' },
             { x: WORLD.SHOPS.bazar.x, z: WORLD.SHOPS.bazar.z, ic: 'scales', label: 'Bazar' },
             { x: -13, z: 89, ic: 'rod', label: 'Barca Rovesciata' },
+            { x: 31, z: 28, ic: 'raven', label: 'Stalla delle Nebbie' },
             { x: WORLD.PLAZA.x, z: WORLD.PLAZA.z, ic: 'trophy', label: 'Albo dei Campioni' },
             { x: WORLD.ARENA.x, z: WORLD.ARENA.z, ic: 'swords', label: 'Arena' },
             { x: WORLD.CEMETERY.x, z: WORLD.CEMETERY.z, ic: 'skull', label: 'Cimitero' },

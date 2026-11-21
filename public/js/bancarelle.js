@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WORLD } from './world.js';
 import { BARCA, RODS } from './shared/mare.js';
+import { STALLA } from './shared/pet.js';
 
 function tex(w, h, draw) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -368,5 +369,89 @@ export function buildBarca(W) {
         put(new THREE.ConeGeometry(0.07, 0.1, 4), fishM, -1.6 + i * 0.35, H0 + 0.48, RAD * 0.7, [Math.PI, 0, 0]);
     }
     put(new THREE.CylinderGeometry(0.01, 0.01, 1.4, 4), rope, -1.25, H0 + 0.98, RAD * 0.7, [0, 0, Math.PI / 2]).castShadow = false;
+    return g;
+}
+
+// =====================================================================
+//  LA STALLA DELLE NEBBIE (Sàlvia, il Medico delle Bestie)
+//  Un recinto di legno con il cancello verso la piazza, una casupola col
+//  tetto di paglia, una cuccia, un trespolo, l'abbeveratoio, il fieno e
+//  le erbe appese ad asciugare. Qui si adottano, si curano e si addestrano
+//  gli SputnikPet.
+// =====================================================================
+export function buildStalla(W) {
+    const y0 = W.terrainAt(STALLA.x, STALLA.z);
+    const { g, L, put, box, circ, lamp } = kit(W, STALLA.x, y0, STALLA.z, STALLA.ry);
+    const wood = W.matWood;
+    const dark = new THREE.MeshStandardMaterial({ color: '#2e2218', roughness: 0.95 });
+    const thatch = new THREE.MeshStandardMaterial({ color: '#7a6a42', roughness: 1, flatShading: true });
+    const hay = new THREE.MeshStandardMaterial({ color: '#c8b060', roughness: 1 });
+    const HX = 3.6, HZ = 2.8;   // mezzo recinto
+    // --- il recinto: pali e due traverse, con il cancello aperto davanti (+z) ---
+    const post = new THREE.CylinderGeometry(0.07, 0.08, 1.2, 7), rail = new THREE.BoxGeometry(1, 0.07, 0.05);
+    const fence = (x0, z0, x1, z1) => {
+        const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 1.4)), ang = Math.atan2(z1 - z0, x1 - x0);
+        for (let i = 0; i <= n; i++) put(post, wood, x0 + (x1 - x0) * i / n, 0.6, z0 + (z1 - z0) * i / n);
+        for (const ry of [0.45, 0.95]) { const r = put(rail, wood, (x0 + x1) / 2, ry, (z0 + z1) / 2, [0, -ang, 0]); r.scale.x = len; }
+        box((x0 + x1) / 2, (z0 + z1) / 2, Math.abs(x1 - x0) + 0.15, Math.abs(z1 - z0) + 0.15, -1, 1.1);
+    };
+    fence(-HX, -HZ, HX, -HZ); fence(-HX, -HZ, -HX, HZ); fence(HX, -HZ, HX, HZ);
+    fence(-HX, HZ, -1.1, HZ); fence(1.1, HZ, HX, HZ);
+    // il cancello, aperto
+    const gate = new THREE.Group(); gate.position.set(1.1, 0, HZ); gate.rotation.y = -1.2; g.add(gate);
+    for (const yy of [0.35, 0.85]) put(new THREE.BoxGeometry(1.0, 0.08, 0.05), wood, -0.5, yy, 0, null, gate);
+    put(new THREE.BoxGeometry(1.1, 0.06, 0.05), wood, -0.5, 0.6, 0, [0, 0, 0.45], gate);
+
+    // --- la casupola in fondo, col tetto di paglia ---
+    const hutZ = -HZ + 1.3;
+    put(new THREE.BoxGeometry(3.0, 1.9, 1.8), wood, -1.6, 0.95, hutZ);
+    put(new THREE.BoxGeometry(0.8, 1.3, 0.05), dark, -1.6, 0.65, hutZ + 0.92);       // la porta
+    const roof = put(new THREE.ConeGeometry(2.3, 1.2, 4), thatch, -1.6, 2.45, hutZ, [0, Math.PI / 4, 0]); roof.scale.set(1, 1, 0.72);
+    put(new THREE.PlaneGeometry(0.5, 0.4), new THREE.MeshStandardMaterial({ color: '#ffd890', emissive: '#ffb347', emissiveIntensity: 1.4 }), -0.6, 1.2, hutZ + 0.91).castShadow = false;
+    box(-1.6, hutZ, 3.1, 1.9, -1, 2.6);
+    // le erbe di Sàlvia, appese ad asciugare sotto la gronda
+    const herbs = ['#5a7a3a', '#8a6aa8', '#c8a040', '#4a6a5a'];
+    for (let i = 0; i < 6; i++) {
+        const b = put(new THREE.ConeGeometry(0.07, 0.3, 6), new THREE.MeshStandardMaterial({ color: herbs[i % 4], roughness: 1 }), -2.8 + i * 0.45, 1.7, hutZ + 1.0, [Math.PI, 0, 0]);
+        b.castShadow = false;
+    }
+    put(new THREE.CylinderGeometry(0.015, 0.015, 2.8, 4), dark, -1.6, 1.88, hutZ + 1.0, [0, 0, Math.PI / 2]).castShadow = false;
+    lamp(-0.6, 1.25, hutZ + 1.3, '#ffb347', 10, 8);
+
+    // --- la cuccia del cane alato ---
+    put(new THREE.BoxGeometry(0.9, 0.7, 1.0), wood, 2.4, 0.35, -1.6);
+    const kr = put(new THREE.ConeGeometry(0.75, 0.5, 4), dark, 2.4, 0.95, -1.6, [0, Math.PI / 4, 0]); kr.scale.set(1, 1, 0.85);
+    put(new THREE.CircleGeometry(0.22, 12, 0, Math.PI), dark, 2.4, 0.15, -1.09).castShadow = false;
+    box(2.4, -1.6, 1.0, 1.1, -1, 1.1);
+    // il trespolo del corvo
+    put(new THREE.CylinderGeometry(0.04, 0.05, 1.7, 6), wood, 2.6, 0.85, 1.4);
+    put(new THREE.CylinderGeometry(0.025, 0.025, 0.7, 6), wood, 2.6, 1.6, 1.4, [0, 0, Math.PI / 2]);
+    circ(2.6, 1.4, 0.15, -1, 1.7);
+    // l'abbeveratoio, con l'acqua
+    put(new THREE.BoxGeometry(1.4, 0.4, 0.5), wood, 0.6, 0.2, -2.1);
+    put(new THREE.PlaneGeometry(1.25, 0.38), new THREE.MeshStandardMaterial({ color: '#2a4a5a', metalness: 0.4, roughness: 0.1 }), 0.6, 0.37, -2.1, [-Math.PI / 2, 0, 0]).castShadow = false;
+    box(0.6, -2.1, 1.5, 0.6, -1, 0.45);
+    // balle di fieno
+    for (const [x, z, r] of [[-2.9, 1.6, 0], [-2.2, 1.9, 0.4], [-2.6, 1.75, 0.2]]) {
+        const b = put(new THREE.CylinderGeometry(0.35, 0.35, 0.6, 14), hay, x, x === -2.6 ? 0.95 : 0.35, z, [0, r, Math.PI / 2]);
+        b.scale.y = 1;
+    }
+    box(-2.6, 1.75, 1.4, 0.9, -1, 0.7);
+    // un graffiatoio per il gatto, e il secchio del granchio
+    put(new THREE.CylinderGeometry(0.08, 0.08, 0.9, 8), new THREE.MeshStandardMaterial({ color: '#a08458', roughness: 1 }), 1.6, 0.45, 0.2);
+    put(new THREE.CylinderGeometry(0.25, 0.25, 0.04, 10), wood, 1.6, 0.92, 0.2);
+    put(new THREE.CylinderGeometry(0.2, 0.16, 0.3, 12, 1, true), new THREE.MeshStandardMaterial({ color: '#8a8a90', metalness: 0.6, roughness: 0.4, side: THREE.DoubleSide }), -0.3, 0.15, 1.9);
+    // l'insegna sul cancello
+    const signT = tex(512, 128, (c, w, h) => {
+        c.fillStyle = '#2e3a24'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = '#c8b060'; c.lineWidth = 6; c.strokeRect(6, 6, w - 12, h - 12);
+        c.fillStyle = '#e8dcb0'; c.font = 'bold 40px Cinzel, Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('LA STALLA DELLE NEBBIE', w / 2, h / 2 - 12);
+        c.font = 'italic 26px Georgia, serif'; c.fillText('bestie curate, nomi custoditi', w / 2, h / 2 + 30);
+    });
+    for (const s of [-1, 1]) put(new THREE.CylinderGeometry(0.08, 0.09, 2.3, 7), wood, s * 1.2, 1.15, HZ);
+    put(new THREE.BoxGeometry(2.7, 0.55, 0.06), dark, 0, 2.05, HZ);
+    put(new THREE.PlaneGeometry(2.6, 0.5), new THREE.MeshStandardMaterial({ map: signT, roughness: 0.8 }), 0, 2.05, HZ + 0.035);
+    circ(-1.2, HZ, 0.12, -1, 2.3); circ(1.2, HZ, 0.12, -1, 2.3);
     return g;
 }

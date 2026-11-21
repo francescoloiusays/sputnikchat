@@ -27,6 +27,7 @@ import { INSULTS, TOLL_START, TOLL_LINES, NPCS, ONDA_Q, ONDA_PLOT, TABLETS, MISS
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
 import { STORY, STORY_END, STORY_SPOTS, WAYS, newStory, chapterReady, nomeVero } from './public/js/shared/story.js';
 import { L2_CHAPTERS, L2_SPOTS, newL2, fixL2, l2Step } from './public/js/shared/libro2.js';
+import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENCH_LV, TRAIN, petXpToNext, petMaxHealth, petWear, petDuel, petFish, petTired, healCost, newPet } from './public/js/shared/pet.js';
 import { RESERVE_WEAPON, RENTALS, weaponDurability, weaponWearLeft, repairCost } from './public/js/shared/catalog.js';
 import { RODS, rodOf, CORAL_CHANCE, TRADES, tradesOfDay, itemOfDay, tonicXp, itemTradeValue, TONIC_DAILY, ITEM_TRADES_DAILY } from './public/js/shared/mare.js';
 
@@ -333,7 +334,7 @@ function privateView(p) {
         inventory: p.inventory, equipment: p.equipment,
         mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
-        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null,
+        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
         episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
@@ -511,7 +512,7 @@ function duelPublic(d, withImages) {
 }
 function fighterInfo(S) {
     const p = S.p;
-    return { id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, rating: p.rating, level: levelOf(p), grade: p.grade || 0, cardImage: p.cardImage };
+    return { id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, rating: p.rating, level: levelOf(p), grade: p.grade || 0, cardImage: p.cardImage, petSp: p.pet && !petTired(p.pet) ? p.pet.sp : null };
 }
 // l'arma di riserva: quella scelta nello spogliatoio (se non è rotta), altrimenti il pugnale
 const reserveOf = p => { const r = p.inventory.find(i => i.uid === p.reserve && i.kind === 'weapon' && !i.broken && i.uid !== p.equipment?.weapon); return r?.spec || RESERVE_WEAPON; };
@@ -525,7 +526,19 @@ function duelWeapon(p, rent) {
 }
 function fighterSetup(p, rent) {
     const W = duelWeapon(p, rent);
-    return { id: p.id, name: p.name, element: p.card.element, weapon: W.spec, dur: W.dur, reserve: reserveOf(p), level: levelOf(p), talents: p.talents, gear: gearOf(p), gearPlus: gearPlusOf(p), seals: p.sealsOn };
+    return { id: p.id, name: p.name, element: p.card.element, weapon: W.spec, dur: W.dur, reserve: reserveOf(p), pet: petDuel(p.pet), level: levelOf(p), talents: p.talents, gear: gearOf(p), gearPlus: gearPlusOf(p), seals: p.sealsOn };
+}
+// lo SputnikPet cresce giocando e si stanca: forze in meno, esperienza in più
+function petGain(p, xp, what) {
+    const P = p.pet;
+    if (!P || petTired(P)) return null;
+    P.health = Math.max(0, (P.health ?? petMaxHealth(P)) - petWear(P, what));
+    let up = 0;
+    if (P.lv < PET_MAX_LV) {
+        P.xp = (P.xp || 0) + xp;
+        while (P.lv < PET_MAX_LV && P.xp >= petXpToNext(P.lv)) { P.xp -= petXpToNext(P.lv); P.lv++; up++; P.health = Math.min(petMaxHealth(P), P.health + 6); }
+    }
+    return { xp, up, lv: P.lv, health: P.health, tired: petTired(P) };
 }
 // dopo un duello: l'arma si consuma dei colpi messi a segno, e se è arrivata a zero si rompe
 function wearWeapon(p, item, used, broken) {
@@ -650,6 +663,9 @@ function endDuel(d, winner, reason) {
         const item = P[s].inventory.find(i => i.uid === d.weaponItem?.[s]);
         result.wear[s] = wearWeapon(P[s], item, d.sim.f[s].used, d.sim.f[s].broken);
     }
+    // lo SputnikPet ha combattuto anche lui
+    result.pet = { a: null, b: null };
+    if (fought) for (const s of ['a', 'b']) result.pet[s] = petGain(P[s], winner === s ? 30 : 15, 'duel');
     // noleggi dello spogliatoio: chi vince si riprende il suo e incassa quello dell'altro; pareggio = rimborso a tutti e due
     result.rent = { a: 0, b: 0 };
     if (d.rent.a || d.rent.b) {
@@ -1309,7 +1325,7 @@ io.on('connection', (socket) => {
         if (Math.hypot(me.pos[0] - FISH_SPOT.x, me.pos[2] - FISH_SPOT.z) > FISH_SPOT.r + 1.5) return fail(reply, 'Si pesca in fondo al molo');
         const now = Date.now();
         if (me.fishing && now - me.fishing.at < 1200) return fail(reply, 'Piano, la lenza è ancora in acqua');
-        const rod = rodOf(me.p), night = isNight(), fish = rollFish(night, Math.random, rod.luck);
+        const rod = rodOf(me.p), pf = petFish(me.p.pet), night = isNight(), fish = rollFish(night, Math.random, rod.luck + (pf.luck || 0));
         me.fishing = { id: uid(), fish, at: now, bite: Math.round((1800 + Math.random() * 4200) * rod.bite) };
         reply({ ok: true, id: me.fishing.id, bite: me.fishing.bite, diff: FISH[fish].diff, move: FISH[fish].move, night, left: Math.max(0, fishDaily(me.p) - dayc(me.p).fish) });
     });
@@ -1350,6 +1366,10 @@ io.on('connection', (socket) => {
             // il Corallo Nero sale attaccato ai pesci rari (a premi pieni)
             if (full && Math.random() < (CORAL_CHANCE[f.rar] || 0)) out.loot.corallo = addMat(p, 'corallo', 1);
         }
+        // il gatto con gli stivali sa dove abboccano quelli che pagano bene
+        const pf = petFish(p.pet);
+        if (pf.coins && out.coins) { const extra = Math.round(out.coins * pf.coins); p.coins += extra; out.coins += extra; }
+        out.pet = petGain(p, 4, 'fish');
         progress(p, 'fish', 1, { id: F.fish, rar: f.rar });
         if (FISH_IDS.filter(id => FISH[id].rar !== 'special').every(id => p.fishLog[id]?.n)) award(p, 'pescatore');
         save(p); sendMe(me);
@@ -1409,8 +1429,9 @@ io.on('connection', (socket) => {
         me.lastWear = now;
         const item = p.inventory.find(i => i.uid === p.equipment?.weapon && i.kind === 'weapon');
         const out = wearWeapon(p, item, int(d.used, 0, 60), !!d.broken);
+        const pet = d.fought ? petGain(p, d.won ? 12 : 6, 'duel') : null;
         save(p); sendMe(me);
-        reply({ ok: true, wear: out });
+        reply({ ok: true, wear: out, pet });
     });
     // Mastro Brace aggiusta le armi: monete in proporzione all'usura, e qualche frammento per quelle di livello alto
     on('forge:repair', (d, reply) => {
@@ -1424,6 +1445,73 @@ io.on('connection', (socket) => {
         it.wear = 0; delete it.broken;
         save(p); sendMe(me);
         reply({ ok: true, cost });
+    });
+
+    // --- LA STALLA DELLE NEBBIE: Sàlvia, il Medico delle Bestie ---
+    const atVet = () => nearNpcId('salvia', 7);
+    on('pet:adopt', (d, reply) => {
+        const p = me.p, sp = String(d.sp);
+        if (!atVet()) return fail(reply, 'Sàlvia è alla Stalla delle Nebbie');
+        if (levelOf(p) < PET_LEVEL) return fail(reply, `Un pet si prende dal livello ${PET_LEVEL}`);
+        if (p.pet) return fail(reply, 'Hai già un compagno: uno solo per viandante');
+        if (!PETS[sp]) return fail(reply, 'Non conosco questa bestia');
+        if (p.coins < PET_ADOPT) return fail(reply, `Servono ${PET_ADOPT} monete per il suo mantenimento`);
+        p.coins -= PET_ADOPT;
+        p.pet = newPet(sp, cleanText(String(d.name || ''), 24) || PETS[sp].name);
+        save(p); sendMe(me); reply({ ok: true, pet: p.pet });
+    });
+    on('pet:rename', (d, reply) => {
+        const p = me.p, n = cleanText(String(d.name || ''), 24);
+        if (!p.pet) return fail(reply, 'Non hai un pet');
+        if (!n) return fail(reply, 'Un nome, almeno');
+        p.pet.name = n; save(p); sendMe(me); reply({ ok: true });
+    });
+    on('pet:train', (d, reply) => {
+        const p = me.p, P = p.pet, c = dayc(p);
+        if (!atVet()) return fail(reply, 'Si addestra alla Stalla delle Nebbie');
+        if (!P) return fail(reply, 'Non hai un pet');
+        if (P.lv >= PET_MAX_LV) return fail(reply, 'Più di così non impara');
+        if ((c.petTrain || 0) >= TRAIN.daily) return fail(reply, 'Per oggi è stanco di imparare: torna domani');
+        if (petTired(P)) return fail(reply, 'È sfinito: prima fallo riposare');
+        const cost = TRAIN.coins(P.lv);
+        if (p.coins < cost) return fail(reply, `Servono ${cost} monete`);
+        p.coins -= cost; c.petTrain = (c.petTrain || 0) + 1;
+        const before = P.lv, xp = TRAIN.xp(P.lv);
+        P.xp = (P.xp || 0) + xp;
+        while (P.lv < PET_MAX_LV && P.xp >= petXpToNext(P.lv)) { P.xp -= petXpToNext(P.lv); P.lv++; }
+        P.health = Math.max(0, (P.health ?? petMaxHealth(P)) - 4);
+        save(p); sendMe(me); reply({ ok: true, xp, up: P.lv - before, lv: P.lv });
+    });
+    on('pet:enchant', (d, reply) => {
+        const p = me.p, P = p.pet;
+        if (!atVet()) return fail(reply, 'Si incanta alla Stalla delle Nebbie');
+        if (!P) return fail(reply, 'Non hai un pet');
+        const e = P.ench || 0;
+        if (e >= PET_MAX_ENCH) return fail(reply, 'Più incantato di così brillerebbe al buio');
+        if (P.lv < PET_ENCH_LV[e]) return fail(reply, `Il prossimo incanto regge dal livello ${PET_ENCH_LV[e]} del pet`);
+        const cost = PET_ENCH[e];
+        if (costMissing(p, cost).length) return fail(reply, 'Ti manca ancora qualcosa per l\'incanto');
+        payCost(p, cost);
+        P.ench = e + 1; P.health = petMaxHealth(P);
+        save(p); sendMe(me); reply({ ok: true, ench: P.ench });
+    });
+    on('pet:heal', (d, reply) => {
+        const p = me.p, P = p.pet;
+        if (!atVet()) return fail(reply, 'Si cura alla Stalla delle Nebbie');
+        if (!P) return fail(reply, 'Non hai un pet');
+        const cost = healCost(P);
+        if (!cost) return fail(reply, 'Sta benissimo');
+        if (costMissing(p, cost).length) return fail(reply, `Servono ${cost.coins} monete`);
+        payCost(p, cost);
+        P.health = petMaxHealth(P);
+        save(p); sendMe(me); reply({ ok: true, cost });
+    });
+    on('pet:release', (d, reply) => {
+        const p = me.p;
+        if (!atVet()) return fail(reply, 'Lo si saluta alla Stalla delle Nebbie');
+        if (!p.pet) return fail(reply, 'Non hai un pet');
+        const name = p.pet.name;
+        p.pet = null; save(p); sendMe(me); reply({ ok: true, name });
     });
 
     // --- LA RETAIA: la canna nuova, alla Barca Rovesciata ---
