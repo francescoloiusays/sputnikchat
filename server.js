@@ -888,6 +888,13 @@ function awardFriday() {
 setInterval(awardFriday, 10 * 60 * 1000);
 
 // profili di prima: si aggiornano all'avvio (qui sotto tutti gli aiuti sono già pronti)
+// i profili di prova creati durante i collaudi: tolti una volta per tutte (codice e nome devono coincidere)
+const PURGED = [
+    ['7Mdgnmw', 'ProvaA'], ['xP9SCA8', 'ProvaB'],                                  // collaudo dei duelli online, 21/11
+    ['DfJvsy0', 'Collaudo'], ['Lp6QmfM', 'Collaudo'], ['YQqdRjA', 'Collaudo'], ['PMi2yWk', 'Sfidante'],   // solo in locale
+];
+const purgedIds = new Set(PURGED.map(([id]) => id));
+for (const p of store.all()) if (PURGED.some(([id, name]) => p.id === id && p.name === name)) { store.del(p.token); console.log(`[pulizia] tolto il profilo di prova ${p.name} (${p.id})`); }
 for (const p of store.all()) { pidIndex.set(p.id, p.token); linkAccount(p); if (migrate(p)) store.put(p); if (p.story?.name) usedNames.add(p.story.name.toLowerCase()); }
 
 io.on('connection', (socket) => {
@@ -904,7 +911,8 @@ io.on('connection', (socket) => {
 
     on('hello', (d, reply) => {
         if (me) return reply({ ok: false, msg: 'Già connesso' });
-        const kept = d.save ? readSave(d.save, d.token ? String(d.token) : null) : null;
+        let kept = d.save ? readSave(d.save, d.token ? String(d.token) : null) : null;
+        if (kept && purgedIds.has(kept.p?.id)) kept = null;   // i profili di prova tolti non si ricostruiscono dal salvataggio del browser
         const token = d.token ? String(d.token) : kept?.p.token;
         let p = token ? store.get(token) : null;
         // il server si è dimenticato di te (riavvio) o ha una copia più vecchia: vale quella del browser
