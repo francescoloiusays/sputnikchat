@@ -90,6 +90,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 const spentPoints = t => TALENT_IDS.reduce((s, k) => s + (t?.[k] || 0), 0);
 // I profili di prima dell'esperienza: 120 a vittoria, 40 a sconfitta, mai sotto il livello che avevano.
 // I capi già comprati restano indossabili anche sotto il livello richiesto.
+// i rimborsi una tantum (vedi migrate): id, monete, solo per i profili nati prima di «before», e l'avviso
+const REFUNDS = [
+    { id: 'duelli-2026-11', coins: 200, before: Date.UTC(2026, 10, 21, 23, 59), text: 'Rimborso: +200 Sputnik Coin. Per qualche ora i duelli fra giocatori si bloccavano a fine incontro e alcuni hanno speso monete per niente. Adesso è tutto a posto: scusateci!' },
+];
 function migrate(p) {
     let changed = false;
     if (p.xp == null) {
@@ -121,6 +125,14 @@ function migrate(p) {
     if (!p.story) { p.story = newStory(true); changed = true; }
     if (!p.libro2 || p.libro2.ch == null) { p.libro2 = fixL2(p.libro2); changed = true; }
     if (p.rod == null) { p.rod = 0; changed = true; }
+    // rimborsi una tantum: ognuno arriva una volta sola, a chi c'era già quando è successo il guaio
+    for (const R of REFUNDS) {
+        if ((p.refunds ||= []).includes(R.id)) continue;
+        p.refunds.push(R.id); changed = true;
+        if ((p.createdAt || 0) > R.before) continue;
+        p.coins = (p.coins || 0) + R.coins;
+        p.refundNote = R.text;
+    }
     if (!p.rob) { p.rob = newRob(); changed = true; }
     updateSeason(p);
     return changed;
@@ -946,6 +958,8 @@ io.on('connection', (socket) => {
         sidByPid.set(p.id, socket.id);
         const seasonMsg = p.seasonMsg || null;
         if (seasonMsg) { delete p.seasonMsg; save(p); }
+        const refundNote = p.refundNote || null;
+        if (refundNote) { delete p.refundNote; save(p); setTimeout(() => notify(me, refundNote, 'coin'), 4000); }
         reply({ ok: true, token: p.token, profile: privateView(p), daily, dailyXp: daily ? XP.DAILY : 0, created, dropped, seasonMsg,
             restored, saveBad: !!d.save && !kept, save: saveTicket(p), now: Date.now() });
         joinRoom(me, 'pub');
