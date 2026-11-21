@@ -814,6 +814,7 @@ export const TITLES = {
     portinaio: { name: 'Chi Apre il Faro', how: 'Apri la porta del Faro Spento (Libro II)' },
     lucefaro: { name: 'Luce del Faro', how: 'Riaccendi il Faro Spento (fine del Libro II)' },
     approdato: { name: 'Oltre il Mare Aperto', how: 'Attraversa il mare aperto fino alla Riva di Là (Libro III)' },
+    robcena: { name: 'Seduto alla Tavola Lunga', how: 'Cena con Rob il Righello, alla fine del suo racconto' },
     nomi: { name: 'Chi Restituisce i Nomi', how: 'Riporta a Nives il suo nome (fine del Libro III)' },
     // il Romanzo della Nebbia: un titolo per capitolo
     scintilla: { name: 'Scintilla', how: 'Chiudi il capitolo della Brace' },

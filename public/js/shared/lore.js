@@ -122,6 +122,16 @@ export const NPCS = {
             'Il Traghettatore passa una volta al giorno. Non mi porta mai niente: solo gente che chiede dov\'è il ritorno.'],
         actions: [['molo', 'Torna al Molo in barca']],
     },
+    // le Terre Nuove: sul portico dello Studio del Geometra (terre.js). Rob il Righello: calvo, la barba rossa, il metro in tasca.
+    rob: {
+        name: 'Rob il Righello', where: 'Lo Studio del Geometra', x: 106.49, z: 30.8, y: 2.55, ry: -1.976, teach: null,
+        app: { species: 'umano', build: 'robusto', height: 1.04, skin: '#e0b894', eyes: 'tondi', eyeColor: '#5a7a9a', mouth: 'sorriso', hair: 'calvo', hairColor: '#b8501e', beard: 'folta', topStyle: 'giacca', top: '#4a5a6e', bottom: '#8a7a5a', shoes: '#3a2a1e' },
+        look: {},
+        lines: ['Un geometra misura tutto. Le distanze, le quote, gli angoli. Le cose importanti no: quelle si sentono.',
+            'Se ti perdi nella nebbia, cerca un caposaldo. Se non lo trovi, mettine uno tu. Poi da lì ricominci.',
+            'Il caffè nel thermos, la livella, il metro in tasca. E un panino col salame, che il cantiere mette fame.'],
+        actions: [['tavole', 'Le tavole dello studio']],
+    },
     // la Stalla delle Nebbie (shared/pet.js, STALLA): cura gli SputnikPet. Porta con sé un seme che non è nessuno dei sette.
     salvia: {
         name: 'Sàlvia', where: 'La Stalla delle Nebbie', x: 29.05, z: 28.43, ry: -2.0, teach: null,

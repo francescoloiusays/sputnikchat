@@ -314,7 +314,7 @@ export function buildBarca(W) {
     const np = netG.attributes.position;
     for (let i = 0; i < np.count; i++) { const x = np.getX(i), yy = np.getY(i); np.setZ(i, Math.sin((x / 3.4 + 0.5) * Math.PI) * 0.25 * (0.5 - yy / 1.7)); np.setY(i, yy - Math.sin((x / 3.4 + 0.5) * Math.PI) * 0.25 * (0.5 + yy / 1.7)); }
     netG.computeVertexNormals();
-    const net = put(netG, new THREE.MeshStandardMaterial({ map: netT, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 1 }), -LEN / 2 - 2.2, 1.35, 1.0, [0, Math.PI / 2 + 0.25, 0]);
+    const net = put(netG, new THREE.MeshStandardMaterial({ map: netT, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide, roughness: 1 }), -LEN / 2 - 2.2, 1.35, 1.0, [0, 0.25, 0]);
     net.castShadow = false;
     for (const s of [-1, 1]) {
         const [px, pz] = [-LEN / 2 - 2.2 + Math.sin(Math.PI / 2 + 0.25) * s * 1.75, 1.0 + Math.cos(Math.PI / 2 + 0.25) * s * 1.75];

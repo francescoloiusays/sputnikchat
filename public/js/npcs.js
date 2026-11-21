@@ -6,6 +6,7 @@
 // =====================================================================
 import { Character } from './character.js';
 import { NPCS } from './shared/lore.js';
+import { robGone } from './rob-ui.js';
 import { characterLod } from './engine/stream.js';
 
 const lerpAngle = (a, b, t) => { const d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * t; };
@@ -35,7 +36,8 @@ export class Npcs {
         for (const n of this.list) {
             const p = n.ch.root.position, d = camPos.distanceTo(p);
             // lontani: non si disegnano nemmeno (ogni personaggio sono ~30 pezzi)
-            n.ch.root.visible = d < 70;
+            // Rob se n'è andato, dopo la cena: per chi l'ha vissuta, il portico resta vuoto
+            n.ch.root.visible = d < 70 && !(n.id === 'rob' && robGone(this.app));
             characterLod(n.ch, d);
             if (d > 70) { if (n.ch.tag) n.ch.tag.visible = false; continue; }
             const dp = Math.hypot(player.x - p.x, player.z - p.z);

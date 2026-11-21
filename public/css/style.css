@@ -1116,3 +1116,11 @@ details.mix .field { margin-top: 6px; }
 .pet-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
 .pet-act { display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; border: 1px solid rgba(90, 60, 25, 0.3); border-radius: 8px; color: #3a2410; }
 .pet-act .btn { align-self: flex-start; }
+
+/* --- le tavole di Rob --- */
+.plate-wrap { display: grid; place-items: center; padding: 6px; background: #2a2218; border-radius: 4px; box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.6); }
+.plate-canvas { width: 100%; height: auto; max-height: 68vh; object-fit: contain; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55); }
+.rob-box .st-head { color: #e8a060; }
+
+/* durante la grande cena di Rob non compaiono avvisi */
+body.cena-on #toasts { display: none; }

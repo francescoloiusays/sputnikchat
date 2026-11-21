@@ -36,6 +36,8 @@ import { Prologue } from './prologue.js';
 import { SkyProbe, ContactShade } from './realism.js';
 import { buildStorySpots, storyBeat, storyInteract, storyVoice, updateThread } from './story-ui.js';
 import { L2World, l2Door } from './libro2-ui.js';
+import { RobWorld } from './rob-ui.js';
+import { Erranti } from './erranti.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
@@ -311,6 +313,7 @@ class Game {
         const W = this.world, moving = new Set([...(W.mist || []).map(m => m.s), ...(W.wisps || []).map(w => w.s), W.moonLight, W.moonLight.target]);
         this.stream.adopt(this.scene.children.filter(o => !before.has(o)), moving);
         registerRegions(this.stream, this);
+        this.robW = new RobWorld(this);   // il Righello di Rob: capisaldi, pedagno, maschera, colle, grotta
         this.l2 = new L2World(this);   // Libro II: cocci, lumi e lapide (fuori dallo streaming: sono pochi e si accendono da soli)
         this.precip = new Precipitation(this.scene, { count: this.quality === 'alta' ? 1600 : 700 });
         if (!this.me) this.me = this.offlineMe();
@@ -323,6 +326,7 @@ class Game {
         this.buildMyCharacter();
         this.npcs = new Npcs(this);
         this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
+        this.erranti = new Erranti(this);    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
         this.storySpots = buildStorySpots(this);
         // luce di riempimento: il personaggio non resta mai in controluce
         this.fillLight = new THREE.PointLight('#d8c4ff', 9, 10, 1.4);
@@ -534,6 +538,7 @@ class Game {
         const oldLook = prev ? JSON.stringify(this.look()) : '';
         this.me = p;
         this.l2?.refresh();
+        this.robW?.refresh();
         if (oldCoins != null && p.coins !== oldCoins) this.coinPop(p.coins - oldCoins);
         const newLook = JSON.stringify(this.look());
         this.local.look = this.look();
@@ -1239,6 +1244,9 @@ class Game {
         else if (it.id === 'barca') this.travel(it.dest);
         else if (it.id === 'faro_porta') this.faroDoor();
         else if (it.id === 'l2spot') this.l2?.find(it.k);
+        else if (it.id === 'robspot') this.robW?.find(it.k);
+        else if (it.id === 'errante') this.openPanel('errante', { id: it.k });
+        else if (it.id === 'cena_tavola') this.robW?.tavola();
         else if (it.id === 'faro_scendi') this.climbFaro(false);
         else if (it.id === 'siedi') this.player.sit === it.seat ? this.standUp() : this.sitDown(it.seat);
         else this.openPanel(it.id);
@@ -1505,6 +1513,7 @@ class Game {
         else if (this.mode === 'fish') this.fishing.update(dt);
         else if (this.mode === 'canto') { const ch = this.myChar; ch.root.position.copy(this.player.pos); ch.state = 'idle'; ch.speed = 0; this.updateFill(this.player); }
         this.npcs?.update(dt, this.player.pos, this.camera.position);
+        this.erranti?.update(dt, this.camera.position);
         this.petF?.update(dt);
         this.storySpots?.update(dt, this.world.t);
         this.onda?.update();
@@ -1709,6 +1718,7 @@ class Game {
     }
 
     updateCamera(dt) {
+        if (this.camOverride) return this.camOverride(dt);   // le scene guidate (la grande cena di Rob)
         const P = this.player, C = this.cam;
         const h = (this.me?.appearance?.height || 1);
         C.dist += (C.wantDist - C.dist) * Math.min(1, dt * 3);

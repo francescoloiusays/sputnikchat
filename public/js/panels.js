@@ -17,6 +17,9 @@ import { composeCard, printCard, downloadCard, CARD_W, holoTrack } from './cards
 import { icon, iconSVG, elIcon, itemIconName, rarityOf, tierOf } from './icons.js';
 import { storyBox, bookContent, storyCtx, npcLine } from './story-ui.js';
 import { l2Box } from './libro2-ui.js';
+import { robBox, PLATES, drawPlate, robGone } from './rob-ui.js';
+import { robPlates } from './shared/rob.js';
+import { erranteView } from './erranti.js';
 import { l2At, L2AT } from './shared/libro2.js';
 import { RODS, TRADES, tonicXp, itemTradeValue } from './shared/mare.js';
 import { weaponDurability, weaponWearLeft, repairCost, RESERVE_WEAPON } from './shared/catalog.js';
@@ -90,7 +93,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('open');
@@ -565,20 +568,21 @@ export class Panels {
         const go = { diario: () => { this.tabs.bag = 'diario'; this.open('inventario'); }, forgia: () => { this.tabs.forge = 'crea'; this.open('forgia'); }, castoni: () => { this.tabs.forge = 'castoni'; this.open('forgia'); },
             sartoria: () => this.open('sartoria'), bazar: () => this.open('bazar'), bacheca: () => this.open('bacheca'), altare: () => this.open('altare'),
             tombe: () => { this.tabs.tombe = 'prato'; this.open('tombe'); }, veglia: () => { this.tabs.tombe = 'veglia'; this.open('tombe'); }, pedaggio: () => this.open('pedaggio'),
-            faro: () => { this.close(); app.travel('faro'); }, relitto: () => { this.close(); app.travel('relitto'); }, baratto: () => this.open('baratto'), canna: () => this.open('canna'), pet: () => this.open('pet'), riva: () => { this.close(); app.travel('riva'); }, molo: () => { this.close(); app.travel('molo'); } };
+            faro: () => { this.close(); app.travel('faro'); }, relitto: () => { this.close(); app.travel('relitto'); }, baratto: () => this.open('baratto'), canna: () => this.open('canna'), pet: () => this.open('pet'), tavole: () => this.open('tavole'), riva: () => { this.close(); app.travel('riva'); }, molo: () => { this.close(); app.travel('molo'); } };
         const portrait = h('canvas', { class: 'npc-portrait', width: 220, height: 220 });
         requestAnimationFrame(() => { try { portrait.getContext('2d').drawImage(app.studio.portrait(N.app, N.look || {}, 220, 'bust'), 0, 0); } catch { /* ok */ } });
         this.set('talk', N.name,
             h('div', { class: 'npc-box' },
                 h('div', { class: 'npc-left' }, portrait, h('div', { class: 'muted small center' }, N.where)),
                 h('div', { class: 'npc-right' },
+                    robBox(app, id),
                     l2Box(app, id),
                     storyBox(app, id),
                     h('div', { class: 'npc-say' }, `«${line}»`),
                     arg.learned != null ? h('div', { class: 'npc-learn', html: iconSVG('quill') }, h('b', {}, 'Ti ha insegnato una risposta per il Pedaggio dello Spettro: '), `«${INSULTS[arg.learned][1]}»`) : null,
                     arg.first && arg.xp ? h('p', { class: 'muted small' }, `Prima chiacchierata: +${arg.xp} esperienza.`) : null,
                     h('div', { class: 'btn-row' },
-                        N.actions.filter(([k]) => k !== 'riva' || l2At(app.me?.libro2) >= L2AT(5, 2)).map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto', faro: 'lantern', relitto: 'wave', riva: 'lantern', molo: 'wave', baratto: 'handshake', canna: 'rod', pet: 'raven' }[k] })),
+                        N.actions.filter(([k]) => k !== 'riva' || l2At(app.me?.libro2) >= L2AT(5, 2)).map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto', faro: 'lantern', relitto: 'wave', riva: 'lantern', molo: 'wave', baratto: 'handshake', canna: 'rod', pet: 'raven', tavole: 'map' }[k] })),
                         btn('Altro?', () => { this.render(); app.npcSay(id); }, { ic: 'talk' }),
                         btn('Arrivederci', () => this.close(), { ic: 'close' })))));
     }
@@ -884,6 +888,26 @@ export class Panels {
                     `${SLOT_NAMES[itemInfo(l.entry).slot]} · venduto da ${l.sellerName}`);
             })) : h('div', { class: 'empty' }, tab === 'miei' ? 'Non hai merce sul banco.' : 'Il banco è vuoto. Sii il primo a vendere qualcosa!'),
             h('div', { class: 'btn-row end', style: { marginTop: '10px' } }, this.purse())));
+    }
+
+    // --- GLI ERRANTI ---
+    p_errante(arg) { return erranteView(this, arg?.id); }
+    matName(k) { return MATS[k]?.name || k; }
+
+    // --- LO STUDIO DEL GEOMETRA: le tavole di Rob ---
+    p_tavole(arg) {
+        const app = this.app, st = app.me?.rob, n = robPlates(st);
+        const sel = Math.min(this.tabs.tavola ?? 0, Math.max(0, n - 1));
+        const T = 'Lo Studio del Geometra';
+        if (!n) return this.set('map', T, h('div', { class: 'parchment' },
+            lore('Sul tavolo da disegno ci sono fogli bianchi, una matita temperata con il coltellino e una gomma consumata. Le tavole, per ora, non ci sono: la nebbia si è mangiata i rilievi.'),
+            h('p', { class: 'muted small' }, 'Parla con Rob, sul portico: ti aiuterà a ritrovarle.')));
+        const P = PLATES[sel], cv = drawPlate(app, P);
+        cv.className = 'plate-canvas';
+        this.set('map', T,
+            h('div', { class: 'tabs' }, PLATES.slice(0, n).map((x, i) => h('button', { class: 'tab' + (i === sel ? ' active' : ''), onclick: () => { this.tabs.tavola = i; this.render(); } }, `Tav. ${x.n}`))),
+            h('div', { class: 'plate-wrap' }, cv),
+            h('p', { class: 'muted small center' }, robGone(app) && sel === 4 ? 'L\'ultima tavola. In basso, la firma: Roberto.' : `Tav. ${P.n} · ${P.title} · firmata Roberto`));
     }
 
     // --- LA STALLA DELLE NEBBIE: Sàlvia e gli SputnikPet ---

@@ -28,6 +28,8 @@ import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/j
 import { STORY, STORY_END, STORY_SPOTS, WAYS, newStory, chapterReady, nomeVero } from './public/js/shared/story.js';
 import { L2_CHAPTERS, L2_SPOTS, newL2, fixL2, l2Step } from './public/js/shared/libro2.js';
 import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENCH_LV, TRAIN, petXpToNext, petMaxHealth, petWear, petDuel, petFish, petTired, healCost, newPet } from './public/js/shared/pet.js';
+import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
+import { ROB_CHAPTERS, ROB_SPOTS, ROB_LEVEL, newRob, robStep } from './public/js/shared/rob.js';
 import { RESERVE_WEAPON, RENTALS, weaponDurability, weaponWearLeft, repairCost } from './public/js/shared/catalog.js';
 import { RODS, rodOf, CORAL_CHANCE, TRADES, tradesOfDay, itemOfDay, tonicXp, itemTradeValue, TONIC_DAILY, ITEM_TRADES_DAILY } from './public/js/shared/mare.js';
 
@@ -118,6 +120,7 @@ function migrate(p) {
     if (!p.story) { p.story = newStory(true); changed = true; }
     if (!p.libro2 || p.libro2.ch == null) { p.libro2 = fixL2(p.libro2); changed = true; }
     if (p.rod == null) { p.rod = 0; changed = true; }
+    if (!p.rob) { p.rob = newRob(); changed = true; }
     updateSeason(p);
     return changed;
 }
@@ -334,7 +337,7 @@ function privateView(p) {
         inventory: p.inventory, equipment: p.equipment,
         mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
-        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
+        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), errToday: dayc(p).err || {}, pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
         episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
@@ -1375,6 +1378,73 @@ io.on('connection', (socket) => {
         save(p); sendMe(me);
         if (f.rar === 'epi') sysChat(me.room, `🎣 ${p.name} ha pescato un ${f.name} di ${size} cm!`);
         reply(out);
+    });
+
+    // --- GLI ERRANTI: un baratto al giorno con ciascuno, se gli sei vicino ---
+    on('errante:trade', (d, reply) => {
+        const p = me.p, id = String(d.id), E = ERRANTI[id], c = dayc(p);
+        if (!E?.trade) return fail(reply, 'Non baratta');
+        const at = erranteAt(id);
+        if (Math.hypot(me.pos[0] - at.x, me.pos[2] - at.z) > 8) return fail(reply, `${E.name} è già andato avanti`);
+        c.err ||= {};
+        if (c.err[id]) return fail(reply, 'Per oggi basta: torna domani');
+        if (costMissing(p, E.trade.give).length) return fail(reply, 'Non hai abbastanza da dargli in cambio');
+        payCost(p, E.trade.give);
+        for (const [k, n] of Object.entries(E.trade.get)) addMat(p, k, n);
+        c.err[id] = 1;
+        save(p); sendMe(me); reply({ ok: true });
+    });
+
+    // --- IL RIGHELLO DI ROB: un ramo della storia che si vive solo con lui ---
+    on('rob:act', (d, reply) => {
+        const p = me.p, st = (p.rob ||= newRob()), C = ROB_CHAPTERS[st.ch], S = robStep(st), a = String(d.a), out = {};
+        if (!S) return fail(reply, 'Il racconto di Rob è finito. Le tavole sono nello studio.');
+        if (a !== S.k) return fail(reply, 'Non adesso');
+        const need = st.ch === 0 ? ROB_LEVEL : C.lv || 1;
+        if (st.i === 0 && levelOf(p) < need) return fail(reply, `Rob ti aspetta dal livello ${need}`);
+        const nearRob = () => !!NPCS.rob && Math.hypot(me.pos[0] - NPCS.rob.x, me.pos[2] - NPCS.rob.z) <= 7;
+        const spotErr = (k) => {
+            const P = ROB_SPOTS[k];
+            if (!P) return "Non c'è niente qui";
+            if (Math.hypot(me.pos[0] - P.x, me.pos[2] - P.z) > (P.r || 3) + 1.5) return 'Troppo lontano';
+            if (P.night && !isNight() && process.env.SPUTNIK_NOTTE !== '1') return 'Rob ha detto stanotte: di giorno la nebbia sta sotto e non si vede niente';
+            return null;
+        };
+        const advance = () => {
+            st.i++; st.got = [];
+            if (st.i < C.steps.length) return;
+            out.chapter = st.ch;
+            out.xp = (out.xp || 0) + grantXp(p, C.xp);
+            p.coins += C.coins; out.coins = C.coins;
+            if (C.title_id && award(p, C.title_id)) out.title = C.title_id;
+            st.done = { ...(st.done || {}), [st.ch]: Date.now() };
+            st.ch++; st.i = 0;
+        };
+        if (a === 'talk' || a === 'answer') {
+            if (!nearRob()) return fail(reply, 'Rob è allo Studio del Geometra, nelle Terre Nuove');
+            if (a === 'answer') {
+                if (d.n == null) return fail(reply, 'Scegli una risposta');
+                (st.ans ||= [])[st.ch] = int(d.n, 0, S.a.length - 1);
+            }
+            advance();
+        } else if (a === 'find') {
+            const k = String(d.k);
+            if (!S.spots.includes(k)) return fail(reply, "Non c'è niente qui");
+            const err = spotErr(k);
+            if (err) return fail(reply, err);
+            if (st.got.includes(k)) return fail(reply, "Questo l'hai già trovato");
+            st.got.push(k); out.got = k;
+            if (S.spots.length > 1) out.xp = grantXp(p, 30);
+            if (S.spots.every(s => st.got.includes(s))) advance();
+        } else if (a === 'cena') {
+            const err = spotErr(S.spot);
+            if (err) return fail(reply, err);
+            out.cena = true;
+            advance();
+            sysChat(me.room, `🕯 Alla Tavola Lunga, nelle Terre Nuove, ${p.name} ha cenato con Rob il Righello.`);
+        } else return fail(reply, "Non c'è niente qui");
+        save(p); sendMe(me);
+        reply({ ok: true, rob: st, ...out });
     });
 
     // --- LO SPOGLIATOIO: prima del duello si sceglie con cosa combattere ---
