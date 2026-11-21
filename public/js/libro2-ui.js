@@ -255,8 +255,10 @@ export class L2World {
         const dir = new THREE.Vector2(138, -170).normalize(), D = 720;
         g.position.set(dir.x * D, -2, dir.y * D);
         g.rotation.y = Math.atan2(dir.x, dir.y);
-        const land = new THREE.MeshBasicMaterial({ color: '#1b0d29', fog: false, transparent: true, opacity: 0.78, depthWrite: false });
-        const far = new THREE.MeshBasicMaterial({ color: '#25123a', fog: false, transparent: true, opacity: 0.55, depthWrite: false });
+        // sagome piene (le trasparenti, sovrapposte, facevano bordi chiari): il colore lo dà la nebbia del momento
+        const land = new THREE.MeshBasicMaterial({ color: '#1b0d29', fog: false });
+        const far = new THREE.MeshBasicMaterial({ color: '#25123a', fog: false });
+        const DARK = new THREE.Color('#12081c');
         const r = (s) => { const x = Math.sin(s * 12.9898) * 43758.5453; return x - Math.floor(x); };
         // due file di colline, e una montagna con la cima storta
         for (let i = 0; i < 14; i++) {
@@ -282,7 +284,10 @@ export class L2World {
         W.animated.push((dt, t) => {
             const P = this.app.player?.pos;
             g.visible = !!this.horizonOn && !(P && nearRiva(P.x, P.z, 160));
-            if (g.visible) spark.material.opacity = 0.5 + 0.45 * Math.max(0, Math.sin(t * 0.8)) ** 6;
+            if (!g.visible) return;
+            spark.material.opacity = 0.5 + 0.45 * Math.max(0, Math.sin(t * 0.8)) ** 6;
+            const fog = W.scene.fog?.color;
+            if (fog) { land.color.copy(fog).lerp(DARK, 0.55); far.color.copy(fog).lerp(DARK, 0.3); }
         });
     }
     // un luogo toccato (la lanterna ha il suo giro)

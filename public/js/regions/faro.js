@@ -128,6 +128,7 @@ export function buildFaro(app) {
     put(new THREE.Mesh(geo(new THREE.CylinderGeometry(1.5, 1.5, 0.12, 8)), iron), 0, top + 2.86, 0);
     const dome = put(new THREE.Mesh(geo(new THREE.SphereGeometry(1.45, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2)), copper), 0, top + 2.9, 0);
     dome.scale.y = 0.8;
+    blockers.push(glass, dome);   // la telecamera resta fuori dalla stanza di vetro (prima ci finiva dentro)
     put(new THREE.Mesh(geo(new THREE.SphereGeometry(0.24, 12, 8)), copper), 0, top + 4.15, 0);
     put(new THREE.Mesh(geo(new THREE.CylinderGeometry(0.025, 0.025, 1.3, 5)), iron), 0, top + 4.9, 0);
     put(new THREE.Mesh(geo(new THREE.ConeGeometry(0.06, 0.25, 5)), iron), 0, top + 5.65, 0);
@@ -398,10 +399,14 @@ export function buildFaro(app) {
         toCam.set(cam.x - X, 0, cam.z - Z).normalize();
         const facing = Math.max(Math.abs(Math.cos(spin.rotation.y) * toCam.x - Math.sin(spin.rotation.y) * toCam.z), 0);
         const flash = Math.pow(facing, 60);
-        core.material.opacity = 0.35 + b * 0.5 + flash * 0.4;
-        halo.material.opacity = (0.08 + b * 0.2) + flash * 0.6 * (0.3 + 0.7 * night);
-        halo.scale.setScalar(26 + flash * 30);
-        beacon.intensity = 2 + b * 7 + flash * 6;
+        // da vicino (in galleria) l'alone e il fascio si attenuano: altrimenti la telecamera ci sta dentro e l'immagine diventa bianca
+        const dc = cam.distanceTo(core.position), near = Math.min(1, Math.max(0, (dc - 4) / 12));
+        core.material.opacity = (0.35 + b * 0.5 + flash * 0.4) * near;
+        halo.material.opacity = ((0.08 + b * 0.2) + flash * 0.6 * (0.3 + 0.7 * night)) * near * near;
+        halo.scale.setScalar(26 + flash * 30 * near);
+        beamMat.uniforms.uI.value *= 0.15 + 0.85 * near;
+        fiamma.material.opacity *= 0.5 + 0.5 * near;
+        beacon.intensity = (2 + b * 7 + flash * 6) * (0.3 + 0.7 * near);
         // la porta si apre piano, come se pesasse trecento anni
         const want = s2 >= L2AT(1) ? -1.75 : 0;
         if (doorA !== want) { doorA += Math.sign(want - doorA) * Math.min(Math.abs(want - doorA), dt * 0.6); doorG.rotation.y = doorA; }

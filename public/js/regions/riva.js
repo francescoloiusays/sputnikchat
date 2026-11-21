@@ -127,6 +127,9 @@ export function buildRiva(app) {
             const [u, v] = rivaUV(x, z);
             if (pathDistUV(u, v) < 2.2) return 0;
             if (Math.hypot(u - RP.village[0], v - RP.village[1]) < 7) return 0;
+            // niente erba sul pavimento delle case
+            for (const [hu, hv] of HUTS) if (Math.hypot(u - hu, v - hv) < 3.2) return 0;
+            if (Math.hypot(u - RP.casa[0], v - RP.casa[1]) < 3.8) return 0;
             if (Math.hypot(u - RP.pozzo[0], v - RP.pozzo[1]) < 6) return 0.15;
             return smooth(0.7, 1.3, h) * (0.55 + 0.45 * smooth(-0.3, 0.4, rfbm(x * 0.04 + 5, z * 0.04)));
         },
@@ -201,7 +204,7 @@ export function buildRiva(app) {
     //  LA LANTERNA DELLA RIVA: latta, un palo storto, una rosa dei venti
     //  Alla fine del libro brucia d'oro e tende un filo di luce fino al faro
     // =================================================================
-    let lumeGlow, lumeLight, lumeCore, thread;
+    let lumeGlow, lumeLight, lumeCore, thread, farBeacon;
     {
         const [lx, lz] = P(...RP.lume), y0 = ground(lx, lz);
         const pole = add(new THREE.Mesh(geo(new THREE.CylinderGeometry(0.09, 0.12, 3.2, 8)), wood), lx, y0 + 1.6, lz);
@@ -233,6 +236,10 @@ export function buildRiva(app) {
         thread.frustumCulled = false;
         thread.visible = false;
         g.add(thread);
+        // il faro, laggiù: se la sua regione non è caricata (si arriva in barca dal Molo) resta almeno la sua luce d'oro
+        farBeacon = sprite('#ffd27a', 14, 0.8, false);
+        farBeacon.position.copy(to);
+        g.add(farBeacon);
     }
 
     // =================================================================
@@ -258,6 +265,10 @@ export function buildRiva(app) {
             const r = wall(Wd + 0.6, 0.12, D / 2 + 0.7, 0, Ht + 0.55, s * (D / 4 + 0.15), thatch);
             r.rotation.x = s * 0.5;
         }
+        // i due timpani: chiudono il triangolo fra i muri e il tetto (prima si vedeva il cielo attraverso)
+        const tri = new THREE.Shape([new THREE.Vector2(-D / 2, 0), new THREE.Vector2(D / 2, 0), new THREE.Vector2(0, 1.15)]);
+        const gableG = geo(new THREE.ExtrudeGeometry(tri, { depth: T, bevelEnabled: false }).translate(0, 0, -T / 2).rotateY(Math.PI / 2));
+        for (const s of [-1, 1]) add(new THREE.Mesh(gableG, plank), s * Wd / 2, Ht, 0, hg);
         // due finestre accese (una sul davanti, una sul fianco che guarda il mare)
         for (const [x, z, ry] of [[-1.6, D / 2 + 0.1, 0], [Wd / 2 + 0.1, 0.4, Math.PI / 2]]) {
             const f = add(new THREE.Mesh(geo(new THREE.PlaneGeometry(0.7, 0.6)), windowHome), x, 1.55, z, hg);
@@ -333,7 +344,7 @@ export function buildRiva(app) {
             wall(DOOR, 0.4, T, 0, Ht - 0.2, D / 2);
             const roof = add(new THREE.Mesh(geo(new THREE.ConeGeometry(3.6, 1.9, 4, 1)), thatch), 0, Ht + 0.9, 0, hg);
             roof.rotation.y = Math.PI / 4;
-            if (i === 1) roof.rotation.z = 0.25;   // una ha il tetto che scivola via
+            if (i === 1) { roof.rotation.z = 0.09; roof.position.y += 0.12; }   // una ha il tetto un po' storto (di più, attraversava il muro)
             // dentro: un tavolo, uno sgabello
             wall(1.0, 0.08, 0.7, 0, 0.75, -1.2, wood);
             wall(0.08, 0.72, 0.6, -0.45, 0.36, -1.2, wood); wall(0.08, 0.72, 0.6, 0.45, 0.36, -1.2, wood);
@@ -499,6 +510,9 @@ export function buildRiva(app) {
         const night = 1 - (W.envS?.day ?? 0);
         lumeGlow.material.opacity = 0.42 + Math.sin(time * 2.1) * 0.06 + Math.random() * 0.04;
         if (thread.visible) thread.material.opacity = 0.35 + 0.2 * Math.sin(time * 1.3);
+        const faroOn = app.stream?.regions?.some(r => r.name === 'Faro Spento' && r.state === 'on');
+        farBeacon.visible = !faroOn && l2At(st()) >= L2AT(4, 3);
+        if (farBeacon.visible) farBeacon.material.opacity = 0.45 + 0.4 * Math.max(0, Math.sin(time * 0.6 * 2)) ** 8;
         // il pozzo respira: più forte di notte, quasi niente quando i nomi sono usciti
         for (const s of breath) {
             const p = (s.userData.p + time * 0.07) % 1, a = s.userData.a + time * 0.2;

@@ -898,7 +898,7 @@ class Game {
         const F = this.faroInfo;
         if (!F) return;
         const T = up ? F.gallery : F.door;
-        this.travel({ ...T, feet: T.y + 0.5, camYaw: T.yaw + Math.PI,
+        this.travel({ ...T, feet: T.y + 0.5, camYaw: up ? T.yaw : T.yaw + Math.PI,   // in cima la telecamera sta fuori dalla ringhiera e guarda la lanterna
             text: up ? 'Centotredici gradini, al buio. A metà, qualcosa ti respira sul collo…' : 'Giù per la scala a chiocciola, contando i gradini al contrario…' });
     }
     async faroDoor() {

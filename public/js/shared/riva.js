@@ -80,6 +80,9 @@ export function rivaHeight(x, z) {
     let base = m < -0.15 ? Math.max(-9, -1.6 + (m + 0.15) * 30) : -1.6 + smooth(-0.15, 0.3, m) * 2.6;
     const hills = (rfbm(x * 0.028 + 40, z * 0.028) * 0.5 + 0.5) * 4 * smooth(0.18, 0.6, m) + rfbm(x * 0.1 + 9, z * 0.1) * 0.3 * smooth(0.05, 0.3, m);
     let h = base + hills + mountain(u, v) * smooth(-0.1, 0.15, m);
+    // in cima un pianoro piccolo: il cippo e chi lo tocca stanno sullo stesso piano
+    const [mu, mv] = RP.monte;
+    h = Math.min(h, 30.5 + smooth(2.8, 9, Math.hypot(u - mu, v - mv)) * 30);
     // il villaggio dei Senza Nome: uno spiazzo piano
     const [vu, vv] = RP.village;
     h = lerp(h, 2.2, 1 - smooth(15, 23, Math.hypot(u - vu, v - vv)));
