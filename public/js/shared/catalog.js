@@ -576,6 +576,7 @@ export const MATS = {
     perla: { name: 'Perla della Laguna', icon: 'pearl', color: '#f2e6ff', where: 'Il Molo: la Pesca nella Nebbia', desc: 'Nasce nelle conchiglie sotto il molo. Serve per le carte e per gli incantamenti fino a +5.' },
     ecto: { name: 'Ectoplasma', icon: 'ecto', color: '#7affd8', where: 'Cimitero Sommerso: acchiappa i fuochi fatui dorati', desc: 'Quello che resta di un fuoco fatuo. Serve per la carta Aurora.' },
     pergamena: { name: 'Pergamena Benedetta', icon: 'scroll', color: '#ffe9a8', where: 'Il Molo: a volte nelle bottiglie', desc: 'Protegge un incantamento: se fallisce, il pezzo non scende di livello.' },
+    corallo: { name: 'Corallo Nero', icon: 'crystal', color: '#ff5a6a', where: 'Il Molo: a volte sale con un pesce raro; il Baratto del Mercante', desc: 'Cresce sui pali sommersi del molo, dove la luce non arriva. La Retaia lo usa per rinforzare le canne da pesca.' },
 };
 for (const el of Object.keys(ELEMENTS)) {
     MATS['ess_' + el] = { name: `Essenza di ${ELEMENTS[el].name}`, icon: 'vial', color: ELEMENTS[el].color, el, where: `Vinci un duello contro un seme di ${ELEMENTS[el].name}`, desc: `Infonde l'arma con il potere di ${ELEMENTS[el].name}. Serve anche per gli incantamenti da +6.` };
@@ -726,10 +727,12 @@ export function isNight(date = new Date()) {
     try { h = +new Intl.DateTimeFormat('it-IT', { hour: 'numeric', hour12: false, timeZone: 'Europe/Rome' }).format(date); } catch { h = date.getHours(); }
     return h >= 20 || h < 6;
 }
-// Sceglie il pesce che abbocca (rnd = funzione 0..1)
-export function rollFish(night, rnd = Math.random) {
+// Sceglie il pesce che abbocca (rnd = funzione 0..1; luck = la fortuna della canna: più rari ed epici, meno rottami)
+const LUCK_K = { rar: 1, epi: 1.5 };
+export function rollFish(night, rnd = Math.random, luck = 0) {
     const pool = FISH_IDS.filter(id => FISH[id].when === 'any' || FISH[id].when === (night ? 'night' : 'day'));
-    const w = id => FISH_RARITY[FISH[id].rar].w / pool.filter(x => FISH[x].rar === FISH[id].rar).length * (night && FISH[id].when === 'night' ? 1.6 : 1);
+    const lk = (r) => (r === 'junk' ? 1 / (1 + luck) : 1 + luck * (LUCK_K[r] || 0));
+    const w = id => FISH_RARITY[FISH[id].rar].w * lk(FISH[id].rar) / pool.filter(x => FISH[x].rar === FISH[id].rar).length * (night && FISH[id].when === 'night' ? 1.6 : 1);
     let tot = pool.reduce((s, id) => s + w(id), 0), r = rnd() * tot;
     for (const id of pool) { r -= w(id); if (r <= 0) return id; }
     return pool[0];

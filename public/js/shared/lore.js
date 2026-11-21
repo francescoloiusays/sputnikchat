@@ -69,13 +69,13 @@ export const NPCS = {
         actions: [['sartoria', 'Entra in Sartoria']],
     },
     mercante: {
-        name: 'Il Mercante senza Ombra', where: 'Bazar del Ratto', x: 13.4, z: 39.2, ry: -Math.PI / 2, teach: 11,
+        name: 'Il Mercante senza Ombra', where: 'Bazar del Ratto', x: 17.05, z: 36.2, y: 1.62, ry: -Math.PI / 2, teach: 11,
         app: { species: 'ratto', build: 'snello', height: 0.95, skin: '#7a7068', eyes: 'sottili', eyeColor: '#ffd23a', mouth: 'ghigno', hair: 'calvo', hairColor: '#5a5048', beard: 'baffi', topStyle: 'giacca', top: '#2f4a24', bottom: '#2b2633', shoes: '#3a2414' },
         look: { head: 'tricorno' },
         lines: ['Compro, vendo, trattengo il cinque per cento. È l\'unica tassa onesta dell\'isola.',
             'Hai visto la Bacheca delle Taglie in piazza? Le taglie pagano meglio dei sogni.',
             'Non ho ombra perché l\'ho venduta. Ottimo affare, all\'epoca.'],
-        actions: [['bazar', 'Apri il Bazar'], ['bacheca', 'Le tue taglie']],
+        actions: [['baratto', 'Baratta col Mercante'], ['bazar', 'Il banco dei viandanti'], ['bacheca', 'Le tue taglie']],
     },
     custode: {
         name: 'La Custode senza Volto', where: 'Cappella in Rovina', x: 30, z: 58.2, ry: Math.PI, teach: 9,
@@ -121,6 +121,16 @@ export const NPCS = {
             'Lassù qualcosa respira. Io lo sento ogni notte. Tu, adesso, lo vedi.',
             'Il Traghettatore passa una volta al giorno. Non mi porta mai niente: solo gente che chiede dov\'è il ritorno.'],
         actions: [['molo', 'Torna al Molo in barca']],
+    },
+    // la Barca Rovesciata, sulla spiaggia a ovest del Molo (shared/mare.js, BARCA: davanti alla bocca della barca)
+    retaia: {
+        name: 'La Retaia', where: 'La Barca Rovesciata', x: -10.72, z: 89.76, ry: 1.25, teach: null,
+        app: { sex: 'f', species: 'umano', build: 'robusto', height: 0.94, skin: '#b9a08c', eyes: 'sottili', eyeColor: '#7fd8ff', mouth: 'ghigno', hair: 'codino', hairColor: '#d8d4cc', beard: 'nessuna', topStyle: 'giacca', top: '#2a3a4a', bottom: '#3a3026', shoes: '#1a1410' },
+        look: { torso: 'grembiule', face: 'benda' },
+        lines: ['Rammendo reti da quando il mare era dolce. Le canne, invece, le aggiusto da quando il mare è diventato cattivo.',
+            'Il Corallo Nero cresce sui pali del molo, dove la luce non arriva. Sale su con i pesci buoni. Portamelo, e la tua canna non tremerà più.',
+            'Quella barca lì sopra era di mio marito. L\'ho girata a pancia in su quando non è tornato: così almeno mi ripara dalla pioggia.'],
+        actions: [['canna', 'Migliora la canna'], ['diario', 'Il Diario del Naufrago']],
     },
     // Libro III: sulla Riva di Là, oltre il mare aperto
     cartografa: {

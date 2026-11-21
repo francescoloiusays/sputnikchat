@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { FISH, FISH_RARITY, FISH_SPOT, FISH_DAILY, DIARY, MATS, SEALS } from './shared/catalog.js';
 import { h, $, toast, IS_MOBILE } from './util.js';
 import { iconSVG, drawIcon } from './icons.js';
+import { rodOf } from './shared/mare.js';
 
 const BITE_WINDOW = IS_MOBILE ? 1.3 : 1.0;   // secondi per ferrare dopo l'abboccata
 
@@ -44,7 +45,7 @@ export class Fishing {
         this.btnCast = h('button', { class: 'btn btn-primary btn-sm', onclick: () => this.press(), html: iconSVG('rod') }, 'Lancia');
         this.btnExit = h('button', { class: 'btn btn-sm', onclick: () => this.stop(), html: iconSVG('close') }, 'Esci');
         this.hud = h('div', { id: 'fish-hud', class: 'hidden' },
-            h('div', { class: 'fish-head', html: iconSVG('rod') }, 'Pesca nella Nebbia'),
+            this.head = h('div', { class: 'fish-head', html: iconSVG('rod') }, 'Pesca nella Nebbia'),
             this.title, this.canvas, this.result, this.hint,
             h('div', { class: 'btn-row mid' }, this.btnCast, this.btnExit));
         document.body.append(this.hud);
@@ -56,10 +57,15 @@ export class Fishing {
     build3D() {
         const app = this.app, ch = app.myChar;
         const rod = new THREE.Group();
-        const woodM = new THREE.MeshStandardMaterial({ color: '#5a3a1e', roughness: 0.8 });
-        const g = new THREE.CylinderGeometry(0.012, 0.028, 2.1, 12); g.translate(0, 1.05, 0);
+        const R = rodOf(app.me);
+        const woodM = new THREE.MeshStandardMaterial({ color: R.wood, roughness: 0.7 });
+        const g = new THREE.CylinderGeometry(0.012, 0.028, 1.5, 12); g.translate(0, 0.75, 0);
         rod.add(new THREE.Mesh(g, woodM));
-        const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 18), new THREE.MeshStandardMaterial({ color: '#9ea4ab', metalness: 0.8, roughness: 0.3 }));
+        // la punta, del colore della canna (sulla Canna della Marea brilla)
+        const tipM = new THREE.MeshStandardMaterial({ color: R.tip, roughness: 0.5, emissive: R.glow ? R.tip : '#000000', emissiveIntensity: R.glow ? 0.8 : 0 });
+        const tg = new THREE.CylinderGeometry(0.007, 0.012, 0.6, 10); tg.translate(0, 1.8, 0);
+        rod.add(new THREE.Mesh(tg, tipM));
+        const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.05 + (app.me?.rod >= 2 ? 0.015 : 0), 0.05 + (app.me?.rod >= 2 ? 0.015 : 0), 0.05, 18), new THREE.MeshStandardMaterial({ color: R.reel, metalness: 0.8, roughness: 0.3 }));
         reel.rotation.z = Math.PI / 2; reel.position.set(0.04, 0.25, 0); rod.add(reel);
         rod.rotation.x = Math.PI / 2 - 0.5;
         this.rodTip = new THREE.Object3D(); this.rodTip.position.y = 2.1; rod.add(this.rodTip);
@@ -67,7 +73,7 @@ export class Fishing {
         ch.arms?.R?.hand?.add(rod);
         this.rod = rod;
         const bob = new THREE.Group();
-        const top = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#e8202a', emissive: '#5a0808', roughness: 0.5 }));
+        const top = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: R.bob, emissive: R.bob, emissiveIntensity: R.glow ? 0.9 : 0.12, roughness: 0.5 }));
         const bot = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#f2efe6', roughness: 0.5 }));
         bob.add(top, bot);
         this.bobGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: app.world.glowTex, color: '#ffd76a', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
@@ -118,6 +124,7 @@ export class Fishing {
         app.cam.yaw = Math.PI + 0.35; app.cam.pitch = 0.2; app.cam.wantDist = 5.2; app.cam.first = false;
         app.myChar.stop?.();
         this.build3D();
+        this.head.innerHTML = iconSVG('rod'); this.head.append(`Pesca nella Nebbia · ${rodOf(app.me).name}`);
         this.hud.classList.remove('hidden');
         this.idle();
         app.sendPos?.(1, 0);
@@ -174,7 +181,8 @@ export class Fishing {
         this.app.audio.play('reel');
         this.bobGlow.material.opacity = 0;
         const d = this.diff;
-        Object.assign(this, { zs: 0.3 - d * 0.08, zy: 0.3, zv: 0, fy: 0.45, fv: 0, ty: 0.5, tT: 0, prog: 0.3, reelT: 0 });
+        const R = rodOf(this.app.me);
+        Object.assign(this, { zs: Math.min(0.55, (0.3 - d * 0.08) * (1 + R.zone)), zy: 0.3, zv: 0, fy: 0.45, fv: 0, ty: 0.5, tT: 0, prog: 0.3, reelT: 0 });
         this.setHint('Ha abboccato!', IS_MOBILE ? 'Tieni premuto sulla barra per alzare la zona chiara' : 'Tieni premuto Spazio o il tasto del mouse per alzare la zona chiara');
     }
     lose(msg, kind) {
@@ -255,7 +263,7 @@ export class Fishing {
             this.biteT += dt;
             this.bob.position.y = -0.09 + Math.sin(t * 22) * 0.03;
             this.bobGlow.material.opacity = 0.9;
-            if (this.biteT > BITE_WINDOW) { this.bobGlow.material.opacity = 0; this.lose('Ha mangiato l\'esca ed è scappato', 'escape'); }
+            if (this.biteT > BITE_WINDOW + rodOf(app.me).window) { this.bobGlow.material.opacity = 0; this.lose('Ha mangiato l\'esca ed è scappato', 'escape'); }
         }
         if (this.state === 'reel') this.reel(dt, t);
         // lenza dalla punta della canna al galleggiante
@@ -305,7 +313,8 @@ export class Fishing {
         this.fy = Math.max(0.03, Math.min(0.97, this.fy + this.fv * dt + Math.sin(t * 9) * 0.0015 * (1 + d * 3)));
         const inside = this.fy >= this.zy && this.fy <= this.zy + this.zs;
         this.inside = inside;
-        this.prog += inside ? 0.22 * dt : -(0.12 + d * 0.15) * dt;
+        const R = rodOf(this.app.me);
+        this.prog += inside ? 0.22 * (1 + R.fill) * dt : -(0.12 + d * 0.15) / (1 + R.fill) * dt;
         // il galleggiante si agita
         this.bob.position.y = -0.06 + Math.sin(t * 14) * 0.04;
         this.bob.position.x += (Math.random() - 0.5) * dt * 0.6;

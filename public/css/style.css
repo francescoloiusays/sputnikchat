@@ -1057,3 +1057,27 @@ details.mix .field { margin-top: 6px; }
 }
 @media (prefers-reduced-motion: reduce) { .bk-tab.now i { animation: none; } .cs-black, .cs-sub { transition: none; } }
 .bk-l2 { display: grid; gap: 10px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #6b4c1a; }
+
+/* --- il Baratto del Mercante e la canna della Retaia --- */
+.cost-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.cost-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px 1px; border-radius: 999px; background: rgba(90, 60, 25, 0.14); border: 1px solid rgba(90, 60, 25, 0.35); color: #3a2410; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.cost-chip svg { width: 14px; height: 14px; }
+.cost-chip.miss { color: #a2261a; border-color: rgba(162, 38, 26, 0.55); background: rgba(162, 38, 26, 0.1); }
+.btn-col { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: 0 0 auto; max-width: 46%; }
+.trade-row { align-items: flex-start; }
+.trade-row .nm { font-weight: 700; color: #3a2410; }
+.trade-say { font-style: italic; opacity: 0.85; }
+.trade-sub { margin: 16px 0 2px; font-family: var(--display, serif); color: #6b4c1a; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; border-top: 1px solid rgba(90, 60, 25, 0.3); padding-top: 10px; }
+.xp-chip { color: #2f6b2a; font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+.rod-card { border: 1px solid rgba(90, 60, 25, 0.35); border-radius: 8px; padding: 10px 12px; background: rgba(255, 248, 228, 0.35); margin: 8px 0; }
+.rod-card.now { box-shadow: inset 0 0 0 2px rgba(201, 162, 74, 0.55); }
+.rod-head { display: flex; align-items: center; gap: 10px; }
+.rod-head .nm { font-weight: 700; color: #3a2410; font-size: 17px; }
+.rod-ic svg { width: 34px; height: 34px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45)); }
+.rod-desc { margin: 6px 0; color: #4a3418; font-style: italic; }
+.rod-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; font-size: 14px; color: #4a3418; }
+.rod-stats b { color: #2f6b2a; }
+.rod-next { margin-top: 10px; }
+.rod-arrow { display: flex; align-items: center; gap: 6px; color: #6b4c1a; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
+.rod-arrow svg { width: 16px; height: 16px; }
+@media (max-width: 560px) { .rod-stats { grid-template-columns: 1fr; } .btn-col { max-width: 55%; } }

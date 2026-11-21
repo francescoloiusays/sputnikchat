@@ -18,6 +18,7 @@ import { icon, iconSVG, elIcon, itemIconName, rarityOf, tierOf } from './icons.j
 import { storyBox, bookContent, storyCtx, npcLine } from './story-ui.js';
 import { l2Box } from './libro2-ui.js';
 import { l2At, L2AT } from './shared/libro2.js';
+import { RODS, TRADES, tonicXp, itemTradeValue } from './shared/mare.js';
 import { STORY_SPOTS } from './shared/story.js';
 import { ritratto } from './story-text.js';
 
@@ -87,7 +88,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('open');
@@ -561,7 +562,7 @@ export class Panels {
         const go = { diario: () => { this.tabs.bag = 'diario'; this.open('inventario'); }, forgia: () => { this.tabs.forge = 'crea'; this.open('forgia'); }, castoni: () => { this.tabs.forge = 'castoni'; this.open('forgia'); },
             sartoria: () => this.open('sartoria'), bazar: () => this.open('bazar'), bacheca: () => this.open('bacheca'), altare: () => this.open('altare'),
             tombe: () => { this.tabs.tombe = 'prato'; this.open('tombe'); }, veglia: () => { this.tabs.tombe = 'veglia'; this.open('tombe'); }, pedaggio: () => this.open('pedaggio'),
-            faro: () => { this.close(); app.travel('faro'); }, relitto: () => { this.close(); app.travel('relitto'); }, riva: () => { this.close(); app.travel('riva'); }, molo: () => { this.close(); app.travel('molo'); } };
+            faro: () => { this.close(); app.travel('faro'); }, relitto: () => { this.close(); app.travel('relitto'); }, baratto: () => this.open('baratto'), canna: () => this.open('canna'), riva: () => { this.close(); app.travel('riva'); }, molo: () => { this.close(); app.travel('molo'); } };
         const portrait = h('canvas', { class: 'npc-portrait', width: 220, height: 220 });
         requestAnimationFrame(() => { try { portrait.getContext('2d').drawImage(app.studio.portrait(N.app, N.look || {}, 220, 'bust'), 0, 0); } catch { /* ok */ } });
         this.set('talk', N.name,
@@ -574,7 +575,7 @@ export class Panels {
                     arg.learned != null ? h('div', { class: 'npc-learn', html: iconSVG('quill') }, h('b', {}, 'Ti ha insegnato una risposta per il Pedaggio dello Spettro: '), `«${INSULTS[arg.learned][1]}»`) : null,
                     arg.first && arg.xp ? h('p', { class: 'muted small' }, `Prima chiacchierata: +${arg.xp} esperienza.`) : null,
                     h('div', { class: 'btn-row' },
-                        N.actions.filter(([k]) => k !== 'riva' || l2At(app.me?.libro2) >= L2AT(5, 2)).map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto', faro: 'lantern', relitto: 'wave', riva: 'lantern', molo: 'wave' }[k] })),
+                        N.actions.filter(([k]) => k !== 'riva' || l2At(app.me?.libro2) >= L2AT(5, 2)).map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto', faro: 'lantern', relitto: 'wave', riva: 'lantern', molo: 'wave', baratto: 'handshake', canna: 'rod' }[k] })),
                         btn('Altro?', () => { this.render(); app.npcSay(id); }, { ic: 'talk' }),
                         btn('Arrivederci', () => this.close(), { ic: 'close' })))));
     }
@@ -879,6 +880,100 @@ export class Panels {
                     `${SLOT_NAMES[itemInfo(l.entry).slot]} · venduto da ${l.sellerName}`);
             })) : h('div', { class: 'empty' }, tab === 'miei' ? 'Non hai merce sul banco.' : 'Il banco è vuoto. Sii il primo a vendere qualcosa!'),
             h('div', { class: 'btn-row end', style: { marginTop: '10px' } }, this.purse())));
+    }
+
+    // --- IL BARATTO DEL MERCANTE SENZA OMBRA ---
+    // un prezzo { coins, perla, ... } come fila di etichette, rosse dove ti manca qualcosa
+    costChips(cost) {
+        const me = this.app.me;
+        return h('span', { class: 'cost-chips' }, Object.entries(cost).map(([k, n]) => {
+            const have = k === 'coins' ? me.coins || 0 : me.mats?.[k] || 0, M = MATS[k];
+            return h('span', { class: 'cost-chip' + (have < n ? ' miss' : ''), title: k === 'coins' ? 'Sputnik Coin' : `${M.name} (ne hai ${have})`, html: iconSVG(k === 'coins' ? 'satellite' : M.icon) }, `${fmt(n)}`);
+        }));
+    }
+    canPay(cost) { const me = this.app.me; return Object.entries(cost).every(([k, n]) => (k === 'coins' ? me.coins || 0 : me.mats?.[k] || 0) >= n); }
+    async p_baratto() {
+        const app = this.app, me = app.me, T = 'Il Baratto del Mercante';
+        const off = this.needOnline();
+        if (off) return this.set('handshake', T, off);
+        const [tab, bar] = this.tabBar('baratto', [['oggi', 'I baratti di oggi', 'handshake'], ['dai', 'Dagli un oggetto', 'bag']]);
+        if (tab === 'dai') {
+            const eq = Object.values(me.equipment || {});
+            const list = (me.inventory || []).filter(e => !eq.includes(e.uid));
+            const r = await app.net.request('trade:get');
+            if (this.current !== 'baratto') return;
+            const left = r.itemsLeft ?? 0;
+            return this.set('handshake', T, bar, h('div', { class: 'parchment' },
+                lore('«Roba vecchia? La prendo io. Ti do qualche moneta, e per le prime cose del giorno ti racconto come le ho avute: si impara sempre qualcosa.»'),
+                h('p', { class: 'muted small' }, left ? `Oggi ancora ${left} oggett${left === 1 ? 'o' : 'i'} con l'esperienza: poi solo monete.` : 'Per oggi solo monete: l\'esperienza torna domani.'),
+                list.length ? list.map(e => {
+                    const inf = itemInfo(e), rt = tierOf(e), v = itemTradeValue(inf.value, me.level || 1);
+                    return h('div', { class: 'ledger-row' }, this.slot({ ic: itemIconName(e), rar: rt.id }),
+                        h('div', { class: 'grow' }, h('div', { class: 'nm ink-' + rt.id }, inf.name), h('div', { class: 'sub' }, `${SLOT_NAMES[inf.slot]} · ${rt.name}`)),
+                        h('div', { class: 'btn-row' }, coin(v.coins), left ? h('span', { class: 'xp-chip' }, `+${v.xp} esp.`) : null,
+                            btn('Dagliela', async () => { const x = await this.act('trade:item', { uid: e.uid }); if (x.ok) toast(`${inf.name}: +${x.coins} monete${x.xp ? `, +${x.xp} esperienza` : ''}`, { kind: 'ok', icon: 'handshake' }); this.render(); }, { cls: 'btn-sm' })));
+                }) : h('div', { class: 'empty' }, 'Non hai niente da dargli: quello che indossi non lo vuole.'),
+                h('div', { class: 'btn-row end', style: { marginTop: '10px' } }, this.purse())));
+        }
+        this.set('handshake', T, bar, h('div', { class: 'parchment' }, h('div', { class: 'empty' }, 'Il Mercante apre la cassa dei baratti...')));
+        const r = await app.net.request('trade:get');
+        if (this.current !== 'baratto') return;
+        if (!r.ok) return this.set('handshake', T, bar, h('div', { class: 'empty' }, r.msg || 'Il Mercante è distratto.'));
+        const lv = me.level || 1;
+        const O = r.item, OI = O && ITEMS[O.itemId];
+        this.set('handshake', T, bar, h('div', { class: 'parchment' },
+            lore('«Le monete puzzano. Io baratto. Ogni giorno cose diverse: torna domani e vedrai.»'),
+            h('p', { class: 'muted small' }, `Tonici ancora oggi: ${r.tonicLeft}. I tonici danno una parte dell'esperienza che ti manca al livello dopo.`),
+            r.trades.map(({ id, used }) => {
+                const t = TRADES[id], done = used >= t.max;
+                const gets = Object.entries(t.get).map(([k, n]) => k === 'xp' ? `+${tonicXp(n, lv)} esperienza` : `+${n} ${MATS[k].name}`).join(', ');
+                const blocked = done || (t.get.xp && !r.tonicLeft) || !this.canPay(t.give);
+                return h('div', { class: 'ledger-row trade-row' }, this.slot({ ic: t.icon, rar: t.get.xp ? 'rar' : 'unc' }),
+                    h('div', { class: 'grow' }, h('div', { class: 'nm' }, t.name, h('span', { class: 'muted small' }, `  ${used}/${t.max} oggi`)), h('div', { class: 'sub' }, gets), h('div', { class: 'sub trade-say' }, `«${t.say}»`)),
+                    h('div', { class: 'btn-col' }, this.costChips(t.give),
+                        btn(done ? 'Fatto' : 'Baratta', async () => {
+                            const x = await this.act('trade:do', { id });
+                            if (x.ok) { app.audio.play(t.get.xp ? 'special' : 'coin'); if (x.xp) toast(`${t.name}: +${x.xp} esperienza`, { kind: 'ok', icon: t.icon }); }
+                            this.render();
+                        }, { cls: 'btn-sm btn-primary', disabled: blocked })));
+            }),
+            OI ? [h('h4', { class: 'trade-sub' }, 'L\'oggetto del giorno'),
+                h('div', { class: 'ledger-row trade-row' }, this.slot({ ic: itemIconName({ kind: 'item', itemId: O.itemId }), rar: tierOf({ kind: 'item', itemId: O.itemId }).id }),
+                    h('div', { class: 'grow' }, h('div', { class: 'nm' }, OI.name), h('div', { class: 'sub' }, `${SLOT_NAMES[OI.slot]} · dal livello ${O.lv}`), h('div', { class: 'sub trade-say' }, `«${OI.desc || 'Roba buona. Non chiedermi da dove viene.'}»`)),
+                    h('div', { class: 'btn-col' }, this.costChips(O.give),
+                        btn(r.itemTaken ? 'Preso' : 'Prendilo', async () => { const x = await this.act('trade:do', { id: '_item' }, `${OI.name} è nella tua bisaccia`); this.render(); },
+                            { cls: 'btn-sm btn-primary', disabled: r.itemTaken || lv < O.lv || !this.canPay(O.give) })))] : null,
+            h('div', { class: 'btn-row end', style: { marginTop: '10px' } }, this.purse())));
+    }
+
+    // --- LA RETAIA: la canna da pesca, alla Barca Rovesciata ---
+    p_canna() {
+        const app = this.app, me = app.me, cur = me.rod || 0, R = RODS[cur], N = RODS[cur + 1], lv = me.level || 1;
+        const pct = (x) => `+${Math.round(x * 100)}%`;
+        const stats = (r) => h('ul', { class: 'rod-stats' },
+            h('li', {}, 'Zona chiara ', h('b', {}, r.zone ? pct(r.zone) : '—')),
+            h('li', {}, 'Lenza più veloce ', h('b', {}, r.fill ? pct(r.fill) : '—')),
+            h('li', {}, 'Abboccano prima ', h('b', {}, r.bite < 1 ? pct(1 - r.bite) : '—')),
+            h('li', {}, 'Più tempo per ferrare ', h('b', {}, r.window ? `+${r.window.toFixed(2)} s` : '—')),
+            h('li', {}, 'Pesci rari ed epici ', h('b', {}, r.luck ? pct(r.luck) : '—')),
+            h('li', {}, 'Pescate piene al giorno ', h('b', {}, String(FISH_DAILY + r.daily))));
+        const card = (r, i, label) => h('div', { class: 'rod-card' + (i === cur ? ' now' : '') },
+            h('div', { class: 'rod-head' }, h('span', { class: 'rod-ic', style: { color: r.tip }, html: iconSVG('rod') }), h('div', {}, h('div', { class: 'nm' }, r.name), h('div', { class: 'muted small' }, label))),
+            h('p', { class: 'rod-desc' }, r.desc), stats(r));
+        if (!app.net.connected) return this.set('rod', 'La Barca Rovesciata', this.needOnline());
+        this.set('rod', 'La Barca Rovesciata', h('div', { class: 'parchment' },
+            lore(N ? '«Fammi vedere quella canna. Mh. Pesca, sì. Ma pesca come uno che ha paura dell\'acqua. Portami quello che serve e te la rifaccio.»' : '«Più di così non si può. Quella canna la laguna la conosce: quando la cali, i pesci fanno la fila.»'),
+            card(R, cur, 'La tua canna'),
+            N ? h('div', { class: 'rod-next' },
+                h('div', { class: 'rod-arrow', html: iconSVG('hook') }, 'La prossima'),
+                card(N, cur + 1, `Dal livello ${N.lv}${lv < N.lv ? ' · non ancora' : ''}`),
+                h('div', { class: 'btn-row mid' }, this.costChips(N.cost),
+                    btn('Rifammi la canna', async () => {
+                        const x = await this.act('rod:upgrade', {}, `La Retaia ti consegna la ${N.name}`);
+                        if (x.ok) { app.audio.play('anvil'); toast(h('div', {}, h('b', {}, N.name), h('div', {}, `${N.desc} +${x.xp} esperienza.`)), { kind: 'coin', icon: 'rod', duration: 9000 }); }
+                        this.render();
+                    }, { cls: 'btn-primary', ic: 'rod', disabled: lv < N.lv || !this.canPay(N.cost) })),
+                h('p', { class: 'muted small' }, 'Il Corallo Nero sale con i pesci rari ed epici, oppure lo baratta il Mercante senza Ombra al Bazar.')) : null));
     }
 
     // --- ALBO DEI CAMPIONI ---

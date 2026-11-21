@@ -27,6 +27,7 @@ import { INSULTS, TOLL_START, TOLL_LINES, NPCS, ONDA_Q, ONDA_PLOT, TABLETS, MISS
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
 import { STORY, STORY_END, STORY_SPOTS, WAYS, newStory, chapterReady, nomeVero } from './public/js/shared/story.js';
 import { L2_CHAPTERS, L2_SPOTS, newL2, fixL2, l2Step } from './public/js/shared/libro2.js';
+import { RODS, rodOf, CORAL_CHANCE, TRADES, tradesOfDay, itemOfDay, tonicXp, itemTradeValue, TONIC_DAILY, ITEM_TRADES_DAILY } from './public/js/shared/mare.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
@@ -114,6 +115,7 @@ function migrate(p) {
     }
     if (!p.story) { p.story = newStory(true); changed = true; }
     if (!p.libro2 || p.libro2.ch == null) { p.libro2 = fixL2(p.libro2); changed = true; }
+    if (p.rod == null) { p.rod = 0; changed = true; }
     updateSeason(p);
     return changed;
 }
@@ -243,6 +245,10 @@ function dayc(p) {
 const addMat = (p, k, n = 1) => { n = Math.max(0, Math.floor(n)); if (!MATS[k] || !n) return 0; p.mats[k] = Math.min(9999, (p.mats[k] || 0) + n); return n; };
 const hasMats = (p, need) => Object.entries(need).every(([k, n]) => (p.mats[k] || 0) >= n);
 const takeMats = (p, need) => { for (const [k, n] of Object.entries(need)) p.mats[k] = (p.mats[k] || 0) - n; };
+// un prezzo fatto di monete e materiali insieme ({ coins, perla, ... })
+const costMissing = (p, cost) => Object.entries(cost).filter(([k, n]) => (k === 'coins' ? p.coins : p.mats[k] || 0) < n).map(([k, n]) => [k, n - (k === 'coins' ? p.coins : p.mats[k] || 0)]);
+const payCost = (p, cost) => { for (const [k, n] of Object.entries(cost)) { if (k === 'coins') p.coins -= n; else p.mats[k] = (p.mats[k] || 0) - n; } };
+const fishDaily = p => FISH_DAILY + rodOf(p).daily;
 const giveSeal = (p, id) => { if (!SEALS[id] || p.seals.includes(id)) return null; p.seals.push(id); return id; };
 const blessed = p => (p.blessing?.until || 0) > Date.now();
 // Cambiare seme fa scendere la carta di un grado: la nebbia ricorda
@@ -326,7 +332,7 @@ function privateView(p) {
         inventory: p.inventory, equipment: p.equipment,
         mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
-        fishLeft: Math.max(0, FISH_DAILY - dayc(p).fish),
+        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0,
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
         episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
@@ -1268,9 +1274,9 @@ io.on('connection', (socket) => {
         if (Math.hypot(me.pos[0] - FISH_SPOT.x, me.pos[2] - FISH_SPOT.z) > FISH_SPOT.r + 1.5) return fail(reply, 'Si pesca in fondo al molo');
         const now = Date.now();
         if (me.fishing && now - me.fishing.at < 1200) return fail(reply, 'Piano, la lenza è ancora in acqua');
-        const night = isNight(), fish = rollFish(night);
-        me.fishing = { id: uid(), fish, at: now, bite: Math.round(1800 + Math.random() * 4200) };
-        reply({ ok: true, id: me.fishing.id, bite: me.fishing.bite, diff: FISH[fish].diff, move: FISH[fish].move, night, left: Math.max(0, FISH_DAILY - dayc(me.p).fish) });
+        const rod = rodOf(me.p), night = isNight(), fish = rollFish(night, Math.random, rod.luck);
+        me.fishing = { id: uid(), fish, at: now, bite: Math.round((1800 + Math.random() * 4200) * rod.bite) };
+        reply({ ok: true, id: me.fishing.id, bite: me.fishing.bite, diff: FISH[fish].diff, move: FISH[fish].move, night, left: Math.max(0, fishDaily(me.p) - dayc(me.p).fish) });
     });
     on('fish:reel', (d, reply) => {
         const F = me.fishing;
@@ -1278,8 +1284,8 @@ io.on('connection', (socket) => {
         me.fishing = null;
         if (!d.ok) return reply({ ok: true, caught: false });
         const f = FISH[F.fish], R = FISH_RARITY[f.rar];
-        if (Date.now() - F.at < F.bite + 1200 + f.diff * 1500) return reply({ ok: true, caught: false, msg: 'Troppa fretta: il pesce si è liberato' });
-        const p = me.p, c = dayc(p), full = c.fish < FISH_DAILY;
+        if (Date.now() - F.at < F.bite + (1200 + f.diff * 1500) / (1 + rodOf(me.p).fill)) return reply({ ok: true, caught: false, msg: 'Troppa fretta: il pesce si è liberato' });
+        const p = me.p, c = dayc(p), full = c.fish < fishDaily(p);
         c.fish++;
         const size = Math.round(f.size[0] + Math.pow(Math.random(), 1.6) * (f.size[1] - f.size[0]));
         const log = p.fishLog[F.fish] ||= { n: 0, best: 0 };
@@ -1306,12 +1312,85 @@ io.on('connection', (socket) => {
             if (!full) perle = Math.random() < 0.25 ? Math.min(1, perle) : 0;
             if (perle) out.loot.perla = addMat(p, 'perla', perle);
             if ((f.rar === 'rar' || f.rar === 'epi') && Math.random() < SEAL_CHANCE * 3) out.seal = giveSeal(p, 'marea');
+            // il Corallo Nero sale attaccato ai pesci rari (a premi pieni)
+            if (full && Math.random() < (CORAL_CHANCE[f.rar] || 0)) out.loot.corallo = addMat(p, 'corallo', 1);
         }
         progress(p, 'fish', 1, { id: F.fish, rar: f.rar });
         if (FISH_IDS.filter(id => FISH[id].rar !== 'special').every(id => p.fishLog[id]?.n)) award(p, 'pescatore');
         save(p); sendMe(me);
         if (f.rar === 'epi') sysChat(me.room, `🎣 ${p.name} ha pescato un ${f.name} di ${size} cm!`);
         reply(out);
+    });
+
+    // --- LA RETAIA: la canna nuova, alla Barca Rovesciata ---
+    const nearNpcId = (id, r = 6) => !!NPCS[id] && Math.hypot(me.pos[0] - NPCS[id].x, me.pos[2] - NPCS[id].z) <= r;
+    on('rod:upgrade', (d, reply) => {
+        const p = me.p, next = RODS[(p.rod || 0) + 1];
+        if (!next) return fail(reply, 'Hai già la canna migliore della laguna');
+        if (!nearNpcId('retaia')) return fail(reply, 'Troppo lontano dalla Retaia');
+        if (levelOf(p) < next.lv) return fail(reply, `La ${next.name} si regge dal livello ${next.lv}`);
+        const miss = costMissing(p, next.cost);
+        if (miss.length) return fail(reply, 'Ti manca ancora qualcosa: ' + miss.map(([k, n]) => `${n} ${k === 'coins' ? 'monete' : MATS[k].name}`).join(', '));
+        payCost(p, next.cost);
+        p.rod = (p.rod || 0) + 1;
+        const xp = grantXp(p, 40 * p.rod);
+        save(p); sendMe(me);
+        reply({ ok: true, rod: p.rod, xp });
+    });
+    // --- IL BARATTO DEL MERCANTE SENZA OMBRA ---
+    const tradeDay = (p) => { const c = dayc(p); c.tr ||= {}; c.tonic ||= 0; c.items ||= 0; return c; };
+    on('trade:get', (d, reply) => {
+        const c = tradeDay(me.p), day = today();
+        reply({ ok: true, trades: tradesOfDay(day).map(id => ({ id, used: c.tr[id] || 0 })), item: itemOfDay(day), itemTaken: !!c.tr._item,
+            tonicLeft: Math.max(0, TONIC_DAILY - c.tonic), itemsLeft: Math.max(0, ITEM_TRADES_DAILY - c.items) });
+    });
+    on('trade:do', (d, reply) => {
+        const p = me.p, c = tradeDay(p), day = today(), id = String(d.id);
+        if (!nearNpcId('mercante')) return fail(reply, 'Il Mercante è al Bazar');
+        if (id === '_item') {
+            const O = itemOfDay(day);
+            if (!O) return fail(reply, 'Oggi il Mercante non ha niente da darti');
+            if (c.tr._item) return fail(reply, "L'oggetto del giorno l'hai già preso");
+            if (levelOf(p) < O.lv) return fail(reply, `Torna al livello ${O.lv}`);
+            if (p.inventory.length >= 80) return fail(reply, 'Inventario pieno');
+            if (costMissing(p, O.give).length) return fail(reply, 'Non hai abbastanza da dargli in cambio');
+            payCost(p, O.give);
+            c.tr._item = 1;
+            p.inventory.push({ uid: uid(), kind: 'item', itemId: O.itemId });
+            save(p); sendMe(me);
+            return reply({ ok: true, itemId: O.itemId });
+        }
+        const T = TRADES[id];
+        if (!T || !tradesOfDay(day).includes(id)) return fail(reply, "Oggi questo baratto non c'è");
+        if ((c.tr[id] || 0) >= T.max) return fail(reply, 'Per oggi basta così: torna domani');
+        if (T.get.xp && c.tonic >= TONIC_DAILY) return fail(reply, `Al massimo ${TONIC_DAILY} tonici al giorno, o ti si annebbia la vista`);
+        if (costMissing(p, T.give).length) return fail(reply, 'Non hai abbastanza da dargli in cambio');
+        payCost(p, T.give);
+        c.tr[id] = (c.tr[id] || 0) + 1;
+        const out = { ok: true, id, xp: 0, got: {} };
+        for (const [k, n] of Object.entries(T.get)) {
+            if (k === 'xp') { c.tonic++; out.xp = grantXp(p, tonicXp(n, levelOf(p))); }
+            else out.got[k] = addMat(p, k, n);
+        }
+        save(p); sendMe(me);
+        reply(out);
+    });
+    // dai un oggetto al Mercante: monete, e le prime volte del giorno anche esperienza
+    on('trade:item', (d, reply) => {
+        const p = me.p, c = tradeDay(p);
+        if (!nearNpcId('mercante')) return fail(reply, 'Il Mercante è al Bazar');
+        const i = p.inventory.findIndex(x => x.uid === d.uid);
+        if (i < 0) return fail(reply, 'Oggetto non trovato');
+        if (Object.values(p.equipment).includes(d.uid)) return fail(reply, 'Prima toglilo di dosso');
+        const it = p.inventory[i];
+        const value = it.kind === 'weapon' ? weaponCost(it.spec) : ITEMS[it.itemId]?.price || 0;
+        const v = itemTradeValue(value, levelOf(p)), withXp = c.items < ITEM_TRADES_DAILY;
+        p.inventory.splice(i, 1);
+        p.coins += v.coins;
+        const xp = withXp ? grantXp(p, v.xp) : 0;
+        if (withXp) c.items++;
+        save(p); sendMe(me);
+        reply({ ok: true, coins: v.coins, xp });
     });
 
     // =================================================================

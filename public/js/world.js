@@ -13,6 +13,7 @@ import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.j
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
 import { addSkyExtras, addSnowCover, SNOW_COVER } from './sky.js';
 import { rivaHeight, rivaShore, nearRiva } from './shared/riva.js';
+import { buildBazar, buildBarca } from './bancarelle.js';
 import { Relief, tileHeights, roughRock } from './realism.js';
 import { Grass } from './grass.js';
 import { buildWeapon } from './character.js';
@@ -1040,29 +1041,9 @@ export class World {
         sm.position.set(SW / 2 - ST - 0.02, 1.2, -0.4); sm.rotation.y = -Math.PI / 2; sg.add(sm);
         const smf = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.85, 0.95), this.matWood); smf.position.set(SW / 2 - ST - 0.05, 1.2, -0.4); sg.add(smf);
 
-        // Bazar: bancarella aperta
-        const B = S.bazar;
-        const bz = new THREE.Group(); bz.position.set(B.x, B.h, B.z); bz.rotation.y = B.ry;
-        for (const [px, pz] of [[-2.6, -1.6], [2.6, -1.6], [-2.6, 1.6], [2.6, 1.6]]) {
-            const p = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.8, 12), this.matWood);
-            p.position.set(px, 1.4, pz); p.castShadow = true; bz.add(p);
-        }
-        const awn = canvasTex(256, 128, (g) => { for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#e8d6a8' : '#6b1a3a'; g.fillRect(i * 32, 0, 32, 128); } });
-        const awning = new THREE.Mesh(new THREE.PlaneGeometry(6, 4, 1, 4), new THREE.MeshStandardMaterial({ map: awn, side: THREE.DoubleSide, roughness: 0.9 }));
-        awning.rotation.x = -Math.PI / 2 + 0.25; awning.position.y = 2.9; awning.castShadow = true; bz.add(awning);
-        const table = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.12, 1.2), this.matWood); table.position.set(0, 0.95, 1.1); bz.add(table);
-        for (let i = 0; i < 5; i++) {
-            const crate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.4), new THREE.MeshStandardMaterial({ color: ['#c99a2e', '#7a4cff', '#2bdc6a', '#ff5a1f', '#cfe4ff'][i], roughness: 0.6, emissive: ['#3a2a00', '#20104a', '#003a10', '#3a1000', '#203040'][i] }));
-            crate.position.set(-1.8 + i * 0.9, 1.21, 1.1); bz.add(crate);
-        }
-        for (let i = 0; i < 3; i++) {
-            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.9, 20), this.matWood);
-            barrel.position.set(-2 + i * 0.8, 0.45, -1.1); bz.add(barrel);
-        }
-        this.scene.add(bz);
-        this.addBox(B.x, B.z, 5.6, 3.6, B.h - 1, B.h + 1.1, B.ry);
-        this.addTorch(B.x + Math.sin(B.ry) * 1.69 + Math.cos(B.ry) * 2.6, B.h + 2.5, B.z + Math.cos(B.ry) * 1.69 - Math.sin(B.ry) * 2.6, true, 0.9, { wall: B.ry });
-        this.interactables.push({ id: 'bazar', x: B.x + Math.sin(B.ry) * 3.6, z: B.z + Math.cos(B.ry) * 3.6, r: 3.8, label: 'Bazar: compra e vendi tra giocatori' });
+        // Bazar del Ratto e Barca Rovesciata della Retaia (bancarelle.js)
+        buildBazar(this);
+        buildBarca(this);
         // lanterne lungo il sentiero
         const P = WORLD.PATH;
         for (let i = 0; i < P.length - 1; i++) {
@@ -1583,6 +1564,7 @@ export class World {
             { x: WORLD.SHOPS.forgia.x, z: WORLD.SHOPS.forgia.z, ic: 'anvil', label: 'Forgia' },
             { x: WORLD.SHOPS.sartoria.x, z: WORLD.SHOPS.sartoria.z, ic: 'needle', label: 'Sartoria' },
             { x: WORLD.SHOPS.bazar.x, z: WORLD.SHOPS.bazar.z, ic: 'scales', label: 'Bazar' },
+            { x: -13, z: 89, ic: 'rod', label: 'Barca Rovesciata' },
             { x: WORLD.PLAZA.x, z: WORLD.PLAZA.z, ic: 'trophy', label: 'Albo dei Campioni' },
             { x: WORLD.ARENA.x, z: WORLD.ARENA.z, ic: 'swords', label: 'Arena' },
             { x: WORLD.CEMETERY.x, z: WORLD.CEMETERY.z, ic: 'skull', label: 'Cimitero' },

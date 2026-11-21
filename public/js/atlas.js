@@ -12,6 +12,7 @@ import { STONES, FISH_SPOT, BOUNTY_BOARD, TOLL, FOUNTAIN, GRAVES } from './share
 import { drawIcon, iconSVG } from './icons.js';
 import { h, $ } from './util.js';
 import { clockText } from './sky.js';
+import { BARCA } from './shared/mare.js';
 
 const BASE = 2048;                                   // lato della carta disegnata, in pixel
 const { MIN_X, MAX_X, MIN_Z } = WORLD;
@@ -42,6 +43,7 @@ const PLACES = [
     { id: 'pietre', cat: 'luoghi', ic: 'runestone', p: 1, name: 'Cerchio di Pietre', x: STONES.x, z: STONES.z, desc: 'Frammenti di Runa da raccogliere e il Canto delle Pietre: ascolta la sequenza e ripetila.' },
     { id: 'molo', cat: 'luoghi', ic: 'rod', p: 1, name: 'Il Molo', x: FISH_SPOT.x, z: FISH_SPOT.z - 3, desc: 'Qui approdano i viandanti. In fondo alle assi si lancia la lenza: di notte abboccano i pesci della nebbia.' },
     { id: 'pedaggio', cat: 'luoghi', ic: 'ecto', p: 2, name: 'Pedaggio dello Spettro', x: TOLL.spot.x, z: TOLL.spot.z, desc: 'Sul Ponte dei Sospiri lo Spettro chiede il pedaggio: un duello a colpi di insulti e risposte.' },
+    { id: 'barca', cat: 'luoghi', ic: 'rod', p: 2, name: 'La Barca Rovesciata', x: BARCA.x, z: BARCA.z, desc: 'La casa della Retaia, sulla spiaggia accanto al Molo: una barca girata a pancia in su. Lì si migliora la canna da pesca, con perle e Corallo Nero.' },
     { id: 'relitto', cat: 'luoghi', ic: 'wave', p: 1, name: 'La Secca del Relitto', x: WORLD.RELITTO.x, z: WORLD.RELITTO.z, desc: 'Libro II. Un banco di sabbia a sud-ovest, dove si è arenata la vecchia barca del Traghettatore. Ci si arriva solo in barca.' },
     { id: 'faro', cat: 'luoghi', ic: 'lantern', p: 1, name: 'Il Faro Spento', x: WORLD.FARO.x, z: WORLD.FARO.z, desc: 'Libro II. Uno scoglio a nord-est: ci porta la barca del Traghettatore. La Guardiana veglia una porta chiusa da trecento anni.' },
 ];
