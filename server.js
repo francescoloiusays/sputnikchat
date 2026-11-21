@@ -29,6 +29,7 @@ import { STORY, STORY_END, STORY_SPOTS, WAYS, newStory, chapterReady, nomeVero }
 import { L2_CHAPTERS, L2_SPOTS, newL2, fixL2, l2Step } from './public/js/shared/libro2.js';
 import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENCH_LV, TRAIN, petXpToNext, petMaxHealth, petWear, petDuel, petFish, petTired, healCost, newPet } from './public/js/shared/pet.js';
 import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
+import { islandNight } from './public/js/shared/clock.js';
 import { ROB_CHAPTERS, ROB_SPOTS, ROB_LEVEL, newRob, robStep } from './public/js/shared/rob.js';
 import { RESERVE_WEAPON, RENTALS, weaponDurability, weaponWearLeft, repairCost } from './public/js/shared/catalog.js';
 import { RODS, rodOf, CORAL_CHANCE, TRADES, tradesOfDay, itemOfDay, tonicXp, itemTradeValue, TONIC_DAILY, ITEM_TRADES_DAILY } from './public/js/shared/mare.js';
@@ -667,8 +668,6 @@ function endDuel(d, winner, reason) {
         result.wear[s] = wearWeapon(P[s], item, d.sim.f[s].used, d.sim.f[s].broken);
     }
     // lo SputnikPet ha combattuto anche lui
-    result.pet = { a: null, b: null };
-    if (fought) for (const s of ['a', 'b']) result.pet[s] = petGain(P[s], winner === s ? 30 : 15, 'duel');
     // noleggi dello spogliatoio: chi vince si riprende il suo e incassa quello dell'altro; pareggio = rimborso a tutti e due
     result.rent = { a: 0, b: 0 };
     if (d.rent.a || d.rent.b) {
@@ -679,6 +678,9 @@ function endDuel(d, winner, reason) {
     }
     // niente esperienza per i duelli lampo (meno di 20 secondi di combattimento)
     const fought = d.startedAt && Date.now() - d.startedAt > 20000;
+    // lo SputnikPet ha combattuto anche lui
+    result.pet = { a: null, b: null };
+    if (fought) for (const s of ['a', 'b']) result.pet[s] = petGain(P[s], winner === s ? 30 : 15, 'duel');
     if (fought) {
         if (winner) {
             const loser = winner === 'a' ? 'b' : 'a';
@@ -762,20 +764,27 @@ setInterval(() => {
         acc -= TICK_MS;
         for (const d of duels.values()) {
             if (d.phase !== 'fight') continue;
-            const ev = stepDuel(d.sim, d.inputs, FIGHT.DT);
-            d.inputs.a.p = 0; d.inputs.b.p = 0;
-            if (ev.length) d.evBuf.push(...ev);
-            d.tick++;
-            const over = d.sim.phase === 'over';
-            if (d.tick % 2 === 0 || over) { io.to('duel:' + d.id).emit('duel:state', snapshotDuel(d.sim, d.evBuf)); d.evBuf = []; }
-            if (over) endDuel(d, d.sim.winner, 'ko');
-            else if (Date.now() - d.startedAt > 8 * 60 * 1000) {
-                const A = d.sim.f.a, B = d.sim.f.b;
-                endDuel(d, A.rw !== B.rw ? (A.rw > B.rw ? 'a' : 'b') : null, 'tempo');
+            try { stepOne(d); } catch (err) {
+                console.error('[duello] errore, lo annullo:', d.id, err);
+                try { cancelDuel(d, 'si è inceppato qualcosa nell\'Arena: poste restituite'); } catch (e2) { console.error('[duello] anche l\'annullo è fallito:', e2); d.phase = 'done'; duels.delete(d.id); }
             }
         }
     }
 }, TICK_MS);
+// un passo di un duello: simula, manda lo stato, e lo chiude se è finito
+function stepOne(d) {
+    const ev = stepDuel(d.sim, d.inputs, FIGHT.DT);
+    d.inputs.a.p = 0; d.inputs.b.p = 0;
+    if (ev.length) d.evBuf.push(...ev);
+    d.tick++;
+    const over = d.sim.phase === 'over';
+    if (d.tick % 2 === 0 || over) { io.to('duel:' + d.id).emit('duel:state', snapshotDuel(d.sim, d.evBuf)); d.evBuf = []; }
+    if (over) endDuel(d, d.sim.winner, 'ko');
+    else if (Date.now() - d.startedAt > 8 * 60 * 1000) {
+        const A = d.sim.f.a, B = d.sim.f.b;
+        endDuel(d, A.rw !== B.rw ? (A.rw > B.rw ? 'a' : 'b') : null, 'tempo');
+    }
+}
 
 // =====================================================================
 //  CONNESSIONI
@@ -1407,7 +1416,8 @@ io.on('connection', (socket) => {
             const P = ROB_SPOTS[k];
             if (!P) return "Non c'è niente qui";
             if (Math.hypot(me.pos[0] - P.x, me.pos[2] - P.z) > (P.r || 3) + 1.5) return 'Troppo lontano';
-            if (P.night && !isNight() && process.env.SPUTNIK_NOTTE !== '1') return 'Rob ha detto stanotte: di giorno la nebbia sta sotto e non si vede niente';
+            // vale la notte vera e anche la sera dell'isola (il suo giorno dura 24 minuti)
+            if (P.night && !isNight() && !islandNight() && process.env.SPUTNIK_NOTTE !== '1') return "Rob ha detto stanotte: aspetta che sull'isola si faccia sera";
             return null;
         };
         const advance = () => {
