@@ -86,7 +86,7 @@ function resetFighter(f, x) {
     Object.assign(f, {
         x, y: 0, vx: 0, vy: 0, facing: x < 0 ? 1 : -1, hp: f.maxHp, st: 'idle', t: 0, mv: null, mt: 0,
         hit: false, spFired: false, grounded: true, jumps: f.maxJumps, inv: 0, burn: 0, slow: 0, poison: 0, dirty: 0,
-        dashCd: 0, drop: 0, combo: 0, comboT: 0, armor: false,
+        dashCd: 0, drop: 0, combo: 0, comboT: 0, armor: false, clashed: false, spAt: null,
     });
 }
 
@@ -97,6 +97,40 @@ function rand(S) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
+
+// =====================================================================
+//  LO SCONTRO DELLE SUPER
+//  Se le due SUPER partono quasi insieme (o i loro colpi si toccano in aria)
+//  si scontrano: succede qualcosa che dipende dai due semi.
+//  Le coppie senza un effetto loro seguono la Ruota: il seme forte passa.
+// =====================================================================
+export const CLASH_WINDOW = 0.45;   // secondi: due SUPER così vicine si scontrano
+export const CLASHES = {
+    'fuoco+ghiaccio': { name: 'Nube di Vapore', desc: 'Fuoco e Ghiaccio si annullano in una nube bollente: tutti e due restano storditi, e la barra torna un po\' indietro.' },
+    'fuoco+tempesta': { name: 'Tempesta di Fuoco', desc: 'Il fulmine incendia la fiamma: esplode tutto, e tutti e due volano via.' },
+    'fuoco+palude': { name: 'Palude in Fiamme', desc: 'Il miasma prende fuoco: in mezzo all\'arena resta una pozza di lava.' },
+    'fuoco+pietra': { name: 'Colata di Lava', desc: 'La roccia si scioglie: lava al centro, che brucia chiunque la tocchi.' },
+    'fango+fuoco': { name: 'Mattoni Cotti', desc: 'Il fango cuoce in un istante: tutti e due restano induriti come terracotta.' },
+    'ghiaccio+tempesta': { name: 'Grandinata', desc: 'Il fulmine spezza il gelo in grandine: colpisce tutti e due e li rallenta.' },
+    'ghiaccio+palude': { name: 'Palude Ghiacciata', desc: 'L\'acqua marcia gela: il terreno scivola sotto i piedi di tutti e due.' },
+    'ghiaccio+spettro': { name: 'Specchio di Brina', desc: 'Il gelo fa da specchio allo spettro: i due duellanti si scambiano di posto.' },
+    'palude+tempesta': { name: 'Fulmine nell\'Acqua', desc: 'Il fulmine corre nell\'acqua della palude: tutti e due avvelenati e scossi.' },
+    'pietra+tempesta': { name: 'Schegge Tonanti', desc: 'Il fulmine spacca la roccia: le schegge volano contro tutti e due.' },
+    'fango+pietra': { name: 'Sabbie Mobili', desc: 'Fango e sassi diventano sabbie mobili: lenti e infangati, niente SUPER per un po\'.' },
+    'fango+palude': { name: 'Melma Antica', desc: 'Fango e palude si riconoscono: la melma avvolge tutti e due.' },
+    'pietra+spettro': { name: 'Eco nella Roccia', desc: 'Lo spettro si infila nella pietra: i due si scambiano la barra della SUPER.' },
+    'palude+spettro': { name: 'Fuochi Fatui', desc: 'Il miasma sveglia i fuochi fatui: curano un poco tutti e due, e li accecano.' },
+    'fango+spettro': { name: 'Fantasma Infangato', desc: 'Lo spettro si sporca di fango: niente SUPER per tutti e due, per un po\'.' },
+    'spettro+tempesta': { name: 'Tuono Fantasma', desc: 'Il fulmine passa attraverso lo spettro e torna indietro: scossa per tutti e due.' },
+    'fango+ghiaccio': { name: 'Fango Gelato', desc: 'Il fango gela a metà: tutti e due bloccati per un attimo.' },
+    'fango+tempesta': { name: 'Pioggia di Fango', desc: 'Il vento solleva il fango e lo rovescia su tutti e due.' },
+    'ghiaccio+pietra': { name: 'Valanga', desc: 'Pietra e gelo franano insieme: tutti e due travolti.' },
+    'fuoco+spettro': { name: 'Fiamma Fatua', desc: 'Lo spettro si accende di fuoco verde: brucia tutti e due, piano.' },
+    'palude+pietra': { name: 'Torbiera', desc: 'La palude inghiotte i sassi: rallenta tutti e due.' },
+};
+export const SAME_CLASH = { name: 'Risonanza', desc: 'Due SUPER dello stesso seme si fanno eco: l\'urto respinge tutti e due.' };
+export const clashKey = (a, b) => [a, b].sort().join('+');
+export function clashOf(a, b) { return a === b ? SAME_CLASH : CLASHES[clashKey(a, b)] || null; }
 
 export function createDuel(setupA, setupB, seed = (Math.random() * 2 ** 31) | 0) {
     const S = {
@@ -236,7 +270,9 @@ function control(S, f, o, inp, dt, ev) {
             return;
         }
         f.meter -= 50; startAttack(f, 'sp');
+        f.spAt = S.time; f.clashed = false;
         ev.push({ t: 'sp', s: f.side, k: f.special, pure: f.tr.puro ? 1 : 0 });
+        if (o.st === 'atk' && o.mv === 'sp' && o.spAt != null && S.time - o.spAt <= CLASH_WINDOW && !o.clashed && S.phase === 'fight') superClash(S, f, o, ev);
         return;
     }
     if (pr & IN.HEAVY) { startAttack(f, f.grounded ? 'heavy' : 'air'); return; }
@@ -267,6 +303,47 @@ function control(S, f, o, inp, dt, ev) {
     const maxV = 7.2 * f.spd * slow;
     f.vx = approach(f.vx, dir * maxV, (f.grounded ? 60 : 32) * dt);
     f.st = f.grounded ? (dir ? 'run' : 'idle') : 'air';
+}
+
+function superClash(S, f, o, ev) {
+    f.clashed = o.clashed = true;
+    const x = (f.x + o.x) / 2, y = Math.max(f.y, o.y) + 1.2;
+    // le due SUPER si fermano: niente proiettili, niente zone, niente fulmini di nessuno dei due
+    for (const g of [f, o]) { if (g.st === 'atk' && g.mv === 'sp') { g.spFired = true; endAttack(g); } }
+    S.proj = S.proj.filter(p => p.k === 'echo');
+    S.zones = S.zones.filter(z => z.o === 'n');
+    S.bolts = [];
+    const both = [f, o], ea = f.element, eb = o.element, key = ea === eb ? 'same' : clashKey(ea, eb);
+    const away = (g, vx, vy) => { g.vx = (g.x >= x ? 1 : -1) * vx; g.vy = vy; g.grounded = false; g.st = 'stun'; g.t = Math.max(g.t || 0, 0.45); g.mv = null; };
+    const stun = (g, t) => { g.st = 'stun'; g.t = t; g.mv = null; };
+    const dmg = (g, n) => { hurt(S, g, n, ev); ev.push({ t: 'hit', s: g.side, d: n, x: g.x, y: g.y + 1.2, h: 1 }); };
+    const out = { t: 'clash', k: key, ea, eb, x, y, win: null };
+    switch (key) {
+        case 'fuoco+ghiaccio': both.forEach(g => { stun(g, 0.8); g.meter = Math.min(100, g.meter + 20); }); break;
+        case 'fuoco+tempesta': both.forEach(g => { dmg(g, 10); away(g, 14, 9); }); break;
+        case 'fuoco+palude': case 'fuoco+pietra': S.zones.push({ k: 'lava', o: 'n', x, y: 0, w: 3.6, h: 1.2, life: 3.5, dps: 4 }); both.forEach(g => away(g, 8, 6)); break;
+        case 'fango+fuoco': case 'fango+ghiaccio': both.forEach(g => { g.st = 'frozen'; g.t = key === 'fango+fuoco' ? 0.9 : 0.7; g.vx = 0; g.mv = null; }); break;
+        case 'ghiaccio+tempesta': both.forEach(g => { dmg(g, 8); g.slow = Math.max(g.slow, 2.5); }); break;
+        case 'ghiaccio+palude': case 'palude+pietra': both.forEach(g => { g.slow = Math.max(g.slow, 3.5); }); break;
+        case 'ghiaccio+spettro': { const fx = f.x, fy = f.y; f.x = o.x; f.y = o.y; o.x = fx; o.y = fy; both.forEach(g => { g.inv = Math.max(g.inv, 0.4); g.facing = -g.facing; }); break; }
+        case 'palude+tempesta': both.forEach(g => { if (!g.cleanse) g.poison = Math.max(g.poison, 3); dmg(g, 5); stun(g, 0.4); }); break;
+        case 'spettro+tempesta': both.forEach(g => { dmg(g, 9); stun(g, 0.4); }); break;
+        case 'pietra+tempesta': for (const g of both) { const from = g === f ? o : f; S.proj.push({ k: 'rock', o: from.side, x, y, vx: (g.x >= x ? 1 : -1) * 12, vy: 2, g: 6, life: 1.2, r: 0.5, dmg: 9, kb: 6, grow: 5 }); } break;
+        case 'fango+pietra': case 'fango+palude': case 'fango+tempesta': case 'fango+spettro':
+            both.forEach(g => { g.dirty = Math.max(g.dirty, key === 'fango+spettro' ? 5 : 3.5); g.slow = Math.max(g.slow, 1.5); if (key === 'fango+tempesta') dmg(g, 5); }); break;
+        case 'pietra+spettro': { const m = f.meter; f.meter = o.meter; o.meter = m; both.forEach(g => stun(g, 0.3)); break; }
+        case 'palude+spettro': both.forEach(g => { g.hp = Math.min(g.maxHp, g.hp + 8); ev.push({ t: 'heal', s: g.side, d: 8 }); stun(g, 0.5); }); break;
+        case 'ghiaccio+pietra': both.forEach(g => { dmg(g, 9); away(g, 10, 4); }); break;
+        case 'fuoco+spettro': both.forEach(g => { g.burn = Math.max(g.burn, 2.5); }); break;
+        case 'same': both.forEach(g => { dmg(g, 8); away(g, 13, 7); }); break;
+        default: {
+            // nessun effetto loro: vince il seme forte (Ruota dei Semi), l'altro resta stordito
+            const W = f.vs.rel === 'up' ? f : o.vs.rel === 'up' ? o : null;
+            if (W) { const L = W === f ? o : f; out.win = W.side; stun(L, 0.7); dmg(L, 10); W.meter = Math.min(100, W.meter + 25); }
+            else both.forEach(g => away(g, 9, 5));
+        }
+    }
+    ev.push(out);
 }
 
 function startAttack(f, mv) {
@@ -394,6 +471,10 @@ function updateSpecial(S, f, o, ev) {
 }
 
 function updateProjectiles(S, dt, ev) {
+    if (S.phase === 'fight' && !S.f.a.clashed && !S.f.b.clashed) {
+        const pa = S.proj.find(p => p.o === 'a' && p.k !== 'echo'), pb = pa && S.proj.find(p => p.o === 'b' && p.k !== 'echo' && Math.abs(p.x - pa.x) < p.r + pa.r && Math.abs(p.y - pa.y) < p.r + pa.r);
+        if (pa && pb) superClash(S, S.f.a, S.f.b, ev);
+    }
     for (let i = S.proj.length - 1; i >= 0; i--) {
         const p = S.proj[i];
         p.vy -= p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
@@ -413,11 +494,12 @@ function updateProjectiles(S, dt, ev) {
     for (let i = S.zones.length - 1; i >= 0; i--) {
         const z = S.zones[i];
         z.life -= dt;
-        const tgt = S.f[other(z.o)];
         const box = { x1: z.x - z.w / 2, x2: z.x + z.w / 2, y1: z.y - 0.3, y2: z.y + z.h };
-        if (tgt.st !== 'ko' && overlap(box, hurtbox(tgt))) {
-            if (z.k === 'lava') tgt.burn = Math.max(tgt.burn, 0.3);
-            else if (!tgt.cleanse) tgt.poison = 0.25;
+        for (const tgt of z.o === 'n' ? [S.f.a, S.f.b] : [S.f[other(z.o)]]) {
+            if (tgt.st !== 'ko' && overlap(box, hurtbox(tgt))) {
+                if (z.k === 'lava') tgt.burn = Math.max(tgt.burn, 0.3);
+                else if (!tgt.cleanse) tgt.poison = 0.25;
+            }
         }
         if (z.life <= 0) S.zones.splice(i, 1);
     }

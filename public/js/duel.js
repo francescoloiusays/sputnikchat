@@ -9,7 +9,7 @@ import { makeSky, makeWaterMaterial, glowTexture } from './world.js';
 import { FireSet, Gallery } from './decor.js';
 import { buildColosseum } from './arena.js';
 import { applySky, Precipitation } from './sky.js';
-import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration, moveStart } from './shared/fight.js';
+import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration, moveStart, clashOf } from './shared/fight.js';
 import { ELEMENTS, ECONOMY, weaponStats, seedRelation, MATS, RESERVE_WEAPON, RENTALS, weaponLevel, weaponDurability, weaponWearLeft } from './shared/catalog.js';
 
 // Come si guardano i due semi sulla Ruota (riga sotto le barre e nella schermata delle scommesse)
@@ -728,6 +728,20 @@ export class DuelView {
             case 'inf': this.burst(e.x, e.y, ELEMENTS[e.e]?.glow || '#fff', e.k > 1 ? 18 : 10, 4, 0.32); break;
             case 'heal': { const p = fpos(e.s); this.burst(p.x, p.y + 1, '#5aff5a', 14, 3, 0.4); this.floatText(`+${e.d}`, p.x, p.y + 1.5, '#7aff7a'); break; }
             case 'quake': this.shake = 0.8; break;
+            // due SUPER che si scontrano: il nome dello scontro, i due colori che si mescolano, e la spiegazione
+            case 'clash': {
+                const C = clashOf(e.ea, e.eb), ca = ELEMENTS[e.ea]?.color || '#fff', cb = ELEMENTS[e.eb]?.color || '#fff';
+                this.announce((C?.name || 'Scontro di SUPER').toUpperCase(), '');
+                this.flash(ca); setTimeout(() => this.flash(cb), 160);
+                this.burst(e.x, e.y, ca, 34, 9, 0.7, -1); this.burst(e.x, e.y, cb, 34, 9, 0.7, 1);
+                this.ring(e.x, 0.05, ca); setTimeout(() => this.ring(e.x, 0.05, cb), 140);
+                this.floatText('SCONTRO DI SUPER!', e.x, e.y + 1.2, '#ffe9a8', 1.4);
+                if (e.win) this.floatText(`vince ${this.info[e.win].name}`, e.x, e.y + 0.4, '#ffd23a', 1.1);
+                A.play('thunder'); setTimeout(() => A.play('special'), 180);
+                this.shake = Math.max(this.shake, 0.7); this.slowT = Math.max(this.slowT, 0.6); this.hitstop = Math.max(this.hitstop, 0.15); this.fovPunch = -4;
+                if (C) toast(h('div', {}, h('b', {}, C.name), h('div', {}, C.desc)), { icon: 'sparkles', duration: 5000 });
+                break;
+            }
             // l'arma si spezza: schegge, e in mano resta la riserva
             case 'break': {
                 this.burst(e.x, e.y, '#c8c0b0', 26, 7, 0.5); this.floatText('ARMA SPEZZATA!', e.x, e.y + 0.4, '#ff8a5a', 1.3);
