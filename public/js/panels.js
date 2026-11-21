@@ -19,6 +19,7 @@ import { storyBox, bookContent, storyCtx, npcLine } from './story-ui.js';
 import { l2Box } from './libro2-ui.js';
 import { l2At, L2AT } from './shared/libro2.js';
 import { RODS, TRADES, tonicXp, itemTradeValue } from './shared/mare.js';
+import { weaponDurability, weaponWearLeft, repairCost, RESERVE_WEAPON } from './shared/catalog.js';
 import { STORY_SPOTS } from './shared/story.js';
 import { ritratto } from './story-text.js';
 
@@ -183,6 +184,7 @@ export class Panels {
             detail = h('div', { class: 'detail' },
                 h('div', { class: 'd-name r-' + r.id }, inf.name),
                 h('div', { class: 'd-type' }, `${SLOT_NAMES[inf.slot]} · ${r.name} · livello ${req}`),
+                sel.kind === 'weapon' ? h('div', { class: 'd-wear' }, h('span', { class: 'muted small' }, sel.broken ? 'Rotta: falla aggiustare da Mastro Brace' : `Usura: ${weaponWearLeft(sel)} colpi su ${weaponDurability(sel.spec)}`), this.wearBar(sel)) : null,
                 stats, inf.desc ? h('div', { class: 'd-flavor' }, inf.desc) : null,
                 locked ? h('p', { class: 'req' }, `Lo potrai usare dal livello ${req}.`) : sel.legacy && req > L ? h('p', { class: 'muted small' }, 'Comprato prima dei livelli: puoi usarlo lo stesso.') : null,
                 h('div', { class: 'btn-row', style: { justifyContent: 'space-between', marginTop: '10px' } },
@@ -793,8 +795,9 @@ export class Panels {
 
     // --- FORGIA ---
     p_forgia() {
-        const [ftab, fbar] = this.tabBar('forge', [['crea', "Crea un'arma", 'anvil'], ['castoni', 'Castoni e rune', 'runestone']]);
+        const [ftab, fbar] = this.tabBar('forge', [['crea', "Crea un'arma", 'anvil'], ['castoni', 'Castoni e rune', 'runestone'], ['ripara', 'Ripara le armi', 'hammer']]);
         if (ftab === 'castoni') return this.castoniView(fbar);
+        if (ftab === 'ripara') return this.repairView(fbar);
         const me = this.app.me;
         const spec = this.forgeSpec ||= { type: 'spada', material: 'ferro', handle: 'cuoio', gem: 'nessuna', name: '' };
         const st = weaponStats(spec), cost = weaponCost(spec);
@@ -879,6 +882,34 @@ export class Panels {
                         : btn('Compra', () => this.act('market:buy', { lid: l.lid }, `Affare fatto: ${itemInfo(l.entry).name}`).then(() => this.render()), { cls: 'btn-sm btn-primary', disabled: me.coins < l.price })),
                     `${SLOT_NAMES[itemInfo(l.entry).slot]} · venduto da ${l.sellerName}`);
             })) : h('div', { class: 'empty' }, tab === 'miei' ? 'Non hai merce sul banco.' : 'Il banco è vuoto. Sii il primo a vendere qualcosa!'),
+            h('div', { class: 'btn-row end', style: { marginTop: '10px' } }, this.purse())));
+    }
+
+    // --- MASTRO BRACE AGGIUSTA LE ARMI ---
+    wearBar(e) {
+        const max = weaponDurability(e.spec), left = weaponWearLeft(e);
+        return h('div', { class: 'wear-bar' + (e.broken ? ' broken' : ''), title: e.broken ? 'Rotta' : `${left} colpi su ${max}` }, h('i', { style: { width: `${e.broken ? 100 : Math.round(left / max * 100)}%` } }));
+    }
+    repairView(bar) {
+        const app = this.app, me = app.me, eq = me.equipment || {};
+        const ws = (me.inventory || []).filter(e => e.kind === 'weapon').sort((a, b) => (b.broken ? 1 : 0) - (a.broken ? 1 : 0) || (b.wear || 0) - (a.wear || 0));
+        this.set('anvil', 'La Forgia di Vulcano', bar, h('div', { class: 'parchment' },
+            lore('«Le armi si stancano, come chi le porta. Ogni colpo che dai, un poco se lo tengono. Quando non ce la fanno più, si spezzano: portamele prima.»'),
+            h('p', { class: 'muted small' }, `Più un'arma è di livello alto e incantata, più colpi regge. In duello, quando si spezza, combatti con la riserva: se non ne scegli una, è il ${RESERVE_WEAPON.name}.`),
+            ws.length ? ws.map(e => {
+                const inf = itemInfo(e), rt = tierOf(e), cost = repairCost(e.spec, e.wear), left = weaponWearLeft(e), max = weaponDurability(e.spec);
+                const isMain = eq.weapon === e.uid, isRes = me.reserve === e.uid;
+                return h('div', { class: 'ledger-row trade-row' }, this.slot({ ic: itemIconName(e), rar: rt.id, eq: isMain }),
+                    h('div', { class: 'grow' }, h('div', { class: 'nm ink-' + rt.id }, inf.name, isRes ? h('span', { class: 'muted small' }, '  · di riserva') : null),
+                        h('div', { class: 'sub' }, e.broken ? 'ROTTA: inutilizzabile finché non la aggiusti' : `${left} colpi su ${max}`), this.wearBar(e)),
+                    h('div', { class: 'btn-col' },
+                        cost ? [this.costChips(cost), btn(e.broken ? 'Rifalla intera' : 'Aggiusta', async () => {
+                            const r = await this.act('forge:repair', { uid: e.uid }, `${inf.name} è come nuova`);
+                            if (r.ok) app.audio.play('anvil');
+                            this.render();
+                        }, { cls: 'btn-sm btn-primary', ic: 'hammer', disabled: !this.canPay(cost) })] : h('span', { class: 'muted small' }, 'Come nuova'),
+                        !isMain && !e.broken ? btn(isRes ? 'Togli dalla riserva' : 'Usala di riserva', async () => { await this.act('weapon:reserve', { uid: isRes ? null : e.uid }); this.render(); }, { cls: 'btn-sm' }) : null));
+            }) : h('div', { class: 'empty' }, 'Non hai armi da aggiustare.'),
             h('div', { class: 'btn-row end', style: { marginTop: '10px' } }, this.purse())));
     }
 

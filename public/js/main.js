@@ -27,7 +27,7 @@ import { Canto } from './canto.js';
 import { Onda } from './onda.js';
 import { TITLES, KING, MATS as MAT_INFO, GRAVES_LEVEL } from './shared/catalog.js';
 import { INSULTS, TABLETS, NPCS } from './shared/lore.js';
-import { VEGLIA, PHONE_SPOT, FOUNTAIN } from './shared/catalog.js';
+import { VEGLIA, PHONE_SPOT, FOUNTAIN, RESERVE_WEAPON, weaponWearLeft } from './shared/catalog.js';
 import { Environment, Precipitation, applySky, clockText } from './sky.js';
 import { Atlas } from './atlas.js';
 import { Prologue } from './prologue.js';
@@ -743,9 +743,9 @@ class Game {
             if (this.duel?.info.id === u.id) this.duel.updatePool(u.pool, u.spectators);
         });
         N.on('duel:start', (info) => this.enterDuel(info, 'fighter', info.side));
-        N.on('duel:begin', ({ id }) => { if (this.duel?.info.id === id) { this.duel.info.phase = 'fight'; this.duel.onBegin(); } });
+        N.on('duel:begin', ({ id, gear }) => { if (this.duel?.info.id === id) { this.duel.info.phase = 'fight'; this.duel.onBegin(gear); } });
         N.on('duel:state', (s) => this.duel?.pushSnap(s));
-        N.on('duel:end', (r) => { if (this.duel?.info.id === r.id) this.duel.showResult(r); });
+        N.on('duel:end', (r) => { if (this.duel?.info.id === r.id) { this.duel.showResult(r); this.wearNews(r.wear?.[this.duel.side], r.rent?.[this.duel.side]); } });
         N.on('duel:cancel', (c) => { if (this.duel?.info.id === c.id) { toast(`Duello annullato: ${c.reason}`, { kind: 'bad' }); this.exitDuel(); } });
         N.on('bet:result', (b) => {
             if (b.won) { toast(h('div', {}, h('b', {}, 'Scommessa vinta!'), ` Avevi puntato ${b.amount} su ${b.name}: il banco te ne paga ${b.payout}.`), { kind: 'coin', duration: 8000 }); this.audio.play('coin'); }
@@ -771,8 +771,27 @@ class Game {
     }
 
     // --- DUELLI ---
+    // l'arma in mano e quella di riserva, con i colpi che restano
+    weaponLoad() {
+        const me = this.me, inv = me?.inventory || [];
+        const w = inv.find(i => i.uid === me?.equipment?.weapon && i.kind === 'weapon');
+        const r = inv.find(i => i.uid === me?.reserve && i.kind === 'weapon' && !i.broken && i.uid !== w?.uid);
+        const reserve = r?.spec || RESERVE_WEAPON;
+        if (!w || me.offline) return { reserve, dur: null };
+        if (w.broken) return { reserve, dur: null, weapon: reserve };
+        return { reserve, dur: weaponWearLeft(w) };
+    }
+    wearNews(w, rent) {
+        if (w?.broken) toast(h('div', {}, h('b', {}, 'La tua arma si è spezzata'), h('div', {}, 'Portala da Mastro Brace, alla Forgia: finché non è aggiustata combatterai con la riserva.')), { kind: 'bad', icon: 'anvil', duration: 9000 });
+        else if (w && w.left < 40) toast(`La tua arma è consumata: ancora ${w.left} colpi, poi si spezza. Mastro Brace la aggiusta.`, { icon: 'anvil', duration: 7000 });
+        if (rent > 0) toast(`Noleggio dello spogliatoio: +${rent} monete (il tuo, più quello dell'avversario)`, { kind: 'coin', duration: 6000 });
+    }
     myFighterInfo() {
-        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look: this.look(), element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), gearPlus: this.gearPlus(), seals: this.me.sealsOn || [], grade: this.me.grade || 0, cardImage: this.local.cardImage };
+        const W = this.weaponLoad(), look = W.weapon ? { ...this.look(), weapon: W.weapon } : this.look();
+        return { dur: W.dur, reserve: W.reserve, ...this._fighterInfo(look) };
+    }
+    _fighterInfo(look) {
+        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look, element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), gearPlus: this.gearPlus(), seals: this.me.sealsOn || [], grade: this.me.grade || 0, cardImage: this.local.cardImage };
     }
     enterDuel(info, role, side) {
         this.fishing?.stop(true);
@@ -1016,6 +1035,8 @@ class Game {
     }
     async practiceDone(won) {
         if (!this.net.connected || !this.helloDone) return;
+        const F = this.duel?.sim?.f?.[this.duel.side || 'a'];
+        if (F?.dur != null && F.used > 0) this.net.request('weapon:wear', { used: F.used, broken: F.broken }).then(r => r.ok && this.wearNews(r.wear));
         const kind = this.localKind || 'practice';
         if (kind === 'skeleton') return this.foeDone('graves:skeleton', { won });
         if (kind === 'veglia' || kind === 'king') return this.foeDone('veglia:end', { won });

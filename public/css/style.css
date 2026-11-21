@@ -1081,3 +1081,15 @@ details.mix .field { margin-top: 6px; }
 .rod-arrow { display: flex; align-items: center; gap: 6px; color: #6b4c1a; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
 .rod-arrow svg { width: 16px; height: 16px; }
 @media (max-width: 560px) { .rod-stats { grid-template-columns: 1fr; } .btn-col { max-width: 55%; } }
+
+/* --- lo spogliatoio prima del duello --- */
+.locker { flex: 1 1 100%; display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; padding: 10px 12px; border: 1px solid rgba(201, 162, 74, 0.45); border-radius: 8px; background: rgba(20, 10, 30, 0.6); text-align: left; max-width: 560px; margin-left: auto; margin-right: auto; }
+.locker-head { display: flex; align-items: center; gap: 8px; font-family: var(--display, serif); color: #e8c26a; letter-spacing: 0.08em; text-transform: uppercase; font-size: 14px; }
+.locker-head svg { width: 18px; height: 18px; }
+.locker label { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; font-size: 15px; }
+.locker label span { color: #c9b58c; }
+.locker select { width: 100%; min-width: 0; padding: 4px 6px; background: #1a1024; color: #eee4d0; border: 1px solid #5a4428; border-radius: 4px; font: inherit; }
+.locker-note { font-size: 13.5px; color: #b8a8c8; font-style: italic; }
+.wear-bar { height: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.35); overflow: hidden; margin-top: 3px; }
+.wear-bar i { display: block; height: 100%; background: linear-gradient(90deg, #c8501e, #e8c26a 45%, #5fd38a); }
+.wear-bar.broken i { background: #a2261a; }

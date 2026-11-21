@@ -4,13 +4,13 @@
 //  Allenamento: la simulazione gira in locale contro il Fantasma.
 // =====================================================================
 import * as THREE from 'three';
-import { Character } from './character.js';
+import { Character, buildWeapon } from './character.js';
 import { makeSky, makeWaterMaterial, glowTexture } from './world.js';
 import { FireSet, Gallery } from './decor.js';
 import { buildColosseum } from './arena.js';
 import { applySky, Precipitation } from './sky.js';
 import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration, moveStart } from './shared/fight.js';
-import { ELEMENTS, ECONOMY, weaponStats, seedRelation, MATS } from './shared/catalog.js';
+import { ELEMENTS, ECONOMY, weaponStats, seedRelation, MATS, RESERVE_WEAPON, RENTALS, weaponLevel, weaponDurability, weaponWearLeft } from './shared/catalog.js';
 
 // Come si guardano i due semi sulla Ruota (riga sotto le barre e nella schermata delle scommesse)
 const VERB = { fuoco: 'scioglie', ghiaccio: 'gela', palude: 'spacca', pietra: 'spegne', tempesta: 'disperde', spettro: 'soffoca' };
@@ -91,7 +91,7 @@ export class DuelView {
         this.buildHud();
         this.bindInput();
         if (this.role === 'local') {
-            const setup = (x) => ({ id: x.id, name: x.name, element: x.element, weapon: x.look?.weapon, level: x.level || 1, talents: x.talents, gear: x.gear, gearPlus: x.gearPlus, seals: x.seals, boss: x.boss });
+            const setup = (x) => ({ id: x.id, name: x.name, element: x.element, weapon: x.look?.weapon, dur: x.dur, reserve: x.reserve, level: x.level || 1, talents: x.talents, gear: x.gear, gearPlus: x.gearPlus, seals: x.seals, boss: x.boss });
             this.sim = createDuel(setup(info.a), setup(info.b));
             this.bot = createBot(opts.botLevel || 1);
             this.acc = 0;
@@ -234,6 +234,7 @@ export class DuelView {
             } else {
                 bet.append(h('span', { class: 'muted' }, this.info.stake ? `In palio ${this.info.stake} Sputnik Coin a testa: chi vince prende tutto` : 'Il pubblico sta piazzando le sue scommesse...'),
                     h('button', { class: 'btn btn-sm btn-danger', onclick: () => this.forfeit() }, 'Ritirati'));
+                if (this.role === 'fighter') bet.append(this.lockerBox());
             }
             vs.replaceChildren(h('div', { class: 'vs-row' }, card(A, 'a'), h('div', { class: 'vs-x' }, 'VS'), card(B, 'b')), h('div', { class: 'vs-match' }, matchText(A, B)), this.vsCount, this.vsPool, bet);
         }
@@ -311,7 +312,53 @@ export class DuelView {
     }
 
     // --- RETE ---
-    onBegin() { this.hideVS(); this.announce('ROUND 1'); this.app.audio.play('gong'); }
+    onBegin(gear) {
+        this.hideVS(); this.announce('ROUND 1'); this.app.audio.play('gong');
+        for (const s of ['a', 'b']) {
+            if (!gear?.[s]) continue;
+            this.info[s].reserve = gear[s].reserve;
+            this.setWeapon(s, gear[s].weapon);
+        }
+    }
+    setWeapon(s, spec) {
+        const ch = this.fighters[s]?.ch;
+        if (!ch?.weaponMesh) return;
+        const hand = ch.weaponMesh.parent;
+        hand?.remove(ch.weaponMesh);
+        ch.weaponMesh = buildWeapon(spec || null);
+        ch.weaponMesh.rotation.x = Math.PI / 2;
+        hand?.add(ch.weaponMesh);
+    }
+    // --- LO SPOGLIATOIO: prima del duello, con che arma scendere in campo ---
+    lockerBox() {
+        const app = this.app, me = app.me, lv = me.level || 1;
+        const box = h('div', { class: 'locker' });
+        const draw = () => {
+            const inv = (me.inventory || []).filter(i => i.kind === 'weapon');
+            const main = me.equipment?.weapon || '', res = me.reserve || '', rent = this.myRent || '';
+            const label = (i) => {
+                const left = weaponWearLeft(i), max = weaponDurability(i.spec);
+                return `${i.spec.name || 'Arma'}${i.spec.plus ? ' +' + i.spec.plus : ''} · ${i.broken ? 'ROTTA' : `${Math.round(left / max * 100)}%`}`;
+            };
+            const ok = (i) => !i.broken && (i.legacy || weaponLevel(i.spec) <= lv);
+            const sel = (val, opts, onchange) => { const el = h('select', { onchange: (e) => onchange(e.target.value) }, opts.map(([v, t, dis]) => h('option', { value: v, selected: v === val || null, disabled: dis || null }, t))); return el; };
+            const send = async (data) => {
+                const r = await app.net.request('duel:loadout', data);
+                if (!r.ok) { toast(r.msg, { kind: 'bad' }); app.audio.play('error'); }
+                else { this.myRent = r.rent; app.audio.play(data.rent ? 'coin' : 'ui'); }
+                setTimeout(draw, 120);
+            };
+            const mainW = inv.find(i => i.uid === main);
+            box.replaceChildren(
+                h('div', { class: 'locker-head', html: iconSVG('hanger') }, 'Spogliatoio'),
+                h('label', {}, h('span', {}, 'In mano'), sel(rent ? '' : main, [['', rent ? '— arma a noleggio —' : 'A mani nude'], ...inv.map(i => [i.uid, label(i), !ok(i)])], (v) => send({ main: v || null, rent: rent ? null : undefined }))),
+                h('label', {}, h('span', {}, 'Di riserva'), sel(res, [['', `${RESERVE_WEAPON.name} (sempre con te)`], ...inv.filter(i => i.uid !== main).map(i => [i.uid, label(i), !ok(i)])], (v) => send({ reserve: v || null }))),
+                h('label', {}, h('span', {}, 'A noleggio'), sel(rent, [['', 'Niente noleggio'], ...Object.entries(RENTALS).map(([k, R]) => [k, `${R.name} · ${R.price} monete · dal livello ${weaponLevel(R.spec)}`, weaponLevel(R.spec) > lv])], (v) => send({ rent: v || null }))),
+                h('div', { class: 'locker-note' }, mainW?.broken ? 'La tua arma è rotta: combatterai con la riserva.' : rent ? 'Se vinci ti ridanno il noleggio, e prendi anche quello dell\'avversario.' : 'Le armi si consumano a ogni colpo a segno: se si spezzano, si passa alla riserva.'));
+        };
+        draw();
+        return box;
+    }
     pushSnap(s) {
         const now = performance.now();
         this.snaps.push({ t: now, s });
@@ -681,6 +728,20 @@ export class DuelView {
             case 'inf': this.burst(e.x, e.y, ELEMENTS[e.e]?.glow || '#fff', e.k > 1 ? 18 : 10, 4, 0.32); break;
             case 'heal': { const p = fpos(e.s); this.burst(p.x, p.y + 1, '#5aff5a', 14, 3, 0.4); this.floatText(`+${e.d}`, p.x, p.y + 1.5, '#7aff7a'); break; }
             case 'quake': this.shake = 0.8; break;
+            // l'arma si spezza: schegge, e in mano resta la riserva
+            case 'break': {
+                this.burst(e.x, e.y, '#c8c0b0', 26, 7, 0.5); this.floatText('ARMA SPEZZATA!', e.x, e.y + 0.4, '#ff8a5a', 1.3);
+                A.play('block'); this.shake = Math.max(this.shake, 0.3);
+                const ch = this.fighters[e.s]?.ch;
+                if (ch?.weaponMesh) {
+                    const hand = ch.weaponMesh.parent;
+                    hand?.remove(ch.weaponMesh);
+                    ch.weaponMesh = buildWeapon(this.info[e.s].reserve || RESERVE_WEAPON);
+                    ch.weaponMesh.rotation.x = Math.PI / 2;
+                    hand?.add(ch.weaponMesh);
+                }
+                break;
+            }
             case 'bolt': this.lightning(e.x); A.play('thunder'); this.shake = 0.6; break;
             case 'pop': this.burst(e.x, e.y, { fire: '#ff6a1a', ice: '#bff0ff', rock: '#a09a90', mud: '#8a5a2a' }[e.k] || '#fff', 12, 5); if (e.k === 'mud') A.play('splash'); break;
             case 'fall': { this.announce('CADUTA!', ''); A.play('splash'); this.floatText(`-${e.d}`, 0, 8, '#ff5a3a'); break; }

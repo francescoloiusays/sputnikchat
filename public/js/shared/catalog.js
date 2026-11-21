@@ -11,7 +11,7 @@ export const ECONOMY = {
     LOSS_BONUS: 5,
     MAX_STAKE: 500,
     MAX_BET: 1000,
-    BET_WINDOW_MS: 15000,
+    BET_WINDOW_MS: 25000,   // scommesse e spogliatoio
     SCRAP_RATE: 0.3,
     MAX_LIST_PRICE: 99999,
 };
@@ -244,6 +244,30 @@ export const SETS = [
 ];
 export const itemTier = (id) => GEAR[id]?.tier || 'com';
 export const itemLevel = (id) => TIERS[itemTier(id)].lv;
+
+// --- USURA DELLE ARMI ---
+// un'arma regge un certo numero di colpi andati a segno: più è di livello e più è incantata, più dura.
+// Quando arriva a zero si rompe (anche a metà duello): resta inutilizzabile finché Mastro Brace non la aggiusta,
+// e intanto si combatte con l'arma di riserva (il pugnale, se non ne scegli un'altra).
+export const RESERVE_WEAPON = { type: 'pugnale', material: 'legno', handle: 'legno', gem: 'nessuna', name: 'Pugnale di Riserva' };
+export const weaponDurability = (spec) => (spec ? Math.round(140 + weaponLevel(spec) * 14 + plusOf(spec) * 35) : 0);
+export const weaponWearLeft = (entry) => (entry?.kind === 'weapon' ? Math.max(0, weaponDurability(entry.spec) - (entry.wear || 0)) : 0);
+// --- LO SPOGLIATOIO DELL'ARENA: armi a noleggio, solo per un duello ---
+// si paga prima di combattere; chi vince si riprende il prezzo e incassa anche il noleggio dell'avversario
+export const RENTALS = {
+    gladio: { name: "Gladio dell'Arena", price: 30, spec: { type: 'spada', material: 'ferro', handle: 'cuoio', gem: 'nessuna', name: "Gladio dell'Arena" } },
+    tridente: { name: 'Lancia del Reziario', price: 70, spec: { type: 'lancia', material: 'ferro', handle: 'cuoio', gem: 'zaffiro', name: 'Lancia del Reziario' } },
+    scure: { name: 'Scure del Boia', price: 140, spec: { type: 'ascia', material: 'osso', handle: 'osso', gem: 'rubino', name: 'Scure del Boia' } },
+    falce: { name: "Falce d'Ossidiana", price: 240, spec: { type: 'falce', material: 'ossidiana', handle: 'seta', gem: 'onice', name: "Falce d'Ossidiana" } },
+};
+// quanto costa rimetterla a nuovo: monete in proporzione all'usura, e qualche frammento per le armi di livello alto
+export function repairCost(spec, wear) {
+    const k = Math.min(1, (wear || 0) / Math.max(1, weaponDurability(spec))), lv = weaponLevel(spec);
+    if (k <= 0) return null;
+    const c = { coins: Math.max(5, Math.ceil(weaponCost(spec) * 0.35 * k)) };
+    if (lv >= 10) c.frammento = Math.max(1, Math.ceil(k * (lv >= 20 ? 4 : 2)));
+    return c;
+}
 // Livello richiesto per i pezzi della Forgia
 export const MATERIAL_LEVEL = { legno: 1, ferro: 1, osso: 3, ossidiana: 8, argento: 14, oro: 18 };
 export const HANDLE_LEVEL = { legno: 1, cuoio: 1, osso: 3, seta: 6, oro: 12 };

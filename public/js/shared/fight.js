@@ -4,7 +4,7 @@
 //  Il server lo esegue in modo autoritativo per i duelli online;
 //  il client lo usa in locale per l'allenamento contro il Fantasma.
 // =====================================================================
-import { computeStats, matchup, dissonance, WHEEL } from './catalog.js';
+import { computeStats, matchup, dissonance, WHEEL, RESERVE_WEAPON } from './catalog.js';
 
 export const FIGHT = {
     DT: 1 / 60,
@@ -61,7 +61,11 @@ export function moveDuration(f, mv) {
 function makeFighter(setup, side) {
     const st = computeStats(setup);
     if (setup.boss) { st.hpMax = Math.round(st.hpMax * (setup.boss.hp || 1)); st.atk *= setup.boss.atk || 1; }
+    // l'arma di riserva: se quella in mano si rompe, si continua con questa (stessa carta, stessi talenti)
+    const rv = setup.dur != null ? computeStats({ ...setup, weapon: setup.reserve || RESERVE_WEAPON }) : null;
     return {
+        dur: setup.dur ?? null, used: 0, broken: false,
+        rsv: rv && { atk: rv.atk, reach: rv.reach, aspd: rv.aspd, kbm: rv.kbm, weapon: setup.reserve || RESERVE_WEAPON },
         id: setup.id, name: setup.name, side, element: st.element, special: st.special,
         atk: st.atk, def: st.def, spd: st.spd, weight: st.weight,
         reach: st.reach, aspd: st.aspd, kbm: st.kbm, meterGain: st.meterGain, effMul: st.effMul,
@@ -324,9 +328,20 @@ function updateAttack(S, f, o, dt, ev) {
                 dmg: m.dmg, kb: m.kb, grow: m.grow, stun: m.stun, meter: m.meter,
                 dir: m.upward ? (o.x >= f.x ? 1 : -1) * 0.3 : f.facing, lift: m.lift, heavy: f.mv === 'heavy', src: f.mv,
             }, ev);
+            wearWeapon(f, ev);
         }
     }
     if (f.mt >= s + a + r) endAttack(f);
+}
+
+// Usura: ogni colpo d'arma andato a segno consuma un punto. A zero l'arma si rompe e si passa alla riserva.
+function wearWeapon(f, ev) {
+    if (f.dur == null || f.broken) return;
+    f.used++;
+    if (f.used < f.dur) return;
+    f.broken = true;
+    if (f.rsv) { f.atk = f.rsv.atk; f.reach = f.rsv.reach; f.aspd = f.rsv.aspd; f.kbm = f.rsv.kbm; }
+    ev.push({ t: 'break', s: f.side, x: f.x, y: f.y + 1.4 });
 }
 
 function endAttack(f) { f.st = f.grounded ? 'idle' : 'air'; f.mv = null; f.armor = false; }
@@ -510,7 +525,7 @@ const r2 = v => Math.round(v * 100) / 100;
 export function snapshotDuel(S, ev) {
     const fs = ['a', 'b'].map(s => {
         const f = S.f[s];
-        const flags = (f.burn > 0 ? 1 : 0) | (f.st === 'frozen' ? 2 : 0) | (f.slow > 0 ? 4 : 0) | (f.poison > 0 ? 8 : 0) | (f.inv > 0 ? 16 : 0) | (f.armor ? 32 : 0) | (f.dirty > 0 ? 64 : 0);
+        const flags = (f.burn > 0 ? 1 : 0) | (f.st === 'frozen' ? 2 : 0) | (f.slow > 0 ? 4 : 0) | (f.poison > 0 ? 8 : 0) | (f.inv > 0 ? 16 : 0) | (f.armor ? 32 : 0) | (f.dirty > 0 ? 64 : 0) | (f.broken ? 128 : 0);
         return [r2(f.x), r2(f.y), f.facing, Math.round(Math.max(0, f.hp) * 10) / 10, f.maxHp, Math.round(f.meter), f.st, f.mv || '', r2(f.mt), f.rw, flags, f.combo, f.grounded ? 1 : 0];
     });
     return {

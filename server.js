@@ -27,6 +27,7 @@ import { INSULTS, TOLL_START, TOLL_LINES, NPCS, ONDA_Q, ONDA_PLOT, TABLETS, MISS
 import { createDuel, stepDuel, snapshotDuel, FIGHT, HELD_MASK } from './public/js/shared/fight.js';
 import { STORY, STORY_END, STORY_SPOTS, WAYS, newStory, chapterReady, nomeVero } from './public/js/shared/story.js';
 import { L2_CHAPTERS, L2_SPOTS, newL2, fixL2, l2Step } from './public/js/shared/libro2.js';
+import { RESERVE_WEAPON, RENTALS, weaponDurability, weaponWearLeft, repairCost } from './public/js/shared/catalog.js';
 import { RODS, rodOf, CORAL_CHANCE, TRADES, tradesOfDay, itemOfDay, tonicXp, itemTradeValue, TONIC_DAILY, ITEM_TRADES_DAILY } from './public/js/shared/mare.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -332,7 +333,7 @@ function privateView(p) {
         inventory: p.inventory, equipment: p.equipment,
         mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
-        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0,
+        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null,
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
         episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
@@ -512,9 +513,26 @@ function fighterInfo(S) {
     const p = S.p;
     return { id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element, rating: p.rating, level: levelOf(p), grade: p.grade || 0, cardImage: p.cardImage };
 }
-function fighterSetup(p) {
-    const w = p.inventory.find(i => i.uid === p.equipment?.weapon);
-    return { id: p.id, name: p.name, element: p.card.element, weapon: w?.spec || null, level: levelOf(p), talents: p.talents, gear: gearOf(p), gearPlus: gearPlusOf(p), seals: p.sealsOn };
+// l'arma di riserva: quella scelta nello spogliatoio (se non è rotta), altrimenti il pugnale
+const reserveOf = p => { const r = p.inventory.find(i => i.uid === p.reserve && i.kind === 'weapon' && !i.broken && i.uid !== p.equipment?.weapon); return r?.spec || RESERVE_WEAPON; };
+// con cosa scende in campo: l'arma a noleggio, o la sua (se è rotta, direttamente la riserva)
+function duelWeapon(p, rent) {
+    const w = p.inventory.find(i => i.uid === p.equipment?.weapon && i.kind === 'weapon');
+    if (rent) return { spec: rent.spec, dur: null, item: null };
+    if (!w) return { spec: null, dur: null, item: null };
+    if (w.broken) return { spec: reserveOf(p), dur: null, item: null };
+    return { spec: w.spec, dur: weaponWearLeft(w), item: w };
+}
+function fighterSetup(p, rent) {
+    const W = duelWeapon(p, rent);
+    return { id: p.id, name: p.name, element: p.card.element, weapon: W.spec, dur: W.dur, reserve: reserveOf(p), level: levelOf(p), talents: p.talents, gear: gearOf(p), gearPlus: gearPlusOf(p), seals: p.sealsOn };
+}
+// dopo un duello: l'arma si consuma dei colpi messi a segno, e se è arrivata a zero si rompe
+function wearWeapon(p, item, used, broken) {
+    if (!item || item.broken || !(used > 0)) return null;
+    item.wear = Math.min(weaponDurability(item.spec), (item.wear || 0) + used);
+    if (broken || item.wear >= weaponDurability(item.spec)) { item.broken = true; item.wear = weaponDurability(item.spec); }
+    return { used, broken: !!item.broken, left: weaponWearLeft(item) };
 }
 
 // Esperienza: aggiorna livello e punti Maestria, avvisa il giocatore se sale di livello.
@@ -560,7 +578,7 @@ function startDuel(A, B, stake) {
         sids: { a: A.sid, b: B.sid }, pids: { a: A.p.id, b: B.p.id },
         info: { a: fighterInfo(A), b: fighterInfo(B) },
         bets: [], spectators: new Set(), inputs: { a: { h: 0, p: 0 }, b: { h: 0, p: 0 } },
-        sim: null, tick: 0, evBuf: [], startedAt: 0,
+        sim: null, tick: 0, evBuf: [], startedAt: 0, rent: { a: null, b: null },
     };
     duels.set(id, d);
     A.duelId = B.duelId = id;
@@ -577,8 +595,11 @@ function beginFight(d) {
     const A = byPid(d.pids.a), B = byPid(d.pids.b);
     d.phase = 'fight';
     d.startedAt = Date.now();
-    d.sim = createDuel(fighterSetup(A), fighterSetup(B));
-    io.to('duel:' + d.id).emit('duel:begin', { id: d.id });
+    d.sim = createDuel(fighterSetup(A, d.rent.a), fighterSetup(B, d.rent.b));
+    // le armi con cui si scende davvero in campo (scelte nello spogliatoio), e le riserve
+    d.weaponItem = { a: duelWeapon(A, d.rent.a).item?.uid || null, b: duelWeapon(B, d.rent.b).item?.uid || null };
+    const gear = { a: { weapon: duelWeapon(A, d.rent.a).spec, reserve: reserveOf(A) }, b: { weapon: duelWeapon(B, d.rent.b).spec, reserve: reserveOf(B) } };
+    io.to('duel:' + d.id).emit('duel:begin', { id: d.id, gear });
     io.to(d.room).emit('duel:update', { id: d.id, phase: 'fight', pool: pool(d) });
 }
 
@@ -611,7 +632,7 @@ function cancelDuel(d, reason) {
     if (d.phase === 'done') return;
     for (const s of ['a', 'b']) {
         const p = byPid(d.pids[s]); if (!p) continue;
-        p.coins += d.stake; save(p); sendMe(sessionOf(p.id));
+        p.coins += d.stake + (d.rent?.[s]?.price || 0); save(p); sendMe(sessionOf(p.id));
     }
     refundBets(d);
     io.to('duel:' + d.id).emit('duel:cancel', { id: d.id, reason });
@@ -623,6 +644,20 @@ function endDuel(d, winner, reason) {
     if (d.phase === 'done') return;
     const P = { a: byPid(d.pids.a), b: byPid(d.pids.b) };
     const result = { id: d.id, winner, reason, names: { a: P.a.name, b: P.b.name }, stake: d.stake, rating: { a: 0, b: 0 }, coins: { a: 0, b: 0 }, xp: { a: 0, b: 0 } };
+    // usura: ognuno consuma la sua arma (quelle a noleggio no)
+    result.wear = { a: null, b: null };
+    if (d.sim) for (const s of ['a', 'b']) {
+        const item = P[s].inventory.find(i => i.uid === d.weaponItem?.[s]);
+        result.wear[s] = wearWeapon(P[s], item, d.sim.f[s].used, d.sim.f[s].broken);
+    }
+    // noleggi dello spogliatoio: chi vince si riprende il suo e incassa quello dell'altro; pareggio = rimborso a tutti e due
+    result.rent = { a: 0, b: 0 };
+    if (d.rent.a || d.rent.b) {
+        if (winner) {
+            const loser = winner === 'a' ? 'b' : 'a', back = (d.rent[winner]?.price || 0) + (d.rent[loser]?.price || 0);
+            P[winner].coins += back; result.rent[winner] = back; result.rent[loser] = -(d.rent[loser]?.price || 0);
+        } else for (const s of ['a', 'b']) { P[s].coins += d.rent[s]?.price || 0; result.rent[s] = 0; }
+    }
     // niente esperienza per i duelli lampo (meno di 20 secondi di combattimento)
     const fought = d.startedAt && Date.now() - d.startedAt > 20000;
     if (fought) {
@@ -1320,6 +1355,75 @@ io.on('connection', (socket) => {
         save(p); sendMe(me);
         if (f.rar === 'epi') sysChat(me.room, `🎣 ${p.name} ha pescato un ${f.name} di ${size} cm!`);
         reply(out);
+    });
+
+    // --- LO SPOGLIATOIO: prima del duello si sceglie con cosa combattere ---
+    on('duel:loadout', (d, reply) => {
+        const D = duels.get(me.duelId), p = me.p;
+        if (!D || D.phase !== 'betting') return fail(reply, 'Lo spogliatoio è chiuso: si combatte');
+        const side = D.pids.a === p.id ? 'a' : D.pids.b === p.id ? 'b' : null;
+        if (!side) return fail(reply, 'Non è il tuo duello');
+        if (d.main !== undefined) {
+            if (d.main === null) delete p.equipment.weapon;
+            else {
+                const w = p.inventory.find(i => i.uid === d.main && i.kind === 'weapon');
+                if (!w) return fail(reply, 'Arma non trovata');
+                if (w.broken) return fail(reply, 'È rotta: portala da Mastro Brace');
+                if (!w.legacy && weaponLevel(w.spec) > levelOf(p)) return fail(reply, 'Non sei ancora al suo livello');
+                p.equipment.weapon = w.uid;
+                if (p.reserve === w.uid) p.reserve = null;
+            }
+        }
+        if (d.reserve !== undefined) {
+            const r = d.reserve && p.inventory.find(i => i.uid === d.reserve && i.kind === 'weapon');
+            if (d.reserve && (!r || r.broken)) return fail(reply, 'Questa non può fare da riserva');
+            if (r && !r.legacy && weaponLevel(r.spec) > levelOf(p)) return fail(reply, 'Non sei ancora al suo livello');
+            p.reserve = r && r.uid !== p.equipment.weapon ? r.uid : null;
+        }
+        if (d.rent !== undefined) {
+            const prev = D.rent[side];
+            if (prev) { p.coins += prev.price; D.rent[side] = null; }
+            if (d.rent) {
+                const R = RENTALS[d.rent];
+                if (!R) return fail(reply, 'Quest\'arma non si noleggia');
+                if (weaponLevel(R.spec) > levelOf(p)) { if (prev) { p.coins -= prev.price; D.rent[side] = prev; } return fail(reply, 'Non sei ancora al suo livello'); }
+                if (p.coins < R.price) { if (prev) { p.coins -= prev.price; D.rent[side] = prev; } return fail(reply, 'Monete insufficienti per il noleggio'); }
+                p.coins -= R.price; D.rent[side] = { id: d.rent, price: R.price, spec: R.spec };
+            }
+        }
+        save(p); sendMe(me);
+        reply({ ok: true, rent: D.rent[side]?.id || null, main: p.equipment.weapon || null, reserve: p.reserve || null });
+    });
+    // la riserva si sceglie anche fuori dall'Arena (dalla bisaccia)
+    on('weapon:reserve', (d, reply) => {
+        const p = me.p, r = d.uid && p.inventory.find(i => i.uid === d.uid && i.kind === 'weapon');
+        if (d.uid && !r) return fail(reply, 'Arma non trovata');
+        if (r?.broken) return fail(reply, 'È rotta: prima falla aggiustare');
+        p.reserve = r && r.uid !== p.equipment?.weapon ? r.uid : null;
+        save(p); sendMe(me); reply({ ok: true });
+    });
+    // i duelli giocati qui (Fantasma, scheletri, boss): il client dice quanti colpi ha messo a segno, il server li tiene bassi
+    on('weapon:wear', (d, reply) => {
+        const p = me.p, now = Date.now();
+        if (now - (me.lastWear || 0) < 15000) return fail(reply, 'Piano');
+        me.lastWear = now;
+        const item = p.inventory.find(i => i.uid === p.equipment?.weapon && i.kind === 'weapon');
+        const out = wearWeapon(p, item, int(d.used, 0, 60), !!d.broken);
+        save(p); sendMe(me);
+        reply({ ok: true, wear: out });
+    });
+    // Mastro Brace aggiusta le armi: monete in proporzione all'usura, e qualche frammento per quelle di livello alto
+    on('forge:repair', (d, reply) => {
+        const p = me.p, it = p.inventory.find(i => i.uid === d.uid && i.kind === 'weapon');
+        if (!it) return fail(reply, 'Arma non trovata');
+        const cost = repairCost(it.spec, it.wear);
+        if (!cost) return fail(reply, 'È già come nuova');
+        const miss = costMissing(p, cost);
+        if (miss.length) return fail(reply, 'Ti manca ancora: ' + miss.map(([k, n]) => `${n} ${k === 'coins' ? 'monete' : MATS[k].name}`).join(', '));
+        payCost(p, cost);
+        it.wear = 0; delete it.broken;
+        save(p); sendMe(me);
+        reply({ ok: true, cost });
     });
 
     // --- LA RETAIA: la canna nuova, alla Barca Rovesciata ---
