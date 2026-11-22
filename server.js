@@ -31,6 +31,8 @@ import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENC
 import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
 import { gente, genteAt, premio, bottinoOggetto, GENTI_PER_DAY, GENTI_FIGHT_DAILY } from './public/js/shared/genti.js';
 import { islandNight } from './public/js/shared/clock.js';
+// è notte quando è notte sull'isola: conta solo il ciclo del gioco (24 minuti), mai l'ora vera
+const nightNow = () => islandNight() || process.env.SPUTNIK_NOTTE === '1';
 import { casaDiRob, cleanCasa, casaValue, casaCount, bauleUsed, inCasa, BAULE_SLOTS } from './public/js/shared/casa.js';
 import { ROB_CHAPTERS, ROB_SPOTS, ROB_LEVEL, newRob, robStep } from './public/js/shared/rob.js';
 import { RESERVE_WEAPON, RENTALS, weaponDurability, weaponWearLeft, repairCost } from './public/js/shared/catalog.js';
@@ -1369,7 +1371,7 @@ io.on('connection', (socket) => {
         if (Math.hypot(me.pos[0] - FISH_SPOT.x, me.pos[2] - FISH_SPOT.z) > FISH_SPOT.r + 1.5) return fail(reply, 'Si pesca in fondo al molo');
         const now = Date.now();
         if (me.fishing && now - me.fishing.at < 1200) return fail(reply, 'Piano, la lenza è ancora in acqua');
-        const rod = rodOf(me.p), pf = petFish(me.p.pet), night = isNight(), fish = rollFish(night, Math.random, rod.luck + (pf.luck || 0));
+        const rod = rodOf(me.p), pf = petFish(me.p.pet), night = nightNow(), fish = rollFish(night, Math.random, rod.luck + (pf.luck || 0));
         me.fishing = { id: uid(), fish, at: now, bite: Math.round((1800 + Math.random() * 4200) * rod.bite) };
         reply({ ok: true, id: me.fishing.id, bite: me.fishing.bite, diff: FISH[fish].diff, move: FISH[fish].move, night, left: Math.max(0, fishDaily(me.p) - dayc(me.p).fish) });
     });
@@ -1567,7 +1569,7 @@ io.on('connection', (socket) => {
             if (!P) return "Non c'è niente qui";
             if (Math.hypot(me.pos[0] - P.x, me.pos[2] - P.z) > (P.r || 3) + 1.5) return 'Troppo lontano';
             // vale la notte vera e anche la sera dell'isola (il suo giorno dura 24 minuti)
-            if (P.night && !isNight() && !islandNight() && process.env.SPUTNIK_NOTTE !== '1') return "Rob ha detto stanotte: aspetta che sull'isola si faccia sera";
+            if (P.night && !nightNow()) return "Rob ha detto stanotte: aspetta che sull'isola si faccia sera";
             return null;
         };
         const advance = () => {
@@ -2244,7 +2246,7 @@ io.on('connection', (socket) => {
             if (!P) return "Non c'è niente qui";
             if (!near(P.x, P.z, (P.r || 3) + 1.5)) return 'Troppo lontano';
             if (P.y != null && (me.pos[1] || 0) < P.y - 2) return 'Devi salire in cima al faro';
-            if (P.night && !isNight() && process.env.SPUTNIK_NOTTE !== '1') return 'Torna di notte: di giorno qui non succede niente';   // SPUTNIK_NOTTE=1: solo per le prove in locale
+            if (P.night && !nightNow()) return "Torna quando sull'isola è notte: di giorno qui non succede niente";   // SPUTNIK_NOTTE=1: solo per le prove in locale
             return null;
         };
         if (a === 'talk' || a === 'answer') {

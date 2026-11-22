@@ -9,7 +9,7 @@ import { STORY, STORY_END, STORY_SPOTS, WAYS, chapterReady, stepHave, gx } from 
 import { NPCS } from './shared/lore.js';
 import { TEXT, SEME_DI, ritratto, npcMemory } from './story-text.js';
 import { xpForLevel } from './shared/catalog.js';
-import { islandHour } from './sky.js';
+import { islandNight as clockNight, minutesToIslandNight } from './shared/clock.js';
 import { Character } from './character.js';
 import { h, toast, $ } from './util.js';
 import { iconSVG } from './icons.js';
@@ -30,15 +30,10 @@ export function storyCtx(app) {
     const sex = me.appearance?.sex || app.local?.appearance?.sex || 'm';
     return { name: me.name || app.local?.name || 'Viandante', sex, o: sex === 'f' ? 'a' : 'o', seme: SEME_DI[me.card?.element] || 'della nebbia', ans: st.ans || [], nome: st.name, way: st.way, lv: me.level || 1 };
 }
-const islandNight = (app) => (app.env?.state?.day ?? 0) < 0.3;
+// è notte quando è notte sull'isola (il ciclo del gioco, lo stesso del server); ?ora= per le prove
+export const islandNight = (app) => app.env?.debugHour != null ? (app.env.state?.day ?? 1) < 0.3 : clockNight();
 // fra quanti minuti veri cala il buio sull'isola (0 = è già notte)
-const darkHour = (hr) => hr >= 19.5 || hr < 5.3;   // come islandNight: day < 0.3
-export function minutesToNight(app) {
-    if (islandNight(app)) return 0;
-    const now = Date.now();
-    for (let s = 15; s <= 25 * 60; s += 15) if (darkHour(islandHour(now + s * 1000))) return Math.max(1, Math.round(s / 60));
-    return 0;
-}
+export function minutesToNight(app) { return islandNight(app) ? 0 : minutesToIslandNight(); }
 // quanto manca al livello che apre il capitolo, e dove prenderlo
 function xpGap(app, lv) {
     const me = app.me || {}, L = me.level || 1;

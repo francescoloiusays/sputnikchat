@@ -12,6 +12,7 @@ import { L2_CHAPTERS, L2_SPOTS, L2_END, L3_END, bookOf, chapterNo, l2Step, l2Nex
 import { nearRiva } from './shared/riva.js';
 import { MATS } from './shared/catalog.js';
 import { h, toast } from './util.js';
+import { islandNight, minutesToIslandNight } from './shared/clock.js';
 import { iconSVG } from './icons.js';
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
@@ -104,7 +105,10 @@ export function l2Thread(app) {
     const C = L2_CHAPTERS[st.ch];
     if (st.ch === 0 && st.i === 0) return null;          // si scopre andando al faro
     if (st.i === 0 && (app.me.level || 1) < C.lv) return null;
-    return { text: `${C.title}: ${l2Next(st)}` };
+    // un posto che si apre solo di notte: dillo, e quanto manca al buio
+    const nightSpot = S.k === 'find' && (S.spots || []).some(k => L2_SPOTS[k]?.night && !(st.got || []).includes(k));
+    const m = nightSpot && !islandNight() ? minutesToIslandNight() : 0;
+    return { text: `${C.title}: ${l2Next(st)}${nightSpot ? (m ? ` · il buio cala fra ${m} min` : ' · è notte: vai ora') : ''}` };
 }
 
 // --- le pagine del Libro II, nel Libro dell'Approdo (tasto G) ---

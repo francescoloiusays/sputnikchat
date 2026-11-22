@@ -17,4 +17,11 @@ export function islandHour(now = Date.now()) {
     return 7;
 }
 // sera e notte sull'isola: dalle 19:30 alle 6
-export const islandNight = (now = Date.now()) => { const h = islandHour(now); return h >= 19.5 || h < 6; };
+// (un quarto d'ora di margine: il cielo del gioco si scurisce un filo prima, e chi è arrivato al buio non deve sentirsi dire «torna di notte»)
+export const islandNight = (now = Date.now()) => { const h = islandHour(now); return h >= 19.25 || h < 6.25; };
+// fra quanti minuti veri si fa notte sull'isola (0 = è già notte)
+export function minutesToIslandNight(now = Date.now()) {
+    if (islandNight(now)) return 0;
+    for (let s = 15; s <= 25 * 60; s += 15) if (islandNight(now + s * 1000)) return Math.max(1, Math.round(s / 60));
+    return 0;
+}
