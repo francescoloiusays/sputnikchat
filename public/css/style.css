@@ -1147,3 +1147,7 @@ body.cena-on #toasts { display: none; }
 .trade-item span { line-height: 1.15; max-height: 2.4em; overflow: hidden; }
 .trade-coins { margin-top: 6px; }
 @media (max-width: 560px) { .trade-table { grid-template-columns: 1fr; } .trade-arrows { display: none; } }
+
+/* le genti di passaggio */
+.gente-card { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0 10px; color: #4a3418; font-size: 14px; }
+.gente-forza { color: #1a1008; font-weight: 700; padding: 2px 9px; border-radius: 999px; font-size: 13px; }

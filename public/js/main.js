@@ -39,6 +39,7 @@ import { buildStorySpots, storyBeat, storyInteract, storyVoice, updateThread } f
 import { L2World, l2Door } from './libro2-ui.js';
 import { RobWorld } from './rob-ui.js';
 import { Erranti } from './erranti.js';
+import { Genti, genteDone } from './genti-ui.js';
 
 const ANIMS = ['idle', 'walk', 'run', 'air', 'sit'];
 const EMOTES = { Digit1: ['saluta', 2], Digit2: ['balla', 4], Digit3: ['inchino', 1.8], Digit4: ['ride', 2] };
@@ -328,7 +329,8 @@ class Game {
         this.npcs = new Npcs(this);
         this.input = new Input(this);        // tasti rimappabili e controller
         this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
-        this.erranti = new Erranti(this);    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
+        this.erranti = new Erranti(this);
+        this.genti = new Genti(this);        // le genti di passaggio: nascono ogni giorno dal motore dei personaggi    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
         this.storySpots = buildStorySpots(this);
         // luce di riempimento: il personaggio non resta mai in controluce
         this.fillLight = new THREE.PointLight('#d8c4ff', 9, 10, 1.4);
@@ -1075,6 +1077,7 @@ class Game {
         if (kind === 'veglia' || kind === 'king') return this.foeDone('veglia:end', { won });
         if (kind === 'cripta') return this.storyBoss(won);
         if (kind === 'faro') return this.l2?.bossDone(won);
+        if (kind === 'gente') return genteDone(this, won);
         const tier = this.practiceLevel < 0.8 ? 1 : this.practiceLevel < 1.3 ? 2 : 3;
         const r = await this.net.request('practice:done', { tier, won, el: this.practiceEl });
         if (r.ok && r.xp) toast(`+${r.xp} esperienza dall'allenamento${r.ess ? ` e un'${MATS[r.ess].name}` : ''}`, { kind: 'ok', icon: r.ess ? 'vial' : 'star', duration: 3500 });
@@ -1264,6 +1267,7 @@ class Game {
         else if (it.id === 'l2spot') this.l2?.find(it.k);
         else if (it.id === 'robspot') this.robW?.find(it.k);
         else if (it.id === 'errante') this.openPanel('errante', { id: it.k });
+        else if (it.id === 'gente') this.openPanel('gente', { k: it.k });
         else if (it.id === 'cena_tavola') this.robW?.tavola();
         else if (it.id === 'faro_scendi') this.climbFaro(false);
         else if (it.id === 'siedi') this.player.sit === it.seat ? this.standUp() : this.sitDown(it.seat);
@@ -1533,6 +1537,7 @@ class Game {
         else if (this.mode === 'canto') { const ch = this.myChar; ch.root.position.copy(this.player.pos); ch.state = 'idle'; ch.speed = 0; this.updateFill(this.player); }
         this.npcs?.update(dt, this.player.pos, this.camera.position);
         this.erranti?.update(dt, this.camera.position);
+        this.genti?.update(dt, this.camera.position);
         this.petF?.update(dt);
         this.storySpots?.update(dt, this.world.t);
         this.onda?.update();

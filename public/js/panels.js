@@ -20,6 +20,7 @@ import { l2Box } from './libro2-ui.js';
 import { robBox, PLATES, drawPlate, robGone } from './rob-ui.js';
 import { robPlates } from './shared/rob.js';
 import { erranteView } from './erranti.js';
+import { genteView } from './genti-ui.js';
 import { ACTIONS, PAD_NAMES, keyName } from './input.js';
 import { l2At, L2AT } from './shared/libro2.js';
 import { RODS, TRADES, tonicXp, itemTradeValue } from './shared/mare.js';
@@ -94,7 +95,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'scambio', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'scambio', 'gente', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('open');
@@ -947,6 +948,7 @@ export class Panels {
 
     // --- GLI ERRANTI ---
     p_errante(arg) { return erranteView(this, arg?.id); }
+    p_gente(arg) { return genteView(this, arg?.k); }
     matName(k) { return MATS[k]?.name || k; }
 
     // --- LO STUDIO DEL GEOMETRA: le tavole di Rob ---

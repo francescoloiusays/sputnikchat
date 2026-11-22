@@ -29,6 +29,7 @@ import { STORY, STORY_END, STORY_SPOTS, WAYS, newStory, chapterReady, nomeVero }
 import { L2_CHAPTERS, L2_SPOTS, newL2, fixL2, l2Step } from './public/js/shared/libro2.js';
 import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENCH_LV, TRAIN, petXpToNext, petMaxHealth, petWear, petDuel, petFish, petTired, healCost, newPet } from './public/js/shared/pet.js';
 import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
+import { gente, genteAt, premio, bottinoOggetto, GENTI_PER_DAY, GENTI_FIGHT_DAILY } from './public/js/shared/genti.js';
 import { islandNight } from './public/js/shared/clock.js';
 import { ROB_CHAPTERS, ROB_SPOTS, ROB_LEVEL, newRob, robStep } from './public/js/shared/rob.js';
 import { RESERVE_WEAPON, RENTALS, weaponDurability, weaponWearLeft, repairCost } from './public/js/shared/catalog.js';
@@ -263,6 +264,7 @@ function dayc(p) {
 const addMat = (p, k, n = 1) => { n = Math.max(0, Math.floor(n)); if (!MATS[k] || !n) return 0; p.mats[k] = Math.min(9999, (p.mats[k] || 0) + n); return n; };
 const hasMats = (p, need) => Object.entries(need).every(([k, n]) => (p.mats[k] || 0) >= n);
 const takeMats = (p, need) => { for (const [k, n] of Object.entries(need)) p.mats[k] = (p.mats[k] || 0) - n; };
+const gentiToday = (p) => { const c = dayc(p); return { t: c.gt || {}, f: c.gf || {}, left: Math.max(0, GENTI_FIGHT_DAILY - Object.keys(c.gf || {}).length) }; };
 // un prezzo fatto di monete e materiali insieme ({ coins, perla, ... })
 const costMissing = (p, cost) => Object.entries(cost).filter(([k, n]) => (k === 'coins' ? p.coins : p.mats[k] || 0) < n).map(([k, n]) => [k, n - (k === 'coins' ? p.coins : p.mats[k] || 0)]);
 const payCost = (p, cost) => { for (const [k, n] of Object.entries(cost)) { if (k === 'coins') p.coins -= n; else p.mats[k] = (p.mats[k] || 0) - n; } };
@@ -350,7 +352,7 @@ function privateView(p) {
         inventory: p.inventory, equipment: p.equipment,
         mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
-        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), errToday: dayc(p).err || {}, pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
+        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), errToday: dayc(p).err || {}, gentiToday: gentiToday(p), pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
         episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
@@ -1410,6 +1412,49 @@ io.on('connection', (socket) => {
         save(p); sendMe(me);
         if (f.rar === 'epi') sysChat(me.room, `🎣 ${p.name} ha pescato un ${f.name} di ${size} cm!`);
         reply(out);
+    });
+
+    // --- LE GENTI DI PASSAGGIO: baratto e duello con i viandanti del giorno ---
+    const genteNear = (k, r = 25) => { if (!(k >= 0 && k < GENTI_PER_DAY)) return null; const G = gente(today(), k), at = genteAt(G); return Math.hypot(me.pos[0] - at.x, me.pos[2] - at.z) <= r ? G : null; };
+    on('gente:trade', (d, reply) => {
+        const p = me.p, k = int(d.k, 0, GENTI_PER_DAY - 1), G = genteNear(k), c = dayc(p);
+        if (!G) return fail(reply, 'Se n\'è già andato per la sua strada');
+        c.gt ||= {};
+        if (c.gt[k]) return fail(reply, 'Per oggi basta: torna domani');
+        if (costMissing(p, G.trade.give).length) return fail(reply, 'Non hai abbastanza da dargli in cambio');
+        payCost(p, G.trade.give);
+        for (const [m, n] of Object.entries(G.trade.get)) { if (m === 'coins') p.coins += n; else addMat(p, m, n); }
+        c.gt[k] = 1;
+        save(p); sendMe(me); reply({ ok: true, today: gentiToday(p) });
+    });
+    on('gente:sfida', (d, reply) => {
+        const k = int(d.k, 0, GENTI_PER_DAY - 1), G = genteNear(k);
+        if (!G) return fail(reply, 'Se n\'è già andato per la sua strada');
+        if (me.duelId) return fail(reply, 'Sei già in duello');
+        me.genteFight = { k, at: Date.now(), day: today() };
+        reply({ ok: true });
+    });
+    on('gente:esito', (d, reply) => {
+        const p = me.p, F = me.genteFight, c = dayc(p);
+        me.genteFight = null;
+        if (!F || F.k !== int(d.k, 0, GENTI_PER_DAY - 1) || F.day !== today()) return fail(reply, 'Quel duello non risulta');
+        const secs = (Date.now() - F.at) / 1000;
+        if (secs < 15 || secs > 900) return reply({ ok: true, xp: 0, today: gentiToday(p) });   // duelli lampo o dimenticati: niente premi
+        c.gf ||= {};
+        const won = !!d.won, out = { ok: true, xp: 0, coins: 0, loot: {} };
+        if (!c.gf[F.k] && Object.keys(c.gf).length < GENTI_FIGHT_DAILY) {
+            c.gf[F.k] = 1;
+            const G = gente(F.day, F.k), Pz = premio(G, levelOf(p), won);
+            out.xp = grantXp(p, Pz.xp);
+            p.coins += Pz.coins; out.coins = Pz.coins;
+            for (const [m, n] of Object.entries(Pz.loot)) if (n) out.loot[m] = addMat(p, m, n);
+            if (Pz.itemChance && Math.random() < Pz.itemChance && p.inventory.length < 80) {
+                const id = bottinoOggetto(G); if (id) { p.inventory.push({ uid: uid(), kind: 'item', itemId: id }); out.item = id; out.itemName = ITEMS[id].name; }
+            }
+            if (won) progress(p, 'duel');
+        }
+        out.today = gentiToday(p);
+        save(p); sendMe(me); reply(out);
     });
 
     // --- GLI ERRANTI: un baratto al giorno con ciascuno, se gli sei vicino ---
