@@ -413,5 +413,6 @@ export async function playCena(app, r) {
     document.body.classList.remove('cena-on');
     app.showHud?.();
     app.robW?.refresh();
-    toast(h('div', {}, h('b', {}, 'Il Righello di Rob · fine'), h('div', {}, `+${r.xp || 0} esperienza, +${r.coins || 0} monete${r.title ? ' · nuovo titolo: Seduto alla Tavola Lunga' : ''}. Nello studio, sul tavolo da disegno, c\'è un\'ultima tavola.`)), { kind: 'coin', icon: 'map', duration: 14000 });
+    app.casa?.refresh();
+    toast(h('div', {}, h('b', {}, 'Il Righello di Rob · fine'), h('div', {}, `+${r.xp || 0} esperienza, +${r.coins || 0} monete${r.title ? ' · nuovo titolo: Seduto alla Tavola Lunga' : ''}. Nello studio, sul tavolo da disegno, c\'è un\'ultima tavola. E il cantiere qui accanto è finito: è la casa che ti ha lasciato.`)), { kind: 'coin', icon: 'map', duration: 14000 });
 }

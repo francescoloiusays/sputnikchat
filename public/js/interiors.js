@@ -32,7 +32,7 @@ export class Interiors {
 
     update() {
         const app = this.app;
-        if (this.busy || app.mode === 'duel' || app.mode === 'cena' || app.mode === 'cutscene') return;
+        if (this.busy || app.mode === 'duel' || app.mode === 'cena' || app.mode === 'cutscene' || app.mode === 'build') return;
         const P = app.player?.pos;
         if (!P) return;
         if (this.cur) {

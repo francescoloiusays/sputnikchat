@@ -1151,3 +1151,14 @@ body.cena-on #toasts { display: none; }
 /* le genti di passaggio */
 .gente-card { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0 10px; color: #4a3418; font-size: 14px; }
 .gente-forza { color: #1a1008; font-weight: 700; padding: 2px 9px; border-radius: 999px; font-size: 13px; }
+
+/* --- costruisci la casa --- */
+#casa-ui { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 60; width: min(980px, calc(100vw - 24px)); background: rgba(20, 12, 28, 0.92); border: 1px solid #6b4c1a; border-radius: 10px; padding: 10px; display: grid; gap: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6); }
+#casa-ui .casa-cats { display: flex; flex-wrap: wrap; gap: 6px; }
+#casa-ui .casa-tools { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+#casa-ui .casa-tool { flex: 0 0 auto; display: grid; grid-template-columns: 22px auto; grid-template-rows: auto auto; column-gap: 6px; align-items: center; text-align: left; padding: 6px 9px; border-radius: 6px; border: 1px solid #4a3a2a; background: #2a1d24; color: #eee4d0; cursor: pointer; }
+#casa-ui .casa-tool.sel { border-color: #e8c26a; background: #4a3424; }
+#casa-ui .casa-tool .sw { grid-row: span 2; width: 20px; height: 20px; border-radius: 4px; border: 1px solid #0006; }
+#casa-ui .casa-tool b { font-size: 13px; font-weight: 600; }
+#casa-ui .casa-tool small { font-size: 11px; color: #c9b58c; }
+#casa-ui .casa-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #e8d9b8; font-size: 14px; }

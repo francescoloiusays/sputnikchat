@@ -13,7 +13,7 @@ const B = TP.borgo;
 // la soglia di casa: davanti alla porta, verso il pozzo
 const home = (i) => { const a = i / 4 * Math.PI * 2 + 0.4; return [B[0] + Math.cos(a) * 4.2, B[1] + Math.sin(a) * 4.2]; };
 // la strada che dal borgo porta alla piazza
-const TO_PLAZA = [[125, 38], [110, 31], [96, 25], [70, 21], [44, 15], [17, 10], [2, 14]];
+const TO_PLAZA = [[132, 36], [118, 33], [110, 31], [96, 25], [70, 21], [44, 15], [17, 10], [2, 14]];
 const SPEED = 1.5;   // metri al secondo: passo tranquillo
 
 // rotte: [x, z, sosta in secondi]; si va fino in fondo e si torna indietro per la stessa strada
@@ -29,7 +29,7 @@ export const ERRANTI = {
     },
     marta: {
         name: 'Marta la Muratrice', where: 'Va e viene dal cantiere e dalla Forgia', home: 1,
-        route: [[...home(1), 30], [125, 38, 0], [124, 40, 90], [110, 31, 0], [96, 25, 0], [70, 21, 0], [44, 15, 0], [17, 10, 0], [-14, 10, 50]],
+        route: [[...home(1), 30], [132, 36, 0], [131, 46, 90], [132, 36, 0], [118, 33, 0], [110, 31, 0], [96, 25, 0], [70, 21, 0], [44, 15, 0], [17, 10, 0], [-14, 10, 50]],
         app: { sex: 'f', species: 'umano', build: 'robusto', height: 1.0, skin: '#c89878', eyes: 'fieri', eyeColor: '#6a4a2a', mouth: 'neutro', hair: 'codino', hairColor: '#5a3a20', beard: 'nessuna', topStyle: 'giacca', top: '#a05a3a', bottom: '#4a4a4a', shoes: '#2a2018' },
         look: { head: 'elmo' },
         lines: ['Le case a metà del cantiere le tiro su io. Senza fretta: un muro storto resta storto per cent\'anni.', 'Vado da Mastro Brace per i chiodi. Lui dice che li consumo. Io dico che lui li fa corti.', 'Rob passava a misurare quello che avevo fatto. Diceva sempre: «Brava. Un centimetro più in là.»'],
@@ -47,7 +47,7 @@ export const ERRANTI = {
     },
     lino: {
         name: 'Lino il Garzone', where: 'Corre per le Terre Nuove', home: 3,
-        route: [[...home(3), 20], [125, 38, 0], [112, 31, 25], [96, 25, 0], [114, 16, 0], [121, 13, 30], [140, 8, 0], [152, 18, 0], [163, 22, 45]],
+        route: [[...home(3), 20], [132, 36, 0], [118, 33, 0], [112, 31, 25], [96, 25, 0], [114, 16, 0], [121, 13, 30], [140, 8, 0], [152, 18, 0], [163, 22, 45]],
         app: { species: 'umano', build: 'snello', height: 0.82, skin: '#e8c0a0', eyes: 'tondi', eyeColor: '#5a8a4a', mouth: 'sorriso', hair: 'ciuffo', hairColor: '#c87a3a', beard: 'nessuna', topStyle: 'tunica', top: '#e8c23a', bottom: '#3a4a6a', shoes: '#4a2a1a' },
         look: {},
         lines: ['Porto i rotoli dallo studio al cantiere e dal cantiere al pontile. Di corsa! Così arrivano più dritti.', 'Da grande faccio il geometra. Ho già il metro: me l\'ha regalato Rob. È un po\' rotto, ma misura lo stesso.', 'Lo sai che dal pontile, con la luce giusta, si vede la Riva di Là? Io la vedo sempre. Forse me la invento.'],

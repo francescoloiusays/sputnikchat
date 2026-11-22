@@ -231,6 +231,7 @@ export function buildTerre(W) {
     // =================================================================
     {
         const [cx, cz] = TP.cantiere;
+        const c0 = W.colliders.length;
         const { g, put, box } = kit(W, cx, cz, 0.6, 2.5);
         for (const [ox, oz] of [[-2.5, 0], [2.8, 0.5]]) {
             for (const [px, pz] of [[-1.6, -1.4], [1.6, -1.4], [-1.6, 1.4], [1.6, 1.4]]) put(new THREE.BoxGeometry(0.14, 2.4, 0.14), wood, ox + px, 1.2, oz + pz);
@@ -248,6 +249,7 @@ export function buildTerre(W) {
         put(new THREE.BoxGeometry(0.6, 0.25, 0.9), iron, 4.6, 0.4, -1.2);
         palina(g, put, 0, 5, 0, 2);
         box(4.7, -2.4, 0.9, 0.5, -1, 0.4);
+        W.cantiere = { g, cols: W.colliders.slice(c0) };   // quando Rob se ne va, al suo posto sorge la casa (casa.js)
     }
 
     // =================================================================

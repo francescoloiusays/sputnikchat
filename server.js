@@ -31,6 +31,7 @@ import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENC
 import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
 import { gente, genteAt, premio, bottinoOggetto, GENTI_PER_DAY, GENTI_FIGHT_DAILY } from './public/js/shared/genti.js';
 import { islandNight } from './public/js/shared/clock.js';
+import { casaDiRob, cleanCasa, casaValue } from './public/js/shared/casa.js';
 import { ROB_CHAPTERS, ROB_SPOTS, ROB_LEVEL, newRob, robStep } from './public/js/shared/rob.js';
 import { RESERVE_WEAPON, RENTALS, weaponDurability, weaponWearLeft, repairCost } from './public/js/shared/catalog.js';
 import { RODS, rodOf, CORAL_CHANCE, TRADES, tradesOfDay, itemOfDay, tonicXp, itemTradeValue, TONIC_DAILY, ITEM_TRADES_DAILY } from './public/js/shared/mare.js';
@@ -135,6 +136,8 @@ function migrate(p) {
         p.refundNote = R.text;
     }
     if (!p.rob) { p.rob = newRob(); changed = true; }
+    // chi ha già cenato con Rob trova la casa del cantiere finita
+    if (!p.casa && (p.rob?.ch || 0) >= ROB_CHAPTERS.length) { p.casa = casaDiRob(); changed = true; }
     updateSeason(p);
     return changed;
 }
@@ -352,7 +355,7 @@ function privateView(p) {
         inventory: p.inventory, equipment: p.equipment,
         mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
-        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), errToday: dayc(p).err || {}, gentiToday: gentiToday(p), pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
+        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), casa: p.casa || null, errToday: dayc(p).err || {}, gentiToday: gentiToday(p), pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
         episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
@@ -1414,6 +1417,26 @@ io.on('connection', (socket) => {
         reply(out);
     });
 
+    // --- LA CASA DEL CANTIERE: si cambia tutta, pagando la differenza (quel che togli rende metà) ---
+    on('casa:save', (d, reply) => {
+        const p = me.p;
+        if (!p.casa) return fail(reply, 'La casa del cantiere non è ancora tua');
+        const L = cleanCasa(d.casa);
+        if (!L) return fail(reply, 'Qualcosa non torna nel progetto');
+        const before = casaValue(p.casa), after = casaValue(L), pay = {}, back = {};
+        for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
+            const diff = (after[k] || 0) - (before[k] || 0);
+            if (diff > 0) pay[k] = diff; else if (diff < 0) back[k] = Math.floor(-diff / 2);
+        }
+        const miss = costMissing(p, pay);
+        if (miss.length) return fail(reply, 'Ti manca ancora: ' + miss.map(([k, n]) => `${n} ${k === 'coins' ? 'monete' : MATS[k].name}`).join(', '));
+        payCost(p, pay);
+        for (const [k, n] of Object.entries(back)) { if (k === 'coins') p.coins += n; else addMat(p, k, n); }
+        p.casa = L;
+        save(p); sendMe(me);
+        reply({ ok: true, pay, back });
+    });
+
     // --- LE GENTI DI PASSAGGIO: baratto e duello con i viandanti del giorno ---
     const genteNear = (k, r = 25) => { if (!(k >= 0 && k < GENTI_PER_DAY)) return null; const G = gente(today(), k), at = genteAt(G); return Math.hypot(me.pos[0] - at.x, me.pos[2] - at.z) <= r ? G : null; };
     on('gente:trade', (d, reply) => {
@@ -1519,6 +1542,7 @@ io.on('connection', (socket) => {
             if (err) return fail(reply, err);
             out.cena = true;
             advance();
+            if (!p.casa) p.casa = casaDiRob();   // il cantiere è finito: la casa è tua
             sysChat(me.room, `🕯 Alla Tavola Lunga, nelle Terre Nuove, ${p.name} ha cenato con Rob il Righello.`);
         } else return fail(reply, "Non c'è niente qui");
         save(p); sendMe(me);

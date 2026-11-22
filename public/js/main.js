@@ -25,6 +25,7 @@ import { Fishing } from './fishing.js';
 import { PetFollower } from './pets.js';
 import { Input } from './input.js';
 import { Interiors } from './interiors.js';
+import { Casa, CasaEditor } from './casa.js';
 import { PETS, petDuel } from './shared/pet.js';
 import { Npcs } from './npcs.js';
 import { Canto } from './canto.js';
@@ -333,6 +334,8 @@ class Game {
         this.interiors = new Interiors(this);
         for (const S of this.world.shops || []) this.interiors.add({ name: S.title === 'Forgia' ? 'La Forgia di Vulcano' : S.title === 'Sartoria' ? 'La Sartoria Spettrale' : S.title, outName: 'Isola Fantasma', x: S.cfg.x, z: S.cfg.z, ry: S.cfg.ry, y: S.cfg.h, w: S.w, d: S.d, h: S.h, groups: [S.grp] });
         if (this.world.studioInt) this.interiors.add({ ...this.world.studioInt, outName: 'Le Terre Nuove' });
+        this.casa = new Casa(this);              // la casa del cantiere, che Rob ti lascia
+        this.casaEditor = new CasaEditor(this);
         this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
         this.erranti = new Erranti(this);
         this.genti = new Genti(this);        // le genti di passaggio: nascono ogni giorno dal motore dei personaggi    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
@@ -548,6 +551,7 @@ class Game {
         this.me = p;
         this.l2?.refresh();
         this.robW?.refresh();
+        this.casa?.refresh();
         if (oldCoins != null && p.coins !== oldCoins) this.coinPop(p.coins - oldCoins);
         const newLook = JSON.stringify(this.look());
         this.local.look = this.look();
@@ -1271,6 +1275,7 @@ class Game {
         else if (it.id === 'faro_porta') this.faroDoor();
         else if (it.id === 'l2spot') this.l2?.find(it.k);
         else if (it.id === 'robspot') this.robW?.find(it.k);
+        else if (it.id === 'casa') this.casaEditor?.open();
         else if (it.id === 'errante') this.openPanel('errante', { id: it.k });
         else if (it.id === 'gente') this.openPanel('gente', { k: it.k });
         else if (it.id === 'cena_tavola') this.robW?.tavola();
