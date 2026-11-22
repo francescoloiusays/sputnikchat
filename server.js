@@ -31,7 +31,7 @@ import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENC
 import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
 import { gente, genteAt, premio, bottinoOggetto, GENTI_PER_DAY, GENTI_FIGHT_DAILY } from './public/js/shared/genti.js';
 import { islandNight } from './public/js/shared/clock.js';
-import { casaDiRob, cleanCasa, casaValue } from './public/js/shared/casa.js';
+import { casaDiRob, cleanCasa, casaValue, casaCount, bauleUsed, inCasa, BAULE_SLOTS } from './public/js/shared/casa.js';
 import { ROB_CHAPTERS, ROB_SPOTS, ROB_LEVEL, newRob, robStep } from './public/js/shared/rob.js';
 import { RESERVE_WEAPON, RENTALS, weaponDurability, weaponWearLeft, repairCost } from './public/js/shared/catalog.js';
 import { RODS, rodOf, CORAL_CHANCE, TRADES, tradesOfDay, itemOfDay, tonicXp, itemTradeValue, TONIC_DAILY, ITEM_TRADES_DAILY } from './public/js/shared/mare.js';
@@ -151,7 +151,11 @@ function award(p, id) {
     return true;
 }
 const titleName = p => (p.titleOn && TITLES[p.titleOn]?.name) || null;
-const statsOf = p => ({ id: p.id, rating: p.rating, level: levelOf(p), wins: p.wins, losses: p.losses, title: titleName(p), league: leagueOf(p.rating) });
+// il pet come lo vedono gli altri: specie, nome, livello, incanti, se è sfinito
+const petPub = p => p.pet ? { sp: p.pet.sp, name: p.pet.name, lv: p.pet.lv || 1, ench: p.pet.ench || 0, health: (p.pet.health ?? 1) > 0 ? 1 : 0 } : null;
+const statsOf = p => ({ id: p.id, rating: p.rating, level: levelOf(p), wins: p.wins, losses: p.losses, title: titleName(p), league: leagueOf(p.rating), pet: petPub(p) });
+// quando il pet cambia (adottato, rinominato, incantato, lasciato a casa…) lo sanno tutti quelli che sono lì
+const petNews = S => { if (S?.room) io.to(S.room).emit('player:stats', statsOf(S.p)); };
 // Stagioni di sei settimane: a fine stagione la lega più alta raggiunta diventa una cornice per la carta
 function updateSeason(p) {
     const sid = seasonOf();
@@ -336,7 +340,7 @@ function publicPlayer(S) {
     return {
         id: p.id, name: p.name, appearance: p.appearance, look: look(p), element: p.card.element,
         rating: p.rating, wins: p.wins, losses: p.losses, level: levelOf(p), title: titleName(p), league: leagueOf(p.rating),
-        pos: S.pos, duel: !!S.duelId,
+        pos: S.pos, duel: !!S.duelId, pet: petPub(p),
     };
 }
 // lo stato del Prato dei Morti che il giocatore può vedere (mai dove stanno le tombe maledette)
@@ -355,7 +359,7 @@ function privateView(p) {
         inventory: p.inventory, equipment: p.equipment,
         mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
-        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), casa: p.casa || null, errToday: dayc(p).err || {}, gentiToday: gentiToday(p), pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
+        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), casa: p.casa || null, baule: p.baule || { inv: [], mats: {} }, cuccia: p.cuccia || [], errToday: dayc(p).err || {}, gentiToday: gentiToday(p), pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
         episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
@@ -1423,6 +1427,9 @@ io.on('connection', (socket) => {
         if (!p.casa) return fail(reply, 'La casa del cantiere non è ancora tua');
         const L = cleanCasa(d.casa);
         if (!L) return fail(reply, 'Qualcosa non torna nel progetto');
+        // quel che c'è dentro bauli e cucce non può restare senza casa
+        if (bauleUsed(p.baule) > casaCount(L, 'baule') * BAULE_SLOTS) return fail(reply, casaCount(L, 'baule') ? "Nei bauli che restano non ci sta tutto quello che c'è dentro: prima svuotane un po'" : 'Prima svuota il baule: dentro ci sono le tue cose');
+        if ((p.cuccia?.length || 0) > casaCount(L, 'cuccia')) return fail(reply, 'Nella cuccia dorme ancora qualcuno: prima riprendilo');
         const before = casaValue(p.casa), after = casaValue(L), pay = {}, back = {};
         for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
             const diff = (after[k] || 0) - (before[k] || 0);
@@ -1435,6 +1442,58 @@ io.on('connection', (socket) => {
         p.casa = L;
         save(p); sendMe(me);
         reply({ ok: true, pay, back });
+    });
+
+    // --- IL BAULE DI CASA: metti via e riprendi oggetti e materiali ---
+    const atHome = () => me.p.casa && me.pos && inCasa(me.pos[0], me.pos[2]);
+    on('baule:move', (d, reply) => {
+        const p = me.p, put = d.dir === 'put';
+        if (!atHome()) return fail(reply, 'Il baule è a casa tua, nelle Terre Nuove');
+        const nb = casaCount(p.casa, 'baule');
+        if (!nb) return fail(reply, 'Non hai un baule in casa: mettilo dal tecnigrafo');
+        const B = p.baule ||= { inv: [], mats: {} };
+        const uids = Array.isArray(d.uids) ? d.uids.slice(0, 80).map(Number) : [];
+        const mats = Object.entries(d.mats || {}).filter(([k, n]) => MATS[k] && Number.isInteger(n) && n > 0);
+        if (put) {
+            const eq = Object.values(p.equipment || {});
+            const items = uids.map(u => p.inventory.find(i => i.uid === u));
+            if (items.some(i => !i)) return fail(reply, "Non hai più quell'oggetto");
+            if (uids.some(u => eq.includes(u))) return fail(reply, 'Prima toglitelo di dosso');
+            for (const [k, n] of mats) if ((p.mats[k] || 0) < n) return fail(reply, `Non hai ${n} × ${MATS[k].name}`);
+            const newKinds = mats.filter(([k]) => !(B.mats[k] > 0)).length;
+            if (bauleUsed(B) + items.length + newKinds > nb * BAULE_SLOTS) return fail(reply, `Il baule è pieno (${nb * BAULE_SLOTS} posti${nb < 3 ? ': un altro baule ne aggiunge ' + BAULE_SLOTS : ''})`);
+            for (const it of items) { p.inventory.splice(p.inventory.indexOf(it), 1); if (p.reserve === it.uid) p.reserve = null; B.inv.push(it); }
+            for (const [k, n] of mats) { p.mats[k] -= n; B.mats[k] = (B.mats[k] || 0) + n; }
+        } else {
+            const items = uids.map(u => B.inv.find(i => i.uid === u));
+            if (items.some(i => !i)) return fail(reply, "Nel baule non c'è");
+            if (p.inventory.length + items.length > 80) return fail(reply, 'La bisaccia è piena (80 oggetti)');
+            for (const [k, n] of mats) if ((B.mats[k] || 0) < n) return fail(reply, 'Nel baule non ce ne sono così tanti');
+            for (const it of items) { B.inv.splice(B.inv.indexOf(it), 1); p.inventory.push(it); }
+            for (const [k, n] of mats) { B.mats[k] -= n; if (!B.mats[k]) delete B.mats[k]; addMat(p, k, n); }
+        }
+        save(p); sendMe(me); reply({ ok: true });
+    });
+    // --- LA CUCCIA: un pet resta a casa a riposare, e intanto ne porti un altro ---
+    const REST_MS = 10 * 60e3;   // dieci minuti nella cuccia e torna in forze
+    on('pet:home', (d, reply) => {
+        const p = me.p;
+        if (!atHome()) return fail(reply, 'La cuccia è a casa tua');
+        const C = p.cuccia ||= [], nc = casaCount(p.casa, 'cuccia');
+        if (!nc) return fail(reply, 'Non hai una cuccia in casa: mettila dal tecnigrafo');
+        const i = d.i == null ? -1 : d.i | 0;
+        if (i >= 0) {   // riprendi quello della cuccia i (e se ne hai uno con te, si danno il cambio)
+            const P = C[i]; if (!P) return fail(reply, 'Quella cuccia è vuota');
+            if (Date.now() - (P.homeAt || 0) >= REST_MS) P.health = petMaxHealth(P);
+            delete P.homeAt;
+            if (p.pet) C[i] = { ...p.pet, homeAt: Date.now() }; else C.splice(i, 1);
+            p.pet = P;
+        } else {        // lascia a casa quello che hai con te
+            if (!p.pet) return fail(reply, 'Non hai un pet con te');
+            if (C.length >= nc) return fail(reply, 'Le cucce sono tutte occupate');
+            C.push({ ...p.pet, homeAt: Date.now() }); p.pet = null;
+        }
+        save(p); sendMe(me); petNews(me); reply({ ok: true, name: p.pet?.name || null });
     });
 
     // --- LE GENTI DI PASSAGGIO: baratto e duello con i viandanti del giorno ---
@@ -1701,13 +1760,13 @@ io.on('connection', (socket) => {
         if (p.coins < PET_ADOPT) return fail(reply, `Servono ${PET_ADOPT} monete per il suo mantenimento`);
         p.coins -= PET_ADOPT;
         p.pet = newPet(sp, cleanText(String(d.name || ''), 24) || PETS[sp].name);
-        save(p); sendMe(me); reply({ ok: true, pet: p.pet });
+        save(p); sendMe(me); petNews(me); reply({ ok: true, pet: p.pet });
     });
     on('pet:rename', (d, reply) => {
         const p = me.p, n = cleanText(String(d.name || ''), 24);
         if (!p.pet) return fail(reply, 'Non hai un pet');
         if (!n) return fail(reply, 'Un nome, almeno');
-        p.pet.name = n; save(p); sendMe(me); reply({ ok: true });
+        p.pet.name = n; save(p); sendMe(me); petNews(me); reply({ ok: true });
     });
     on('pet:train', (d, reply) => {
         const p = me.p, P = p.pet, c = dayc(p);
@@ -1736,7 +1795,7 @@ io.on('connection', (socket) => {
         if (costMissing(p, cost).length) return fail(reply, 'Ti manca ancora qualcosa per l\'incanto');
         payCost(p, cost);
         P.ench = e + 1; P.health = petMaxHealth(P);
-        save(p); sendMe(me); reply({ ok: true, ench: P.ench });
+        save(p); sendMe(me); petNews(me); reply({ ok: true, ench: P.ench });
     });
     on('pet:heal', (d, reply) => {
         const p = me.p, P = p.pet;
@@ -1747,14 +1806,14 @@ io.on('connection', (socket) => {
         if (costMissing(p, cost).length) return fail(reply, `Servono ${cost.coins} monete`);
         payCost(p, cost);
         P.health = petMaxHealth(P);
-        save(p); sendMe(me); reply({ ok: true, cost });
+        save(p); sendMe(me); petNews(me); reply({ ok: true, cost });
     });
     on('pet:release', (d, reply) => {
         const p = me.p;
         if (!atVet()) return fail(reply, 'Lo si saluta alla Stalla delle Nebbie');
         if (!p.pet) return fail(reply, 'Non hai un pet');
         const name = p.pet.name;
-        p.pet = null; save(p); sendMe(me); reply({ ok: true, name });
+        p.pet = null; save(p); sendMe(me); petNews(me); reply({ ok: true, name });
     });
 
     // --- LA RETAIA: la canna nuova, alla Barca Rovesciata ---

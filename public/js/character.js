@@ -1106,9 +1106,15 @@ export function makeNameTag(name, sub, color = '#ffff00') {
 const POSE_KEYS = ['bodyRx', 'bodyRy', 'bodyRz', 'bodyY', 'spineRx', 'spineRy', 'spineRz', 'headRx', 'headRy',
     'shLx', 'shLy', 'shLz', 'elL', 'shRx', 'shRy', 'shRz', 'elR', 'hipLx', 'hipLz', 'knL', 'hipRx', 'hipRz', 'knR', 'cape'];
 
+// tutti i personaggi in giro (per il cappuccio quando piove)
+export const CHARACTERS = new Set();
+// chi ha già qualcosa in testa che para la pioggia non mette il cappuccio
+const HOOD_SKIP = new Set(['cappuccio', 'piuma', 'strega', 'tricorno', 'elmo', 'corona']);
+
 export class Character {
     constructor(appearance, look = {}, opts = {}) {
         this.root = new THREE.Group();
+        CHARACTERS.add(this);
         this.opts = opts;
         this.t = Math.random() * 10;
         this.state = 'idle';
@@ -1129,6 +1135,7 @@ export class Character {
         if (this.body) this.root.remove(this.body);
         if (this.faceMat) this.faceMat.dispose();
         this.halo = null;
+        this.rainHood = null; this.hooded = false; this.hoodHide = [];   // il cappuccio da pioggia si rifà alla prima goccia
         const a = this.app = sanitizeAppearance(appearance);
         this.look = look || {};
         const b = BUILD[a.build];
@@ -1250,7 +1257,7 @@ export class Character {
                 if (sp === 'elfo') {
                     const ear = M(elfEarGeo(), skinM, s * HEAD_R * 0.93, 0.03, -0.02);
                     ear.rotation.set(0.2, -s * 0.35, -s * 1.05);
-                    head.add(ear);
+                    head.add(ear); this.hoodHide.push(ear);
                 } else {
                     const ear = M(earGeo(), skinM, s * HEAD_R * 0.935, -0.005, -0.015);
                     ear.rotation.set(-0.1, s * 0.3, s * 0.06);
@@ -1267,10 +1274,10 @@ export class Character {
             for (const s of [1, -1]) {
                 const ear = M(sphere(0.1, 14, 10), skinM, s * 0.15, 0.17, -0.02);
                 ear.scale.set(1, 1.15, 0.3); ear.rotation.z = -s * 0.4;
-                head.add(ear);
+                head.add(ear); this.hoodHide.push(ear);
                 const inner = M(sphere(0.07, 12, 8), stdMat('#e8909a'), s * 0.152, 0.17, 0.0);
                 inner.scale.set(1, 1.15, 0.25); inner.rotation.z = -s * 0.4;
-                head.add(inner);
+                head.add(inner); this.hoodHide.push(inner);
             }
             const wm = new THREE.LineBasicMaterial({ color: 0xe8e0d0, transparent: true, opacity: 0.8 });
             const pts = [];
@@ -1282,7 +1289,9 @@ export class Character {
             bd.scale.set(1.15, 0.9, 0.7);
             head.add(bd);
         }
+        const nh = head.children.length;
         this.addHair(head, a, hairM, !!this.look.head);
+        this.hoodHide.push(...head.children.slice(nh));   // i capelli, sotto il cappuccio, non si vedono (e non lo bucano)
         this.addHeadItem(head, ITEMS[this.look.head]);
         this.addFaceItem(head, ITEMS[this.look.face]);
 
@@ -2042,7 +2051,92 @@ export class Character {
         }
     }
 
+    // --- IL CAPPUCCIO DA PIOGGIA: su quando piove, giù al riparo ---
+    // largo abbastanza da stare fuori da testa e orecchie; i capelli e le orecchie lunghe ci finiscono sotto;
+    // le corna escono da due asole orlate, una per corno
+    setRainHood(on) {
+        on = !!on && !HOOD_SKIP.has(this.look.head) && !!this.head;
+        if (on === this.hooded) return;
+        this.hooded = on;
+        if (on && !this.rainHood) this.rainHood = this.makeRainHood();
+        if (this.rainHood) this.rainHood.visible = on;
+        for (const o of this.hoodHide) o.visible = !on;
+    }
+    makeRainHood() {
+        // una calotta un po' più larga della testa, con due aperture che si toccano: il viso davanti e il collo sotto
+        const R = HEAD_R, HR = R * 1.3, TILT = 0.3, THMAX = Math.PI * 0.68, HOLE = 0.98;
+        const X = new THREE.Vector3(1, 0, 0), Z = new THREE.Vector3(0, 0, 1);
+        const face = new THREE.Vector3(0, -0.12, 1).normalize().applyAxisAngle(X, TILT);   // dove guarda il viso, nel riferimento della calotta
+        const capeIt = ITEMS[this.look.cape];
+        // della stessa stoffa del mantello, se c'è; altrimenti una tela cerata, ognuno la sua
+        const TELE = ['#2e4a52', '#5a4632', '#4a3a5a', '#3e4d3a', '#7a3a2a', '#8a6a2a'];
+        let hsh = 0; for (const ch of JSON.stringify(this.app)) hsh = (hsh * 31 + ch.charCodeAt(0)) | 0;
+        const col = capeIt?.color ? shade(capeIt.color, 0.85) : TELE[Math.abs(hsh) % TELE.length];
+        const mat = clothMat(col, 'lino', { r: 0.5, side: THREE.DoubleSide });
+        const g = new THREE.Group();
+        const shell = M(geo('rainhood3', () => {
+            const s = new THREE.SphereGeometry(HR, 64, 36, 0, Math.PI * 2, 0, THMAX);
+            // via i triangoli davanti al viso
+            const ix = s.index.array, keep = [], P0 = s.attributes.position, cosH = Math.cos(HOLE);
+            for (let i = 0; i < ix.length; i += 3) {
+                _v1.set(0, 0, 0);
+                for (let j = 0; j < 3; j++) _v1.add(_v2.fromBufferAttribute(P0, ix[i + j]));
+                if (_v1.normalize().dot(face) < cosH) keep.push(ix[i], ix[i + 1], ix[i + 2]);
+            }
+            s.setIndex(keep);
+            const p = s.attributes.position;   // in cima (che è dietro, in alto) la stoffa fa una punta morbida; verso il bordo, le pieghe
+            for (let i = 0; i < p.count; i++) {
+                _v1.fromBufferAttribute(p, i);
+                const ny = _v1.y / HR, a = Math.atan2(_v1.x, _v1.z), down = Math.max(0, 0.2 - ny * 0.6);
+                const k = 1 + 0.03 * Math.sin(a * 9 + _v1.y * 18) * down + 0.42 * Math.max(0, ny) ** 7;
+                const lat = 1 - 0.06 * Math.max(0, ny) ** 2;   // un filo più stretto ai lati della punta
+                p.setXYZ(i, _v1.x * k * lat, _v1.y * k, _v1.z * k * lat);
+            }
+            s.computeVertexNormals();
+            return s;
+        }), mat);
+        // guscio e bordo stanno in un gruppo inclinato all'indietro, un filo più alto e profondo della testa
+        const sg = new THREE.Group(); sg.rotation.x = -TILT; sg.scale.set(1, 1.04, 1.06); g.add(sg);
+        sg.add(shell);
+        // l'orlo arrotolato sulle due aperture, solo dove c'è stoffa (le aperture sono cerchi sulla sfera: si orlano con un toro)
+        const rimM = clothMat(shade(col, 0.8), 'lino', { r: 0.6 });
+        const hem = (dir, half, onCloth) => {
+            const q = new THREE.Quaternion().setFromUnitVectors(Z, dir), c = dir.clone().multiplyScalar(HR * Math.cos(half)), r = HR * Math.sin(half);
+            const N = 96, ok = [];
+            for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2; ok.push(onCloth(_v1.set(Math.cos(a) * r, Math.sin(a) * r, 0).applyQuaternion(q).add(c).normalize())); }
+            if (!ok.some(Boolean)) return;
+            let s0 = 0, L = N;
+            if (!ok.every(Boolean)) { s0 = ok.findIndex((v, i) => v && !ok[(i + N - 1) % N]); L = 0; while (L < N && ok[(s0 + L) % N]) L++; }
+            const arc = L / N * Math.PI * 2;
+            const m = M(geo(`rainhem_${r.toFixed(3)}_${arc.toFixed(3)}`, () => new THREE.TorusGeometry(r, 0.02, 8, Math.max(8, L), arc)), rimM);
+            m.position.copy(c); m.quaternion.copy(q).multiply(new THREE.Quaternion().setFromAxisAngle(Z, s0 / N * Math.PI * 2));
+            sg.add(m);
+        };
+        const cosT = Math.cos(THMAX) + 0.02, cosH = Math.cos(HOLE) - 0.02;
+        hem(face, HOLE, (d) => d.y > cosT);                              // attorno al viso
+        hem(new THREE.Vector3(0, -1, 0), Math.PI - THMAX, (d) => d.dot(face) < cosH);   // sotto, attorno al collo
+        // la punta che ricade sulla nuca
+        g.add(M(sweep('rainhoodtip3', [new THREE.Vector3(0, 0.36, -0.12), new THREE.Vector3(0, 0.33, -0.25), new THREE.Vector3(0, 0.21, -0.34), new THREE.Vector3(0, 0.06, -0.35), new THREE.Vector3(0, -0.05, -0.32)],
+            s => 0.055 * (1 - s) ** 1.1 + 0.008, { flat: 0.6, n: 28 }), mat));
+        // le corna: dove escono dalla stoffa, un'asola orlata
+        if (this.look.head === 'corna') for (const s of [1, -1]) {
+            const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(s * 0.12, 0.17, 0.03), new THREE.Vector3(s * 0.19, 0.25, 0.06), new THREE.Vector3(s * 0.23, 0.34, 0.01), new THREE.Vector3(s * 0.21, 0.42, -0.07)]);
+            // il punto del corno che sta sulla superficie del cappuccio (in coordinate del guscio: ruotato e scalato)
+            sg.updateMatrix(); const inv = sg.matrix.clone().invert();
+            let t = 0;
+            for (let i = 0; i <= 60; i++) { const q = curve.getPoint(i / 60).applyMatrix4(inv); if (q.length() >= HR) { t = i / 60; break; } }
+            const p = curve.getPoint(t), tan = curve.getTangent(t), hr = 0.034 * (1 - t) ** 0.9 + 0.003;
+            const ring = M(torus(hr + 0.012, 0.011, Math.PI * 2, 8, 20), clothMat(shade(col, 0.7), 'lino', { r: 0.6 }), p.x, p.y, p.z);
+            ring.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+            g.add(ring);
+        }
+        g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+        this.head.add(g);
+        return g;
+    }
+
     dispose() {
+        CHARACTERS.delete(this);
         if (this.fx) { this.fx.dispose(); this.fx = null; }
         if (this.tag) { this.tag.material.map.dispose(); this.tag.material.dispose(); }
         this.faceMat?.dispose();

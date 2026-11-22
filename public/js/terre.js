@@ -141,7 +141,7 @@ export function buildTerre(W) {
         W.interactables.push({ id: 'tavole', x: tx, z: tz, r: 1.8, label: 'Le tavole di Rob' });
         // fuori: il teodolite sul treppiede, e tre paline appoggiate al muro
         const th = new THREE.Group(); th.position.set(-2.6, 0, D / 2 + 3.2); g.add(th);
-        for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; put(new THREE.CylinderGeometry(0.02, 0.03, 1.5, 6), wood, Math.cos(a) * 0.3, 0.7, Math.sin(a) * 0.3, [Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35], th); }
+        for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; put(new THREE.CylinderGeometry(0.02, 0.03, 1.5, 6), wood, Math.cos(a) * 0.3, 0.7, Math.sin(a) * 0.3, [-Math.sin(a) * 0.35, 0, Math.cos(a) * 0.35], th); }
         put(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 12), iron, 0, 1.42, 0, null, th);
         put(new THREE.BoxGeometry(0.16, 0.22, 0.14), new THREE.MeshStandardMaterial({ color: '#e8c23a', roughness: 0.5 }), 0, 1.58, 0, null, th);
         put(new THREE.CylinderGeometry(0.035, 0.035, 0.26, 10), iron, 0, 1.62, 0.08, [Math.PI / 2, 0, 0], th);

@@ -28,6 +28,7 @@ import { weaponDurability, weaponWearLeft, repairCost, RESERVE_WEAPON } from './
 import { PETS, PET_IDS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENCH_LV, TRAIN, petXpToNext, petMaxHealth, petPower, petTired, petDuel, petFish, healCost } from './shared/pet.js';
 import { STORY_SPOTS } from './shared/story.js';
 import { ritratto } from './story-text.js';
+import { BAULE_SLOTS, casaCount, bauleUsed } from './shared/casa.js';
 
 export function itemInfo(e) {
     if (e.kind === 'weapon') {
@@ -95,7 +96,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'scambio', 'gente', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'scambio', 'gente', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro', 'cuccia'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('open');
@@ -921,6 +922,65 @@ export class Panels {
             h('div', { class: 'btn-row end', style: { marginTop: '10px' } },
                 btn('Chiudi lo scambio', () => app.net.request('trade:cancel', {}), { cls: 'btn-sm btn-danger' }),
                 btn(T.ok[mine] ? 'Ci ripenso' : 'D\'accordo', async () => { const r = await app.net.request('trade:ok', { yes: !T.ok[mine] }); if (!r.ok) toast(r.msg, { kind: 'bad' }); }, { cls: 'btn-primary', ic: 'handshake' }))));
+    }
+
+    // --- IL BAULE DI CASA: a sinistra la bisaccia, a destra il baule; clic per spostare ---
+    p_baule() {
+        const app = this.app, me = app.me, T = 'Il baule';
+        if (!app.net.connected) return this.set('bag', T, this.needOnline());
+        const B = me.baule || { inv: [], mats: {} }, nb = casaCount(me.casa, 'baule'), cap = nb * BAULE_SLOTS, used = bauleUsed(B);
+        const eq = new Set(Object.values(me.equipment || {}));
+        // le categorie: per gli oggetti il posto dove si portano, per i materiali il tipo
+        const CATS = [['tutto', 'Tutto'], ['weapon', 'Armi'], ['head', 'Testa'], ['face', 'Volto'], ['cape', 'Mantelli'], ['torso', 'Busto'], ['mat', 'Materiali'], ['ess', 'Essenze'], ['runa', 'Rune']];
+        const matCat = (k) => k.startsWith('ess_') ? 'ess' : k.startsWith('runa_') ? 'runa' : 'mat';
+        const cat = this.tabs.bauleCat || 'tutto';
+        const okItem = (e) => cat === 'tutto' || itemInfo(e).slot === cat;
+        const okMat = (k) => cat === 'tutto' || matCat(k) === cat;
+        const move = async (dir, uids = [], mats = {}) => { const r = await app.net.request('baule:move', { dir, uids, mats }); if (!r.ok) { toast(r.msg, { kind: 'bad' }); app.audio.play('error'); } else app.audio.play('wood'); this.render(); };
+        const sortI = (a, b) => (ORDER[itemInfo(a).slot] - ORDER[itemInfo(b).slot]) || itemInfo(a).name.localeCompare(itemInfo(b).name);
+        const itemBtn = (e, dir) => { const inf = itemInfo(e), worn = eq.has(e.uid); return h('button', { class: 'trade-item' + (worn ? ' off' : ''), title: worn ? 'Lo stai indossando' : (dir === 'put' ? 'Metti nel baule' : 'Riprendi'), disabled: worn ? true : null, onclick: () => move(dir, [e.uid]) },
+            this.slot({ ic: itemIconName(e), rar: tierOf(e).id, plus: inf.plus, eq: worn }), h('span', {}, inf.name, h('small', {}, SLOT_NAMES[inf.slot]))); };
+        const matRow = (k, n, dir) => h('div', { class: 'baule-mat' }, matChip(k, n),
+            h('span', { class: 'grow' }),
+            n > 1 ? h('button', { class: 'btn btn-sm', onclick: () => move(dir, [], { [k]: 1 }) }, '1') : null,
+            n > 10 ? h('button', { class: 'btn btn-sm', onclick: () => move(dir, [], { [k]: Math.ceil(n / 2) }) }, 'metà') : null,
+            h('button', { class: 'btn btn-sm', onclick: () => move(dir, [], { [k]: n }) }, n > 1 ? 'tutti' : (dir === 'put' ? 'metti' : 'prendi')));
+        const side = (title, ic, inv, mats, dir, extra) => {
+            const its = inv.filter(okItem).sort(sortI), ms = MAT_IDS.filter(k => mats[k] > 0 && okMat(k));
+            return h('div', { class: 'baule-side' },
+                h('h3', { class: 'sect', html: iconSVG(ic) }, title, extra),
+                its.length || ms.length ? null : h('p', { class: 'muted small' }, 'Niente, in questa categoria.'),
+                its.length ? h('div', { class: 'trade-items pick' }, its.map(e => itemBtn(e, dir))) : null,
+                ms.length ? h('div', { class: 'baule-mats' }, ms.map(k => matRow(k, mats[k], dir))) : null);
+        };
+        const free = (me.inventory || []).filter(e => okItem(e) && !eq.has(e.uid));
+        this.set('bag', T, h('div', { class: 'parchment' },
+            !nb ? h('p', { class: 'muted' }, 'In casa non c\'è ancora un baule: mettilo dal tecnigrafo di Rob (Arredi → Baule).') : null,
+            h('div', { class: 'chips baule-cats' }, CATS.map(([k, n]) => h('button', { class: 'chip' + (k === cat ? ' sel' : ''), onclick: () => { this.tabs.bauleCat = k; this.render(); } }, n))),
+            h('div', { class: 'baule-cap' }, h('span', { class: 'grow' }, `Posti nel baule: ${used} / ${cap}`, nb < 3 && nb ? h('span', { class: 'muted small' }, ` · un altro baule ne aggiunge ${BAULE_SLOTS}`) : null),
+                free.length ? btn('Metti via tutto quello che non indossi', () => move('put', free.map(e => e.uid)), { cls: 'btn-sm' }) : null),
+            h('div', { class: 'baule-grid' },
+                side('Nella bisaccia', 'bag', me.inventory || [], me.mats || {}, 'put', h('span', { class: 'muted small' }, ` (${(me.inventory || []).length}/80)`)),
+                side('Nel baule', 'bag', B.inv || [], B.mats || {}, 'take'))));
+    }
+    // --- LA CUCCIA: chi resta a casa e chi viene con te ---
+    p_cuccia() {
+        const app = this.app, me = app.me, T = 'La cuccia';
+        if (!app.net.connected) return this.set('raven', T, this.needOnline());
+        const C = me.cuccia || [], nc = casaCount(me.casa, 'cuccia'), pet = me.pet;
+        const swap = async (i) => { const r = await this.act('pet:home', { i }); if (r.ok) app.audio.play('special'); this.render(); };
+        const card = (P, extra) => h('div', { class: 'pet-card' }, h('span', { class: 'pet-ic', style: { color: PETS[P.sp]?.color }, html: iconSVG(PETS[P.sp]?.icon || 'raven') }),
+            h('b', {}, P.name), h('span', { class: 'pet-role' }, `${PETS[P.sp]?.name} · livello ${P.lv || 1}${P.ench ? ` · +${P.ench}` : ''}`), extra);
+        const rested = (P) => Date.now() - (P.homeAt || 0) >= 10 * 60e3;
+        this.set('raven', T, h('div', { class: 'parchment' },
+            lore('Chi resta a casa dorme sul cuscino e si riposa: dopo dieci minuti nella cuccia torna in piene forze. Intanto puoi portarti dietro un altro compagno, o prenderne uno nuovo da Sàlvia.'),
+            !nc ? h('p', { class: 'muted' }, 'Non c\'è ancora una cuccia: mettila dal tecnigrafo di Rob (Arredi → Cuccia).') : null,
+            h('h3', { class: 'sect', html: iconSVG('person') }, 'Con te'),
+            pet ? h('div', { class: 'pet-grid' }, card(pet, C.length < nc ? btn('Lascialo a casa', () => swap(null), { cls: 'btn-sm btn-primary' }) : h('span', { class: 'muted small' }, 'Le cucce sono piene: dagli il cambio con uno di quelli che dormono.'))) : h('p', { class: 'muted small' }, 'Nessuno ti segue, adesso.'),
+            h('h3', { class: 'sect', html: iconSVG('door') }, `Nelle cucce (${C.length}/${nc})`),
+            C.length ? h('div', { class: 'pet-grid' }, C.map((P, i) => card(P, h('div', {},
+                h('div', { class: 'muted small' }, rested(P) ? 'Riposato: è in piene forze' : 'Sta ancora riposando…'),
+                btn(pet ? 'Dagli il cambio' : 'Portalo con te', () => swap(i), { cls: 'btn-sm' }))))) : h('p', { class: 'muted small' }, 'Le cucce sono vuote.')));
     }
 
     // --- COMANDI: tastiera e controller ---

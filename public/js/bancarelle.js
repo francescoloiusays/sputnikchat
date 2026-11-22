@@ -442,16 +442,29 @@ export function buildStalla(W) {
     put(new THREE.CylinderGeometry(0.25, 0.25, 0.04, 10), wood, 1.6, 0.92, 0.2);
     put(new THREE.CylinderGeometry(0.2, 0.16, 0.3, 12, 1, true), new THREE.MeshStandardMaterial({ color: '#8a8a90', metalness: 0.6, roughness: 0.4, side: THREE.DoubleSide }), -0.3, 0.15, 1.9);
     // l'insegna sul cancello
-    const signT = tex(512, 128, (c, w, h) => {
-        c.fillStyle = '#2e3a24'; c.fillRect(0, 0, w, h);
-        c.strokeStyle = '#c8b060'; c.lineWidth = 6; c.strokeRect(6, 6, w - 12, h - 12);
-        c.fillStyle = '#e8dcb0'; c.font = 'bold 40px Cinzel, Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.fillText('LA STALLA DELLE NEBBIE', w / 2, h / 2 - 12);
-        c.font = 'italic 26px Georgia, serif'; c.fillText('bestie curate, nomi custoditi', w / 2, h / 2 + 30);
+    // (la tela ha le stesse proporzioni della tavola, 1024 × 192 ≈ 2.6 × 0.5, e il testo si stringe per starci dentro)
+    const SW = 2.6, SH = 0.5;
+    const signT = tex(1024, 192, (c, w, h) => {
+        const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#34442a'); gr.addColorStop(1, '#25311d');
+        c.fillStyle = gr; c.fillRect(0, 0, w, h);
+        c.strokeStyle = '#c8b060'; c.lineWidth = 8; c.strokeRect(10, 10, w - 20, h - 20);
+        c.lineWidth = 2; c.strokeRect(22, 22, w - 44, h - 44);
+        c.fillStyle = '#efe3b8'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        const fit = (txt, font, px, maxW) => { let s = px; do { c.font = font.replace('#', s); s -= 2; } while (c.measureText(txt).width > maxW && s > 10); };
+        fit('LA STALLA DELLE NEBBIE', 'bold #px Cinzel, Georgia, serif', 76, w - 110);
+        c.fillText('LA STALLA DELLE NEBBIE', w / 2, h / 2 - 20);
+        c.fillStyle = '#c8b060';
+        fit('— bestie curate, nomi custoditi —', 'italic #px Georgia, serif', 38, w - 160);
+        c.fillText('— bestie curate, nomi custoditi —', w / 2, h / 2 + 46);
     });
-    for (const s of [-1, 1]) put(new THREE.CylinderGeometry(0.08, 0.09, 2.3, 7), wood, s * 1.2, 1.15, HZ);
-    put(new THREE.BoxGeometry(2.7, 0.55, 0.06), dark, 0, 2.05, HZ);
-    put(new THREE.PlaneGeometry(2.6, 0.5), new THREE.MeshStandardMaterial({ map: signT, roughness: 0.8 }), 0, 2.05, HZ + 0.035);
-    circ(-1.2, HZ, 0.12, -1, 2.3); circ(1.2, HZ, 0.12, -1, 2.3);
+    signT.anisotropy = 4;
+    for (const s of [-1, 1]) put(new THREE.CylinderGeometry(0.08, 0.09, 2.5, 7), wood, s * 1.45, 1.25, HZ);
+    put(new THREE.BoxGeometry(SW + 0.16, SH + 0.14, 0.07), dark, 0, 2.05, HZ);
+    const signM = new THREE.MeshStandardMaterial({ map: signT, roughness: 0.8 });
+    put(new THREE.PlaneGeometry(SW, SH), signM, 0, 2.05, HZ + 0.04).castShadow = false;            // davanti, verso la piazza
+    put(new THREE.PlaneGeometry(SW, SH), signM, 0, 2.05, HZ - 0.04, [0, Math.PI, 0]).castShadow = false;   // e dietro, per chi esce
+    put(new THREE.BoxGeometry(3.2, 0.1, 0.12), wood, 0, 2.5, HZ);                                          // la trave in cima
+    for (const s of [-1, 1]) put(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 4), dark, s * 1.1, 2.4, HZ).castShadow = false;   // le catenelle
+    circ(-1.45, HZ, 0.12, -1, 2.5); circ(1.45, HZ, 0.12, -1, 2.5);
     return g;
 }

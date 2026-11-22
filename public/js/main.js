@@ -11,7 +11,7 @@ import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { World, WORLD, makeSky } from './world.js';
 import { Streamer, characterLod } from './engine/stream.js';
 import { registerRegions } from './regions/index.js';
-import { Character, setCharacterQuality } from './character.js';
+import { Character, setCharacterQuality, CHARACTERS } from './character.js';
 import { Studio } from './studio.js';
 import { Creator, randomAppearance } from './creator.js';
 import { Panels } from './panels.js';
@@ -70,6 +70,12 @@ class RemotePlayer {
         this.ch.root.rotation.y = this.ry;
         this.speed = 0;
         app.scene.add(this.ch.root);
+        // il suo SputnikPet, che gli va dietro come il tuo va dietro a te
+        this.petF = new PetFollower(app, {
+            pet: () => this.info.pet || null, element: () => this.info.element,
+            pos: () => this.ch.root.position, yaw: () => this.ch.root.rotation.y,
+            show: () => this.ch.root.visible && app.mode !== 'duel' && this.petNear, fishing: () => ANIMS[this.anim] === 'sit',
+        });
     }
     updateTag() {
         const friend = this.app.isFriend(this.info.id);
@@ -103,8 +109,10 @@ class RemotePlayer {
         r.visible = d < 120;   // oltre la nebbia non si disegna
         characterLod(this.ch, d);
         if (d < 120) this.ch.update(dt);
+        this.petNear = d < 70;
+        this.petF.update(dt);
     }
-    dispose() { this.ch.dispose(); }
+    dispose() { this.ch.dispose(); this.petF?.dispose(); }
 }
 
 // =====================================================================
@@ -568,7 +576,7 @@ class Game {
         this.setHolo(p.grade || 0);
         if ((p.grade || 0) >= 4 && !this.vivaFrames && this.local.cardSig === this.cardSignature()) this.buildViva();
         else if ((p.grade || 0) < 4 && this.vivaFrames) this.startViva(null);
-        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria', 'altare', 'bacheca', 'tombe', 'npc', 'pedaggio']);
+        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria', 'altare', 'bacheca', 'tombe', 'npc', 'pedaggio', 'baule', 'cuccia']);
     }
     // riflesso olografico della carta in alto a sinistra (Filigrana, Aurora, Incisa)
     setHolo(grade) {
@@ -1276,6 +1284,8 @@ class Game {
         else if (it.id === 'l2spot') this.l2?.find(it.k);
         else if (it.id === 'robspot') this.robW?.find(it.k);
         else if (it.id === 'casa') this.casaEditor?.open();
+        else if (it.id === 'baule') this.openPanel('baule');
+        else if (it.id === 'cuccia') this.openPanel('cuccia');
         else if (it.id === 'errante') this.openPanel('errante', { id: it.k });
         else if (it.id === 'gente') this.openPanel('gente', { k: it.k });
         else if (it.id === 'cena_tavola') this.robW?.tavola();
@@ -1557,6 +1567,7 @@ class Game {
         for (const p of this.players.values()) p.update(dt, this.camera.position);
         this.interiors?.update();
         this.interiors?.frame();
+        if (this.mode === 'build') for (const ch of CHARACTERS) if (ch.tag) ch.tag.visible = false;   // arredando la casa: niente nomi sopra le teste
         this.updateMud(dt);
         this.mmT -= dt;
         if (this.mmT <= 0) {
@@ -1592,6 +1603,7 @@ class Game {
             if (this.cutFog != null && this.scene.fog) this.scene.fog.density = this.cutFog;
             applySky(this.sky, S, this.world.t);
             this.precip?.update(dt, this.camera.position, S, this.world.indoor);
+            this.updateHoods(S);
             if (!this.fillInRoom) this.fillLight.intensity = 9 - 8.6 * S.day;   // di giorno la luce lilla di riempimento appiattirebbe tutto
         }
         this.audio.setEnv(S);
@@ -1732,9 +1744,21 @@ class Game {
         this.sendPos(dt, swimming ? (hs > 0.4 ? 1 : 0) : !P.grounded ? 3 : hs > 6 ? 2 : hs > 0.4 ? 1 : 0);
     }
     // luce di riempimento: lilla all'aperto, bianca e calda nella Stanza Bianca
+    // quando piove (o nevica) tutti tirano su il cappuccio; al riparo, dentro le case, lo abbassano
+    updateHoods(S) {
+        const r = Math.max(S.rain || 0, S.snow || 0);
+        this.hoodOn = this.hoodOn ? r > 0.15 : r > 0.3;
+        const W = this.world, I = this.interiors?.list || [];
+        for (const ch of CHARACTERS) {
+            if (ch.root.parent !== this.scene) continue;   // nel palco dei duelli e negli studi no
+            let on = this.hoodOn;
+            if (on) { const p = ch.root.position; if (W.inRoom?.(p) || I.some(R => this.interiors.inside(R, p))) on = false; }
+            ch.setRainHood(on);
+        }
+    }
     updateFill(P) {
         this.fillLight.position.set(P.pos.x + Math.sin(this.cam.yaw) * 2, P.pos.y + 2.6, P.pos.z + Math.cos(this.cam.yaw) * 2);
-        const inRoom = this.world.inRoom(P.pos);
+        const inRoom = this.world.inRoom(P.pos) || !!this.interior;   // anche negli interni: niente pioggia né erba dentro casa
         if (inRoom !== this.fillInRoom) {
             this.fillInRoom = inRoom;
             this.fillLight.color.set(inRoom ? '#fff1e2' : '#d8c4ff');

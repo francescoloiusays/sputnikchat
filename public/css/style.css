@@ -1162,3 +1162,30 @@ body.cena-on #toasts { display: none; }
 #casa-ui .casa-tool b { font-size: 13px; font-weight: 600; }
 #casa-ui .casa-tool small { font-size: 11px; color: #c9b58c; }
 #casa-ui .casa-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #e8d9b8; font-size: 14px; }
+
+/* --- la casa: mentre la si costruisce si vede solo lei --- */
+body.building #hud > :not(#toasts), body.building #vignette, body.building #panel-root, body.building #mobile-controls { display: none !important; }
+#casa-ui .chip-tool { font-weight: 700; }
+#casa-ui .chip-gomma.sel { background: #6a2424; border-color: #ff8a7a; }
+#casa-ui .casa-sep { width: 1px; background: #6b4c1a; margin: 0 4px; }
+#casa-ui .casa-placed { grid-template-columns: auto 24px; grid-template-rows: auto; align-items: center; }
+#casa-ui .casa-placed .x { width: 22px; height: 22px; border-radius: 50%; border: 1px solid #a04a4a; background: #4a1d1d; color: #ffd0c8; font-weight: 700; line-height: 1; cursor: pointer; padding: 0; }
+#casa-ui .casa-placed .x:hover { background: #8a2a2a; }
+#casa-ui .casa-selbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; background: #3a2a14; border: 1px solid #e8c26a; color: #ffe6a8; }
+#casa-ui .casa-selbar b { margin-right: auto; }
+#casa-ui .btn-danger { background: #7a2424; border-color: #c85a4a; color: #ffe0d8; }
+#casa-ui .casa-hint { color: #9fe8c8; }
+#casa-ui .casa-hint.bad { color: #ff9a8a; }
+#casa-ui .casa-keys { font-size: 11px; }
+
+/* --- il baule di casa --- */
+.baule-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.baule-cap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 14px; }
+.baule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 720px) { .baule-grid { grid-template-columns: 1fr; } }
+.baule-side { background: rgba(0, 0, 0, 0.12); border: 1px solid rgba(107, 76, 26, 0.5); border-radius: 8px; padding: 8px; min-height: 120px; }
+.baule-side .trade-items { max-height: 260px; overflow-y: auto; }
+.baule-side .trade-item small { display: block; opacity: 0.7; font-size: 11px; }
+.baule-side .trade-item.off { opacity: 0.45; cursor: not-allowed; }
+.baule-mats { display: grid; gap: 4px; margin-top: 8px; max-height: 220px; overflow-y: auto; }
+.baule-mat { display: flex; align-items: center; gap: 6px; }

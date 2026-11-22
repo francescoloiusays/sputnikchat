@@ -16,6 +16,7 @@ import { rivaHeight, rivaShore, nearRiva } from './shared/riva.js';
 import { buildBazar, buildBarca, buildStalla } from './bancarelle.js';
 import { terreMask, terreRelief, PADS, TERRE_PATHS, nearTerreBuild, inTerre } from './shared/terre.js';
 import { buildTerre } from './terre.js';
+import { LOTTO, GW, GD } from './shared/casa.js';
 import { Relief, tileHeights, roughRock } from './realism.js';
 import { Grass } from './grass.js';
 import { buildWeapon } from './character.js';
@@ -592,8 +593,9 @@ export class World {
             for (const s of Object.values(WORLD.SHOPS)) m *= smooth(6, 8.5, Math.hypot(x - s.x, z - s.z));
             m *= smooth(27, 32, Math.pow(Math.pow(Math.abs(x - C.x), 4) + Math.pow(Math.abs(z - C.z), 4), 0.25));
             m *= 1 - smooth(0.4, 0.75, Math.hypot(hx, hz) / this.cw);
-            if (Math.abs(x - 30) < 4.6 && Math.abs(z - 52) < 7) m *= 0.12;
-            if (nearTerreBuild(x, z, -1.5)) m *= 0.15;   // dentro le case delle Terre Nuove   // dentro la cappella: lastre, solo qualche ciuffo tra le fughe
+            if (Math.abs(x - 30) < 4.6 && Math.abs(z - 52) < 7) m *= 0.12;   // dentro la cappella: lastre, solo qualche ciuffo tra le fughe
+            if (nearTerreBuild(x, z, -1.5)) m *= 0.15;   // dentro le case delle Terre Nuove
+            if (x > LOTTO.x - 2 && x < LOTTO.x + GW + 2 && z > LOTTO.z - 2 && z < LOTTO.z + GD + 2) m = 0;   // il lotto della casa: niente erba dal pavimento
             return m * (0.55 + 0.45 * smooth(-0.35, 0.3, fbm(x * 0.11 + 3, z * 0.11)));   // a chiazze, non un prato all'inglese
         };
         this.grass = new Grass(this.scene, { H: this.H, n, mask, minX: MIN_X, minZ: MIN_Z, cw: this.cw, cd: this.cd });

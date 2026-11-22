@@ -55,7 +55,7 @@ const NOMI = {
 // i posti dove la gente va e viene (sui sentieri): dalla piazza a tutta l'isola
 const POSTI = {
     piazza: [2, 20], molo: [0.5, 84], forgia: [-14, 11], sartoria: [14, 11], bazar: [9, 34], cimitero: [-25, 40], stalla: [27, 29],
-    cappella: [24, 46], ponte: [0, -28], terre: [70, 21], borgo: [TP.borgo[0] - 4, TP.borgo[1] - 4], tavola: [TP.tavola[0] - 4, TP.tavola[1] + 3], studio: [104, 28],
+    cappella: [24, 46], ponte: [0, -28], terre: [70, 21], borgo: [TP.borgo[0] - 2.5, TP.borgo[1] - 2.5], tavola: [TP.tavola[0] - 4, TP.tavola[1] + 3], studio: [104, 28],
 };
 const HUB = [[0, 14], [0, 32]];
 const SPEED = 1.4;

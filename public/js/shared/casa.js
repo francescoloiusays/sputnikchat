@@ -41,14 +41,21 @@ export const ARREDI = {
     sedia: { name: 'Sedia', w: 1, d: 1, cost: { coins: 12 } },
     camino: { name: 'Camino', w: 2, d: 1, cost: { coins: 90, frammento: 2 } },
     libreria: { name: 'Libreria', w: 2, d: 1, cost: { coins: 55 } },
-    baule: { name: 'Baule', w: 1, d: 1, cost: { coins: 30 } },
+    baule: { name: 'Baule', w: 1, d: 1, cost: { coins: 30 }, max: 3 },
+    cuccia: { name: 'Cuccia', w: 1, d: 1, cost: { coins: 45 }, max: 3 },
     tappeto: { name: 'Tappeto', w: 2, d: 2, cost: { coins: 35 }, flat: true },
     lampada: { name: 'Lampada', w: 1, d: 1, cost: { coins: 25 } },
     pianta: { name: 'Pianta in vaso', w: 1, d: 1, cost: { coins: 15 } },
     acquario: { name: 'Acquario della laguna', w: 1, d: 1, cost: { coins: 80, perla: 3 } },
     trofeo: { name: 'Trofeo d\'armi', w: 1, d: 1, cost: { coins: 70, frammento: 2 } },
-    tecnigrafo: { name: 'Il tecnigrafo di Rob', w: 1, d: 1, cost: {}, gift: true },
+    tecnigrafo: { name: 'Il tecnigrafo di Rob', w: 1, d: 1, cost: {}, gift: true, max: 1 },
 };
+// il baule: quanti posti per ogni baule in casa (un oggetto = un posto; un materiale = un posto, quanti che siano)
+export const BAULE_SLOTS = 40;
+export const casaCount = (L, id) => (L?.items || []).filter(it => it.id === id).length;
+export const bauleUsed = (B) => (B?.inv?.length || 0) + Object.values(B?.mats || {}).filter(n => n > 0).length;
+// sei dentro il lotto della casa? (per il baule e la cuccia)
+export const inCasa = (x, z) => x > LOTTO.x - 1 && x < LOTTO.x + GW + 1 && z > LOTTO.z - 1 && z < LOTTO.z + GD + 1;
 
 // la casa che lascia Rob: assi di legno, intonaco, una porta sulla facciata, due finestre, il suo tecnigrafo
 export function casaDiRob() {
@@ -102,7 +109,7 @@ export function cleanCasa(L) {
         floor[k] = f;
     }
     const used = new Set();
-    if ((L.items || []).filter(it => it?.id === 'tecnigrafo').length > 1) return null;   // il tecnigrafo di Rob è uno solo
+    for (const [id, A] of Object.entries(ARREDI)) if (A.max && (L.items || []).filter(it => it?.id === id).length > A.max) return null;   // un tecnigrafo solo, tre bauli, tre cucce
     for (const it of (L.items || []).slice(0, 40)) {
         const c = { id: String(it.id), x: it.x | 0, z: it.z | 0, r: (it.r | 0) & 3 };
         if (!ARREDI[c.id]) return null;

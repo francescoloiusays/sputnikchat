@@ -4,6 +4,7 @@
 //  si fermano, se gli parli ti guardano. Si parla, si baratta (una volta
 //  al giorno) e ci si sfida: il cartellino dice quanto sono forti per te.
 // =====================================================================
+import { walkTo } from './npc-walk.js';
 import { gentiOf, genteAt, forza, premio, MESTIERI } from './shared/genti.js';
 import { Character } from './character.js';
 import { characterLod } from './engine/stream.js';
@@ -37,11 +38,16 @@ export class Genti {
             const near = P && Math.hypot(P.x - ch.root.position.x, P.z - ch.root.position.z) < 3;
             if (near && app.panels.current === 'gente' && app.panels.arg?.k === n.G.k) n.stop = 1.5;
             n.stop = Math.max(0, n.stop - dt);
-            if (!n.stop) ch.root.position.set(at.x, W.groundAt(at.x, at.z), at.z);
-            const want = n.stop && P ? Math.atan2(P.x - ch.root.position.x, P.z - ch.root.position.z) : at.yaw ?? n.ry;
+            const far = camPos.distanceTo(ch.root.position) > 90;
+            let mv = 0;
+            if (n.stop) { /* resta lì */ }
+            else if (far) { ch.root.position.set(at.x, W.terrainAt(at.x, at.z), at.z); n.wk = false; }   // lontano nessuno lo vede: niente passi
+            else mv = walkTo(W, n, at, dt, n.G.k, genteAt(n.G, now + 12000));   // guarda dove sarà fra una dozzina di secondi e ci traccia il sentiero
+            const walking = !n.stop && (far ? at.walking : mv > dt * 0.35);
+            const want = n.stop && P ? Math.atan2(P.x - ch.root.position.x, P.z - ch.root.position.z) : walking ? (n.moveYaw ?? at.yaw ?? n.ry) : at.yaw ?? n.ry;
             n.ry = lerpAngle(n.ry, want, Math.min(1, dt * 6));
             ch.root.rotation.y = n.ry;
-            ch.state = at.walking && !n.stop ? 'walk' : 'idle'; ch.speed = at.walking && !n.stop ? 1.4 : 0;
+            ch.state = walking ? 'walk' : 'idle'; ch.speed = walking ? 1.4 : 0;
             n.it.x = ch.root.position.x; n.it.z = ch.root.position.z; n.it.y = ch.root.position.y;
             const d = camPos.distanceTo(ch.root.position);
             ch.root.visible = d < 75;
