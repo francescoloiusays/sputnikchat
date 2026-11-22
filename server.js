@@ -804,6 +804,7 @@ function stepOne(d) {
 // =====================================================================
 //  IN ONDA! (Stanza Bianca) e LA VEGLIA DEI MORTI: stato condiviso
 // =====================================================================
+const trades = new Map();   // scambi aperti fra giocatori (id → tavolo)
 const ondas = new Map();   // stanza → puntata in corso
 const ondaPeople = (room) => [...online.values()].filter(S => S.room === room && inWhiteRoom(S.pos[0], S.pos[1], S.pos[2]));
 function startOnda(room, hosts) {
@@ -1477,6 +1478,77 @@ io.on('connection', (socket) => {
         } else return fail(reply, "Non c'è niente qui");
         save(p); sendMe(me);
         reply({ ok: true, rob: st, ...out });
+    });
+
+    // --- LO SCAMBIO FRA GIOCATORI: vendere, comprare, permutare, senza passare dal Bazar ---
+    // Si apre un tavolo a due: ognuno mette oggetti e monete, tutti e due confermano, e solo allora si scambia.
+    // Ogni cambio di offerta toglie le conferme (niente furbizie all'ultimo secondo).
+    const tradeView = (T) => ({ id: T.id, names: T.names, ids: T.pids, offer: T.offer, ok: T.ok });
+    const tradeSend = (T) => { for (const s of ['a', 'b']) { const S = sessionOf(T.pids[s]); if (S) S.socket.emit('trade:state', { ...tradeView(T), side: s }); } };
+    const tradeClose = (T, why) => {
+        trades.delete(T.id);
+        for (const s of ['a', 'b']) { const S = sessionOf(T.pids[s]); if (S) { if (S.tradeId === T.id) S.tradeId = null; S.socket.emit('trade:closed', { id: T.id, why }); } }
+    };
+    on('trade:open', (d, reply) => {
+        const B = sessionOf(String(d.to)), p = me.p;
+        if (!B || B === me) return fail(reply, 'Giocatore non disponibile');
+        if (me.tradeId || B.tradeId) return fail(reply, 'Uno dei due sta già scambiando');
+        if (me.duelId || B.duelId) return fail(reply, 'Non durante un duello');
+        const id = uid();
+        const T = { id, pids: { a: p.id, b: B.p.id }, names: { a: p.name, b: B.p.name }, offer: { a: { items: [], coins: 0 }, b: { items: [], coins: 0 } }, ok: { a: false, b: false }, open: false, at: Date.now() };
+        trades.set(id, T); me.tradeId = id;
+        B.socket.emit('trade:invite', { id, from: { id: p.id, name: p.name } });
+        setTimeout(() => { if (trades.get(id) === T && !T.open) tradeClose(T, `${B.p.name} non ha risposto`); }, 30000);
+        reply({ ok: true, id });
+    });
+    on('trade:answer', (d, reply) => {
+        const T = trades.get(String(d.id));
+        if (!T || T.pids.b !== me.p.id || T.open) return fail(reply, 'Proposta scaduta');
+        if (!d.yes) { tradeClose(T, `${me.p.name} ha detto di no`); return reply({ ok: true }); }
+        if (me.tradeId) return fail(reply, 'Stai già scambiando con qualcun altro');
+        T.open = true; me.tradeId = T.id;
+        tradeSend(T); reply({ ok: true });
+    });
+    on('trade:set', (d, reply) => {
+        const T = trades.get(me.tradeId), p = me.p;
+        if (!T || !T.open) return fail(reply, 'Nessuno scambio aperto');
+        const side = T.pids.a === p.id ? 'a' : 'b', eq = Object.values(p.equipment || {});
+        const items = [...new Set((Array.isArray(d.items) ? d.items : []).map(String))].slice(0, 12);
+        for (const u of items) { const it = p.inventory.find(i => i.uid === u); if (!it) return fail(reply, 'Oggetto non trovato'); if (eq.includes(u)) return fail(reply, 'Prima toglilo di dosso'); }
+        const coins = int(d.coins, 0, 999999);
+        if (coins > p.coins) return fail(reply, 'Non hai tutte quelle monete');
+        T.offer[side] = { items, coins, show: items.map(u => p.inventory.find(i => i.uid === u)) };
+        T.ok = { a: false, b: false };
+        tradeSend(T); reply({ ok: true });
+    });
+    on('trade:ok', (d, reply) => {
+        const T = trades.get(me.tradeId), p = me.p;
+        if (!T || !T.open) return fail(reply, 'Nessuno scambio aperto');
+        const side = T.pids.a === p.id ? 'a' : 'b';
+        T.ok[side] = !!d.yes;
+        if (!(T.ok.a && T.ok.b)) { tradeSend(T); return reply({ ok: true }); }
+        // tutti e due d'accordo: si controlla tutto di nuovo e si scambia in un colpo solo
+        const P = { a: byPid(T.pids.a), b: byPid(T.pids.b) };
+        for (const s of ['a', 'b']) {
+            const o = T.offer[s], q = P[s], other = P[s === 'a' ? 'b' : 'a'];
+            if (!q || !sessionOf(q.id)) { tradeClose(T, 'Uno dei due se n\'è andato'); return reply({ ok: false, msg: 'Scambio annullato' }); }
+            if (q.coins < o.coins || o.items.some(u => !q.inventory.some(i => i.uid === u) || Object.values(q.equipment || {}).includes(u))) { T.ok = { a: false, b: false }; tradeSend(T); return fail(reply, `${q.name} non ha più quello che aveva offerto`); }
+            if (other.inventory.length - T.offer[s === 'a' ? 'b' : 'a'].items.length + o.items.length > 80) { T.ok = { a: false, b: false }; tradeSend(T); return fail(reply, `La bisaccia di ${other.name} è troppo piena`); }
+        }
+        const move = (from, to, o) => {
+            from.coins -= o.coins; to.coins += o.coins;
+            for (const u of o.items) { const i = from.inventory.findIndex(x => x.uid === u); const [it] = from.inventory.splice(i, 1); if (from.reserve === u) from.reserve = null; to.inventory.push({ ...it, uid: uid() }); }
+        };
+        move(P.a, P.b, T.offer.a); move(P.b, P.a, T.offer.b);
+        for (const s of ['a', 'b']) { save(P[s]); const S = sessionOf(P[s].id); if (S) sendMe(S); }
+        console.log(`[scambio] ${P.a.name} ⇄ ${P.b.name}: ${T.offer.a.items.length}+${T.offer.a.coins} / ${T.offer.b.items.length}+${T.offer.b.coins}`);
+        tradeClose(T, 'done');
+        reply({ ok: true, done: true });
+    });
+    on('trade:cancel', (d, reply) => {
+        const T = trades.get(me.tradeId || String(d?.id || ''));
+        if (T && (T.pids.a === me.p.id || T.pids.b === me.p.id)) tradeClose(T, `${me.p.name} ha chiuso lo scambio`);
+        me.tradeId = null; reply({ ok: true });
     });
 
     // --- LO SPOGLIATOIO: prima del duello si sceglie con cosa combattere ---
@@ -2467,6 +2539,7 @@ io.on('connection', (socket) => {
             }
         }
         if (me.watching) duels.get(me.watching)?.spectators.delete(me.sid);
+        for (const T of [...trades.values()]) if (T.pids.a === p.id || T.pids.b === p.id) { trades.delete(T.id); for (const s of ['a', 'b']) { const S = sessionOf(T.pids[s]); if (S && S !== me) { S.tradeId = null; S.socket.emit('trade:closed', { id: T.id, why: `${p.name} se n'è andato` }); } } }
         for (const [cid, c] of challenges) if (c.from === me.sid || c.to === me.sid) challenges.delete(cid);
         socket.to(me.room).emit('player:leave', { id: p.id });
         online.delete(socket.id);

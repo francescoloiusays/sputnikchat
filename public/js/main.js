@@ -23,6 +23,7 @@ import { installTheme, icon, iconSVG, drawIcon } from './icons.js';
 import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, sanitizeCard, sanitizeAppearance, STARTER_WEAPON, levelProgress, titleFor, talentPoints, TALENT_IDS, plusOf, MATS, SEALS, gradeOf } from './shared/catalog.js';
 import { Fishing } from './fishing.js';
 import { PetFollower } from './pets.js';
+import { Input } from './input.js';
 import { PETS, petDuel } from './shared/pet.js';
 import { Npcs } from './npcs.js';
 import { Canto } from './canto.js';
@@ -325,6 +326,7 @@ class Game {
         this.cam = { yaw: 0, pitch: 0.28, dist: 9, wantDist: innerWidth < innerHeight ? 6.2 : 4.6, first: false };
         this.buildMyCharacter();
         this.npcs = new Npcs(this);
+        this.input = new Input(this);        // tasti rimappabili e controller
         this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
         this.erranti = new Erranti(this);    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
         this.storySpots = buildStorySpots(this);
@@ -753,6 +755,21 @@ class Game {
         N.on('duel:start', (info) => this.enterDuel(info, 'fighter', info.side));
         N.on('duel:begin', ({ id, gear }) => { if (this.duel?.info.id === id) { this.duel.info.phase = 'fight'; this.duel.onBegin(gear); } });
         N.on('duel:state', (s) => this.duel?.pushSnap(s));
+        // lo scambio fra giocatori
+        N.on('trade:invite', (t) => {
+            toast(h('div', {}, h('b', {}, `${t.from.name} ti propone uno scambio`),
+                h('div', { class: 'btn-row', style: { marginTop: '6px' } },
+                    h('button', { class: 'btn btn-sm btn-primary', onclick: async (e) => { e.target.closest('.toast')?.remove(); const r = await this.net.request('trade:answer', { id: t.id, yes: true }); if (!r.ok) toast(r.msg, { kind: 'bad' }); } }, 'Apri il tavolo'),
+                    h('button', { class: 'btn btn-sm', onclick: (e) => { e.target.closest('.toast')?.remove(); this.net.request('trade:answer', { id: t.id, yes: false }); } }, 'No, grazie'))), { icon: 'handshake', duration: 28000 });
+            this.audio.play('notify');
+        });
+        N.on('trade:state', (t) => { this.trade = t; if (this.panels.current === 'scambio') this.panels.render(); else this.openPanel('scambio'); });
+        N.on('trade:closed', (t) => {
+            this.trade = null;
+            if (this.panels.current === 'scambio') this.panels.close();
+            if (t.why === 'done') { toast('Scambio fatto: controlla la bisaccia', { kind: 'coin', icon: 'handshake' }); this.audio.play('coin'); }
+            else toast(t.why || 'Scambio chiuso', { icon: 'handshake' });
+        });
         N.on('duel:end', (r) => { if (this.duel?.info.id === r.id) { this.duel.showResult(r); this.wearNews(r.wear?.[this.duel.side], r.rent?.[this.duel.side]); this.petNews(r.pet?.[this.duel.side]); } });
         N.on('duel:cancel', (c) => { if (this.duel?.info.id === c.id) { toast(`Duello annullato: ${c.reason}`, { kind: 'bad' }); this.exitDuel(); } });
         N.on('bet:result', (b) => {
@@ -789,6 +806,7 @@ class Game {
         if (w.broken) return { reserve, dur: null, weapon: reserve };
         return { reserve, dur: weaponWearLeft(w) };
     }
+    toastPad(name, on) { toast(on ? `Controller collegato: ${String(name).split('(')[0].trim()}. I pulsanti si cambiano in Opzioni → Comandi.` : 'Controller scollegato', { icon: 'swords', duration: 5000 }); }
     petNews(r) {
         const pet = this.me?.pet;
         if (!r || !pet) return;
@@ -1496,6 +1514,7 @@ class Game {
             this.slowT = dt > 1 / 40 ? (this.slowT || 0) + dt : Math.max(0, (this.slowT || 0) - dt * 2);
             if (this.slowT > 5) this.contact.enabled = false;
         }
+        this.input?.update(dt);
         this.updateEnv(dt);
         if (this.mode === 'duel' && this.duel) { this.duel.update(dt); return; }
         if (!this.world) return;
@@ -1609,6 +1628,7 @@ class Game {
             if (K.KeyD || K.ArrowRight) right += 1;
             if (K.KeyA || K.ArrowLeft) right -= 1;
             if (this.joy) { fwd += this.joy.y; right += this.joy.x; }
+            if (this.padMove) { fwd += this.padMove.y; right += this.padMove.x; }   // la levetta del controller
         }
         const cy = this.cam.yaw;
         const f = new THREE.Vector3(-Math.sin(cy), 0, -Math.cos(cy)), r = new THREE.Vector3(Math.cos(cy), 0, -Math.sin(cy));

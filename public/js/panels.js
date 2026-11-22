@@ -20,6 +20,7 @@ import { l2Box } from './libro2-ui.js';
 import { robBox, PLATES, drawPlate, robGone } from './rob-ui.js';
 import { robPlates } from './shared/rob.js';
 import { erranteView } from './erranti.js';
+import { ACTIONS, PAD_NAMES, keyName } from './input.js';
 import { l2At, L2AT } from './shared/libro2.js';
 import { RODS, TRADES, tonicXp, itemTradeValue } from './shared/mare.js';
 import { weaponDurability, weaponWearLeft, repairCost, RESERVE_WEAPON } from './shared/catalog.js';
@@ -93,7 +94,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'scambio', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('open');
@@ -111,6 +112,8 @@ export class Panels {
     }
     close() {
         if (!this.current) return;
+        // chiudere il tavolo dello scambio vuol dire andarsene dallo scambio
+        if (this.current === 'scambio' && this.app.trade) { this.app.trade = null; this.app.net.request('trade:cancel', {}); }
         this.cleanup();
         this.current = null;
         this.root.classList.add('hidden');
@@ -890,6 +893,58 @@ export class Panels {
             h('div', { class: 'btn-row end', style: { marginTop: '10px' } }, this.purse())));
     }
 
+    // --- LO SCAMBIO FRA GIOCATORI ---
+    p_scambio() {
+        const app = this.app, T = app.trade, me = app.me;
+        if (!T) return this.set('handshake', 'Scambio', h('div', { class: 'empty' }, 'Nessuno scambio aperto. Apri il profilo di un altro viandante (tasto R quando gli sei vicino, o dalla lista dei giocatori) e proponigli uno scambio.'));
+        const mine = T.side, theirs = mine === 'a' ? 'b' : 'a', my = T.offer[mine], their = T.offer[theirs];
+        const sel = new Set(my.items), eq = Object.values(me.equipment || {});
+        const coinsIn = h('input', { type: 'number', min: 0, max: me.coins || 0, value: my.coins || 0, style: { width: '110px' } });
+        const send = (items, coins) => app.net.request('trade:set', { items, coins }).then(r => { if (!r.ok) toast(r.msg, { kind: 'bad' }); });
+        const card = (e, on, click) => { const inf = itemInfo(e), rt = tierOf(e); return h('button', { class: 'trade-item' + (on ? ' on' : ''), onclick: click, title: inf.name }, this.slot({ ic: itemIconName(e), rar: rt.id, plus: inf.plus }), h('span', {}, inf.name)); };
+        const side = (title, o, ok, extra) => h('div', { class: 'trade-side' + (ok ? ' ok' : '') },
+            h('div', { class: 'trade-title' }, title, ok ? h('span', { class: 'trade-ok' }, '✔ d\'accordo') : null),
+            h('div', { class: 'trade-items' }, (o.show || []).filter(Boolean).map(e => card(e, true, null)), !(o.show || []).length ? h('span', { class: 'muted small' }, 'nessun oggetto') : null),
+            h('div', { class: 'trade-coins' }, coin(o.coins || 0)), extra);
+        this.set('handshake', `Scambio con ${T.names[theirs]}`, h('div', { class: 'parchment' },
+            lore('Ognuno mette sul tavolo quello che vuole dare. Quando tutti e due premete «D\'accordo», lo scambio si fa. Se qualcuno cambia l\'offerta, si ricomincia a confermare.'),
+            h('div', { class: 'trade-table' },
+                side(`Tu dai`, my, T.ok[mine]),
+                h('div', { class: 'trade-arrows', html: iconSVG('handshake') }),
+                side(`${T.names[theirs]} dà`, their, T.ok[theirs])),
+            h('h3', { class: 'sect', html: iconSVG('bag') }, 'Dalla tua bisaccia (clicca per mettere o togliere)'),
+            h('div', { class: 'trade-items pick' }, (me.inventory || []).filter(e => !eq.includes(e.uid)).map(e => card(e, sel.has(e.uid), () => { sel.has(e.uid) ? sel.delete(e.uid) : sel.add(e.uid); send([...sel], +coinsIn.value || 0); }))),
+            h('div', { class: 'btn-row', style: { marginTop: '10px' } },
+                h('span', {}, 'Monete che dai: '), coinsIn, btn('Metti le monete', () => send([...sel], +coinsIn.value || 0), { cls: 'btn-sm' }),
+                this.purse()),
+            h('div', { class: 'btn-row end', style: { marginTop: '10px' } },
+                btn('Chiudi lo scambio', () => app.net.request('trade:cancel', {}), { cls: 'btn-sm btn-danger' }),
+                btn(T.ok[mine] ? 'Ci ripenso' : 'D\'accordo', async () => { const r = await app.net.request('trade:ok', { yes: !T.ok[mine] }); if (!r.ok) toast(r.msg, { kind: 'bad' }); }, { cls: 'btn-primary', ic: 'handshake' }))));
+    }
+
+    // --- COMANDI: tastiera e controller ---
+    commandsSection() {
+        const app = this.app, I = app.input;
+        if (!I) return null;
+        const open = this.tabs.cmdOpen, ctx = this.tabs.cmdCtx || 'world';
+        const pad = (navigator.getGamepads?.() || []).find(p => p);
+        const row = ([id, name]) => {
+            const waitKey = I.capture?.kind === 'key' && I.capture.ctx === ctx && I.capture.id === id;
+            const waitPad = I.capture?.kind === 'pad' && I.capture.ctx === ctx && I.capture.id === id;
+            const b = I.padOf(ctx, id);
+            return h('div', { class: 'cmd-row' }, h('span', { class: 'grow' }, name),
+                h('button', { class: 'btn btn-sm' + (waitKey ? ' btn-primary' : ''), onclick: () => { I.startCapture('key', ctx, id, () => this.render()); this.render(); } }, waitKey ? 'premi un tasto…' : keyName(I.keyOf(ctx, id))),
+                h('button', { class: 'btn btn-sm' + (waitPad ? ' btn-primary' : ''), title: 'Pulsante del controller', onclick: () => { I.startCapture('pad', ctx, id, () => this.render()); this.render(); } }, waitPad ? 'premi un pulsante…' : b == null ? (['su', 'giu', 'sx', 'dx'].includes(id) ? 'Levetta / croce' : '—') : PAD_NAMES[b] || 'pulsante ' + b));
+        };
+        return h('details', { class: 'mix cmds', open: open || null, ontoggle: (e) => { this.tabs.cmdOpen = e.target.open; } },
+            h('summary', {}, 'Comandi: tastiera e controller'),
+            h('p', { class: 'muted small' }, pad ? `Controller collegato: ${pad.id.split('(')[0].trim()}. Levetta sinistra per muoverti, destra per la visuale.` : 'Collega un controller Xbox o PlayStation e premi un pulsante: il gioco lo riconosce da solo.'),
+            h('div', { class: 'chips' }, [['world', 'Sull\'isola'], ['duel', 'In duello']].map(([k, l]) => h('button', { class: 'chip' + (ctx === k ? ' sel' : ''), onclick: () => { this.tabs.cmdCtx = k; this.render(); } }, l))),
+            h('div', { class: 'cmd-head' }, h('span', { class: 'grow' }, 'Azione'), h('span', {}, 'Tastiera'), h('span', {}, 'Controller')),
+            ACTIONS[ctx].map(row),
+            h('div', { class: 'btn-row' }, btn('Rimetti i comandi di sempre', () => { I.reset(); this.render(); }, { cls: 'btn-sm' })));
+    }
+
     // --- GLI ERRANTI ---
     p_errante(arg) { return erranteView(this, arg?.id); }
     matName(k) { return MATS[k]?.name || k; }
@@ -1204,7 +1259,8 @@ export class Panels {
                     h('div', { class: 'btn-row', style: { marginTop: '14px' } },
                         p.id === me.id ? null : p.friend ? h('span', { class: 'sub' }, 'Siete amici') : p.requested ? h('span', { class: 'sub' }, 'Richiesta inviata') : btn('Stringi amicizia', () => this.act('friend:request', { id: p.id }).then(() => this.render()), { ic: 'handshake' }),
                         p.id !== me.id && inRoom ? btn('Sfida a duello', () => this.open('arena', { focus: p.id }), { cls: 'btn-primary', ic: 'swords' }) : null,
-                        p.id !== me.id ? btn('Mandagli la tua card', () => this.act('card:send', { to: p.id }), { ic: 'letter' }) : null))));
+                        p.id !== me.id ? btn('Mandagli la tua card', () => this.act('card:send', { to: p.id }), { ic: 'letter' }) : null,
+                        p.id !== me.id && p.online ? btn('Proponi uno scambio', async () => { const r = await this.act('trade:open', { to: p.id }); if (r.ok) toast(`Proposta mandata a ${p.name}: aspetta che apra il tavolo`, { icon: 'handshake' }); }, { ic: 'handshake' }) : null))));
     }
 
     // --- CARD DEL POTERE ---
@@ -1346,6 +1402,7 @@ export class Panels {
         this.set('cog', 'Opzioni',
             h('div', { class: 'parchment' },
                 this.accountSection(),
+                this.commandsSection(),
                 h('h3', { class: 'sect', html: iconSVG('mirror') }, 'Il tuo viandante'),
                 h('div', { class: 'btn-row' },
                     btn('Cambia aspetto e nome', () => { this.close(); app.editAppearance(); }, { ic: 'mirror' }),
