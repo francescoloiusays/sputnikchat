@@ -347,13 +347,13 @@ export class L2World {
         if (spot === 'pozzo') {
             app.audio.play('roar');
             setTimeout(() => app.audio.voice?.('re', 'Sono la madre di tutti i nomi che avete buttato. Volete riprenderveli? Allora prendete anche il dolore.'), 900);
-            return app.startFoe({ kind: 'faro', name: 'La Madre della Nebbia', botLevel: 1.2, level: 20, element: 'spettro', boss: { hp: 1100, atk: 1.2 }, height: 1.25,
+            return app.startFoe({ kind: 'faro', name: 'La Madre della Nebbia', botLevel: 1.2, level: 20, element: 'spettro', boss: { hp: 1.6, atk: 1.2 }, height: 1.25,
                 look: { cape: 'ali', head: 'cappuccio', weapon: { type: 'falce', material: 'argento', handle: 'osso', gem: 'zaffiro', name: 'Falce dei Nomi' } },
                 texts: ['La Madre della Nebbia si scioglie in mille voci, che per un attimo dicono tutte il tuo nome. Poi tacciono. Il pozzo è libero.', 'La Madre della Nebbia ti avvolge e ti dimentichi per un attimo chi sei. Riprendi fiato, e riprova.'] });
         }
         app.audio.play('roar');
         setTimeout(() => app.audio.voice?.('re', 'Ti ricordi di me? No. Nessuno si ricorda di me. Per questo sono nebbia.'), 900);
-        app.startFoe({ kind: 'faro', name: 'L\'Ombra della Nebbia', botLevel: 1.1, level: 16, element: 'spettro', boss: { hp: 900, atk: 1.15 }, height: 1.1,
+        app.startFoe({ kind: 'faro', name: 'L\'Ombra della Nebbia', botLevel: 1.1, level: 16, element: 'spettro', boss: { hp: 1.3, atk: 1.15 }, height: 1.1,
             look: { cape: 'mantello_nero', head: 'cappuccio', weapon: { type: 'falce', material: 'argento', handle: 'osso', gem: 'smeraldo', name: 'Falce di Nebbia' } },
             texts: ['L\'Ombra si sfilaccia come fumo. Per un attimo ha il volto di un uomo che sorride, poi è solo nebbia che scappa giù per la scogliera.', 'L\'Ombra ti respinge contro la ringhiera. Riprendi fiato, e riprova.'] });
     }
