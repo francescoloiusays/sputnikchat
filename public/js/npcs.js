@@ -23,7 +23,8 @@ export class Npcs {
             ch.root.rotation.y = N.ry;
             app.scene.add(ch.root);
             W.addCirc(N.x, N.z, 0.38, y - 0.5, y + 1.9);
-            W.interactables.push({ id: 'npc', npc: id, x: N.x + Math.sin(N.ry) * 1.1, z: N.z + Math.cos(N.ry) * 1.1, y, r: 2.4, label: `Parla con ${N.name}` });
+            // Rob, dopo la grande cena, non c'è più: non gli si parla
+            W.interactables.push({ id: 'npc', npc: id, x: N.x + Math.sin(N.ry) * 1.1, z: N.z + Math.cos(N.ry) * 1.1, y, r: 2.4, label: `Parla con ${N.name}`, when: id === 'rob' ? () => !robGone(app) : undefined });
             this.list.push({ id, N, ch, ry: N.ry, talkT: 0 });
         }
     }

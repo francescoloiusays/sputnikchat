@@ -216,7 +216,7 @@ export function drawPlate(app, P) {
     g.strokeStyle = ink; g.lineWidth = 2; g.strokeRect(cx, cy, cw, ch);
     const row = (y) => { g.beginPath(); g.moveTo(cx, y); g.lineTo(cx + cw, y); g.stroke(); };
     [cy + 60, cy + 120, cy + 175, cy + 255].forEach(row);
-    label('STUDIO TECNICO', cx + 14, cy + 26, 18); label('geom. Roberto', cx + 14, cy + 50, 20, ink, true);
+    label('ROLO STUDIO', cx + 14, cy + 26, 18); label('tecnico: Roberto', cx + 14, cy + 50, 20, ink, true);
     label(`Tav. ${P.n}`, cx + 14, cy + 86, 16); label(P.title, cx + 14, cy + 108, P.title.length > 34 ? 14 : 17);
     label(`Scala ${P.scale}`, cx + cw - 120, cy + 86, 16);
     const me = app.me || {}, nome = me.story?.name;
@@ -225,7 +225,7 @@ export function drawPlate(app, P) {
     else hand('(il Nome Vero lo scriverai tu)', cx + 14, cy + 166, 17);
     label('detto anche', cx + 14, cy + 198, 13, ink, true); label(me.name || 'Viandante', cx + 120, cy + 198, 19, blue);
     label('Data: nella nebbia', cx + 14, cy + 232, 14);
-    label('Il Tecnico', cx + 14, cy + 280, 14);
+    label('Il tecnico', cx + 14, cy + 280, 14);
     hand('Roberto', cx + 110, cy + 322, 46, blue);
     g.strokeStyle = blue; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx + 104, cy + 332); g.quadraticCurveTo(cx + 230, cy + 342, cx + 330, cy + 322); g.stroke();
     return c;

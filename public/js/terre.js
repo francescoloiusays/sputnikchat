@@ -100,14 +100,18 @@ export function buildTerre(W) {
         for (const s of [-1, 1]) put(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 8), wood, s * (Wd / 2 - 0.2), 1.3, D / 2 + 2.0);
         put(new THREE.BoxGeometry(Wd + 0.4, 0.1, 2.3), tile, 0, 2.62, D / 2 + 1.05, [-0.12, 0, 0]);
         put(new THREE.BoxGeometry(1.6, 0.08, 0.45), wood, 1.6, 0.48, D / 2 + 1.6);
-        // l'insegna: «Studio Tecnico · Geom. Roberto»
-        const signT = tex(512, 112, (c, w, h) => {
-            c.fillStyle = '#efe6cf'; c.fillRect(0, 0, w, h); c.strokeStyle = '#2a2a3a'; c.lineWidth = 6; c.strokeRect(6, 6, w - 12, h - 12);
-            c.fillStyle = '#2a2a3a'; c.textAlign = 'center'; c.textBaseline = 'middle';
-            c.font = 'bold 34px Georgia, serif'; c.fillText('STUDIO TECNICO', w / 2, 38);
-            c.font = 'italic 30px Georgia, serif'; c.fillText('geom. Roberto', w / 2, 78);
+        // la targhetta d'ottone accanto alla porta, all'altezza degli occhi: «Rolo Studio»
+        const plaqueT = tex(256, 128, (c, w, h) => {
+            const gr = c.createLinearGradient(0, 0, w, h); gr.addColorStop(0, '#e8c46a'); gr.addColorStop(0.5, '#c8963a'); gr.addColorStop(1, '#a87a2a');
+            c.fillStyle = gr; c.fillRect(0, 0, w, h);
+            c.strokeStyle = '#6a4a14'; c.lineWidth = 5; c.strokeRect(8, 8, w - 16, h - 16);
+            for (const [x, y] of [[18, 18], [w - 18, 18], [18, h - 18], [w - 18, h - 18]]) { c.fillStyle = '#7a5a1a'; c.beginPath(); c.arc(x, y, 5, 0, 7); c.fill(); }
+            c.fillStyle = '#3a2408'; c.textAlign = 'center'; c.textBaseline = 'middle';
+            c.font = 'bold 40px Georgia, serif'; c.fillText('Rolo Studio', w / 2, h / 2 - 12);
+            c.font = 'italic 22px Georgia, serif'; c.fillText('tecnico: Roberto', w / 2, h / 2 + 26);
         });
-        put(new THREE.PlaneGeometry(2.0, 0.44), new THREE.MeshStandardMaterial({ map: signT, roughness: 0.8 }), -Wd / 2 + 1.9, Ht - 0.25, D / 2 + 0.12);
+        put(new THREE.BoxGeometry(0.56, 0.3, 0.03), brass, -0.6, 1.55, D / 2 + 0.115);
+        put(new THREE.PlaneGeometry(0.52, 0.26), new THREE.MeshStandardMaterial({ map: plaqueT, metalness: 0.6, roughness: 0.35 }), -0.6, 1.55, D / 2 + 0.132).castShadow = false;
         // dentro: il tecnigrafo con una tavola sopra, lo sgabello, la cassettiera delle piante, i rotoli
         const tg = new THREE.Group(); tg.position.set(1.4, 0, -0.9); tg.rotation.y = 0.3; g.add(tg);
         put(new THREE.BoxGeometry(0.1, 0.95, 0.1), iron, 0, 0.48, 0, null, tg);
