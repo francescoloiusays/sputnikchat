@@ -77,6 +77,7 @@ export function buildTerre(W) {
         const [sx, sz] = TP.studio;
         const { g, L, put, box, lamp } = kit(W, sx, sz, STUDIO_YAW, 2.4);
         const Wd = 7, D = 5, Ht = 2.9, T = 0.2;
+        W.studioInt = { name: 'Rolo Studio', x: sx, z: sz, ry: STUDIO_YAW, y: 2.4, w: Wd, d: D, h: Ht, groups: [g] };   // si entra: diventa un interno (interiors.js)
         // pavimento di cotto, muri intonacati, la parete davanti con la porta e una vetrata larga
         put(new THREE.BoxGeometry(Wd + 0.4, 0.15, D + 0.4), new THREE.MeshStandardMaterial({ color: '#9a5a3a', roughness: 0.9 }), 0, 0.075, 0);
         box(0, 0, Wd + 0.4, D + 0.4, -1, 0.15); box(0, D / 2 + 1.1, Wd, 2.0, -1, 0.18);   // pavimento e portico si calpestano

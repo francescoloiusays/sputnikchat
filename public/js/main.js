@@ -24,6 +24,7 @@ import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, sanitizeCa
 import { Fishing } from './fishing.js';
 import { PetFollower } from './pets.js';
 import { Input } from './input.js';
+import { Interiors } from './interiors.js';
 import { PETS, petDuel } from './shared/pet.js';
 import { Npcs } from './npcs.js';
 import { Canto } from './canto.js';
@@ -328,6 +329,10 @@ class Game {
         this.buildMyCharacter();
         this.npcs = new Npcs(this);
         this.input = new Input(this);        // tasti rimappabili e controller
+        // gli edifici in cui si entra: ogni porta apre un livello a parte (interiors.js)
+        this.interiors = new Interiors(this);
+        for (const S of this.world.shops || []) this.interiors.add({ name: S.title === 'Forgia' ? 'La Forgia di Vulcano' : S.title === 'Sartoria' ? 'La Sartoria Spettrale' : S.title, outName: 'Isola Fantasma', x: S.cfg.x, z: S.cfg.z, ry: S.cfg.ry, y: S.cfg.h, w: S.w, d: S.d, h: S.h, groups: [S.grp] });
+        if (this.world.studioInt) this.interiors.add({ ...this.world.studioInt, outName: 'Le Terre Nuove' });
         this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
         this.erranti = new Erranti(this);
         this.genti = new Genti(this);        // le genti di passaggio: nascono ogni giorno dal motore dei personaggi    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
@@ -1545,13 +1550,15 @@ class Game {
         this.world.update(dt, this.player.pos);
         this.myChar.update(dt);
         for (const p of this.players.values()) p.update(dt, this.camera.position);
+        this.interiors?.update();
+        this.interiors?.frame();
         this.updateMud(dt);
         this.mmT -= dt;
         if (this.mmT <= 0) {
             this.mmT = 0.08;
             this.drawMinimap();
             this.updateVoiceVolumes();
-            const zone = this.world.zoneName(this.player.pos.x, this.player.pos.z);
+            const zone = this.interior?.name || this.world.zoneName(this.player.pos.x, this.player.pos.z);
             if (zone !== this.zone) { this.zone = zone; $('#zone-name').textContent = zone; this.zoneSince = performance.now(); this.zoneShown = false; }
             else if (!this.zoneShown && performance.now() - this.zoneSince > 700) { this.zoneShown = true; this.showZoneBanner(zone); }
             this.updatePrompt();
@@ -1764,6 +1771,7 @@ class Game {
         const pos = target.clone().addScaledVector(off, dist);
         const gh = Math.max(this.world.terrainAt(pos.x, pos.z), 0) + 0.35;
         if (pos.y < gh) pos.y = gh;
+        if (this.interior) this.interiors.clamp(pos);   // dentro un edificio la telecamera resta fra i muri
         this.camera.position.lerp(pos, hit ? 1 : 1 - Math.exp(-dt * 18));
         this.camera.lookAt(target);
     }

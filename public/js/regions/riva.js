@@ -42,7 +42,7 @@ export function buildRiva(app) {
     const W = app.world;
     const g = new THREE.Group();
     g.name = 'regione: Riva di Là';
-    const disposables = [], colliders = [], interactables = [], fires = [], ticks = [];
+    const disposables = [], colliders = [], interactables = [], fires = [], ticks = [], interiors = [];
     const mat = (o) => { const m = new THREE.MeshStandardMaterial(o); disposables.push(m); return m; };
     const geo = (x) => { disposables.push(x); return x; };
     const add = (mesh, x, y, z, parent = g) => { mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); return mesh; };
@@ -284,6 +284,7 @@ export function buildRiva(app) {
         wbox(0, -D / 2, Wd, T + 0.1); wbox(-Wd / 2, 0, T + 0.1, D); wbox(Wd / 2, 0, T + 0.1, D);
         wbox(-(Wd + 1.1) / 4, D / 2, (Wd - 1.1) / 2, T + 0.1); wbox((Wd + 1.1) / 4, D / 2, (Wd - 1.1) / 2, T + 0.1);
         wbox(-1.8, -0.9, 0.9, 1.9);
+        interiors.push(app.interiors?.add({ name: 'La casa della Cartografa', outName: 'La Riva di Là', x: cx, z: cz, ry: yaw, y: y0, w: Wd, d: D, h: Ht, groups: [hg] }));
         // fuori, il tavolo della mappa (di lato, verso il pontile)
         const [tx, tz] = local(cx, cz, yaw, -2.4, D / 2 + 1.6);
         const tb = new THREE.Group(); tb.position.set(tx, ground(tx, tz), tz); tb.rotation.y = yaw + 0.25; g.add(tb);
@@ -360,6 +361,7 @@ export function buildRiva(app) {
             wbox(0, -D / 2, Wd, T); wbox(-Wd / 2, 0, T, D); wbox(Wd / 2, 0, T, D);
             wbox(-(Wd + DOOR) / 4, D / 2, (Wd - DOOR) / 2, T); wbox((Wd + DOOR) / 4, D / 2, (Wd - DOOR) / 2, T);
             wbox(0, -1.2, 1.0, 0.7);
+            interiors.push(app.interiors?.add({ name: i === 4 ? 'La casa di Tobia' : 'Una casa vuota', outName: 'Il villaggio dei Senza Nome', x: cx, z: cz, ry: yaw, y: y0, w: Wd, d: D, h: Ht, groups: [hg], camDist: 2.4 }));
         }
     }
     // il forno di Tobia: una cupola di pietra; dopo il suo nome si riaccende e fuma
@@ -552,6 +554,7 @@ export function buildRiva(app) {
             const drop = (arr, items) => { for (let k = arr.length - 1; k >= 0; k--) if (items.includes(arr[k])) arr.splice(k, 1); };
             drop(W.colliders, colliders);
             drop(W.interactables, interactables);
+            for (const I of interiors) if (I) app.interiors?.remove(I);
             const gi = W.grassX.indexOf(grass);
             if (gi >= 0) W.grassX.splice(gi, 1);
             for (const m of grass.meshes) { W.scene.remove(m); m.geometry.dispose(); }

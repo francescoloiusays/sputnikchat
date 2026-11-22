@@ -938,7 +938,7 @@ export class World {
             this.scene.add(grp);
             const [tx, tz] = toWorld(1.55, SD / 2 + 0.15);
             this.addTorch(tx, cfg.h + 2.4, tz, true, 1, { wall: cfg.ry });
-            this.shops.push({ cfg, cos, sin, w: SW, d: SD, h: SH });
+            this.shops.push({ id, title, grp, cfg, cos, sin, w: SW, d: SD, h: SH });
             return { grp, toWorld, solid };
         };
         // pavimenti: lastre di pietra per la forgia, assi di legno per la sartoria
