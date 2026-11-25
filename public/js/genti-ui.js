@@ -7,6 +7,8 @@
 import { walkTo } from './npc-walk.js';
 import { gentiOf, genteAt, forza, premio, MESTIERI } from './shared/genti.js';
 import { Character } from './character.js';
+import { PetFollower } from './pets.js';
+import { PETS } from './shared/pet.js';
 import { characterLod } from './engine/stream.js';
 import { h, toast } from './util.js';
 
@@ -17,14 +19,16 @@ export class Genti {
     constructor(app) { this.app = app; this.day = null; this.list = []; }
     build() {
         const app = this.app, W = app.world;
-        for (const n of this.list) { app.scene.remove(n.ch.root); const i = W.interactables.indexOf(n.it); if (i >= 0) W.interactables.splice(i, 1); }
+        for (const n of this.list) { app.scene.remove(n.ch.root); n.petF?.dispose(); const i = W.interactables.indexOf(n.it); if (i >= 0) W.interactables.splice(i, 1); }
         this.day = today();
         this.list = gentiOf(this.day).map(G => {
             const ch = new Character(G.app, G.look, { name: G.name, sub: `${MESTIERI[G.mestiere].nome[0]} · livello ${G.level}`, color: '#b8d8a0' });
             app.scene.add(ch.root);
+            const PET = G.pet;
+            const petF = PET && new PetFollower(app, { pet: () => PET, element: () => G.element, pos: () => ch.root.position, yaw: () => ch.root.rotation.y, show: () => ch.root.visible && (app.mode === 'world' || app.mode === 'fish'), fishing: () => false });
             const it = { id: 'gente', k: G.k, x: 0, z: 0, r: 2.4, label: `Parla con ${G.name}` };
             W.interactables.push(it);
-            return { G, ch, it, ry: 0, stop: 0 };
+            return { G, ch, it, ry: 0, stop: 0, petF };
         });
     }
     byK(k) { return this.list.find(n => n.G.k === k)?.G; }
@@ -33,7 +37,7 @@ export class Genti {
         const app = this.app, W = app.world, P = app.player?.pos, now = Date.now(), lv = app.me?.level || 1;
         for (const n of this.list) {
             const ch = n.ch;
-            if (app.cena || app.interior) { ch.root.visible = false; continue; }
+            if (app.cena || app.interior) { ch.root.visible = false; n.petF?.update(dt); continue; }
             const at = genteAt(n.G, now);
             const near = P && Math.hypot(P.x - ch.root.position.x, P.z - ch.root.position.z) < 3;
             if (near && app.panels.current === 'gente' && app.panels.arg?.k === n.G.k) n.stop = 1.5;
@@ -54,6 +58,7 @@ export class Genti {
             characterLod(ch, d);
             if (ch.tag) ch.tag.visible = d < 22;
             if (d < 75) ch.update(dt);
+            n.petF?.update(dt);
         }
     }
 }
@@ -71,6 +76,7 @@ export function genteView(panels, k) {
         h('div', { class: 'gente-card' },
             h('span', { class: 'gente-forza', style: { background: F.color } }, F.name),
             h('span', {}, `${MESTIERI[G.mestiere].nome[G.app.sex === 'f' ? 1 : 0]} · livello ${G.level} · seme ${G.element}`)),
+        G.pet ? h('p', { class: 'muted small' }, `Con ${G.app.sex === 'f' ? 'lei' : 'lui'} c'è ${G.pet.name}: ${(PETS[G.pet.sp]?.name || 'una bestiola').toLowerCase()}, livello ${G.pet.lv}${G.pet.ench ? `, incantato +${G.pet.ench}` : ''}.`) : null,
         h('div', { class: 'ledger-row trade-row' },
             h('div', { class: 'grow' }, h('div', { class: 'nm' }, 'Un baratto'), h('div', { class: 'sub' }, 'In cambio: ' + gets)),
             h('div', { class: 'btn-col' }, panels.costChips(T.give),
@@ -90,7 +96,7 @@ export async function startGenteDuel(app, G) {
     const lv = G.level, pts = Math.max(0, lv - 1);
     app.localKind = 'gente'; app.genteK = G.k; app.practiceLevel = 0.5 + Math.min(1.1, lv / 22) * G.fight; app.practiceEl = G.element;
     const foe = { id: 'gente:' + G.id, name: G.name, element: G.element, rating: 900 + lv * 30, level: lv, cardImage: null, gear: [G.look.head, G.look.face, G.look.cape].filter(Boolean),
-        appearance: G.app, look: G.look, talents: { forza: Math.ceil(pts / 2), tempra: Math.floor(pts / 2), maestria: 0 } };
+        appearance: G.app, look: G.look, petSp: G.pet?.sp, talents: { forza: Math.ceil(pts / 2), tempra: Math.floor(pts / 2), maestria: 0 } };
     app.enterDuel({ id: 'practice', a: app.myFighterInfo(), b: foe, phase: 'fight', noRematch: true,
         texts: [`${G.name} si inchina: «Ben fatto. Oggi l'isola è tua.»`, `${G.name} ti tende la mano: «Rialzati. Domani magari va meglio.»`] }, 'local', 'a');
 }

@@ -38,7 +38,7 @@ export const PADS = [
     { at: TP.studio, r: 6, h: 2.4 },
     { at: TP.tavola, r: 9, h: 2.2 },
     { at: TP.borgo, r: 9, h: 2.6 },
-    { at: TP.cantiere, r: 6, h: 2.5 },
+    { at: TP.cantiere, r: 11, h: 2.5, b: 6 },     // la casa (b: dove ci sono i muri) e il suo giardino, tutto in piano
 ];
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -64,8 +64,9 @@ export function terreRelief(x, z) {
 }
 export const pathDistTerre = (x, z) => { let d = Infinity; for (const [a, b] of TERRE_PATHS) d = Math.min(d, distSeg(x, z, a[0], a[1], b[0], b[1])); return d; };
 // vicino a una costruzione delle Terre Nuove: niente alberi, rocce, canne o erba alta
-export function nearTerreBuild(x, z, m = 0) {
-    for (const P of PADS) if (Math.hypot(x - P.at[0], z - P.at[1]) < P.r + 2 + m) return true;
+// pad = true: tutto lo spiazzo (niente alberi e rocce); altrimenti solo dove ci sono le costruzioni (l'erba del giardino cresce)
+export function nearTerreBuild(x, z, m = 0, pad = false) {
+    for (const P of PADS) if (Math.hypot(x - P.at[0], z - P.at[1]) < (pad ? P.r : P.b ?? P.r) + 2 + m) return true;
     for (const k of ['trig', 'cs1', 'cs2', 'cs3', 'pontile']) if (Math.hypot(x - TP[k][0], z - TP[k][1]) < 3 + m) return true;
     const [gx, gz] = TP.grotta;
     return Math.hypot(x - gx, z - gz) < 5 + m;

@@ -58,6 +58,12 @@ const POSTI = {
     cappella: [24, 46], ponte: [0, -28], terre: [70, 21], borgo: [TP.borgo[0] - 2.5, TP.borgo[1] - 2.5], tavola: [TP.tavola[0] - 4, TP.tavola[1] + 3], studio: [104, 28],
 };
 const HUB = [[0, 14], [0, 32]];
+// le bestie preferite da ogni mestiere, e i nomi che danno ai loro pet
+const PET_PREF = {
+    pellegrino: ['cane', 'fantasmino', 'gatto'], ambulante: ['gatto', 'corvo', 'cane'], guardia: ['cane', 'corvo'], strega: ['corvo', 'fatuo', 'gatto'],
+    marinaio: ['granchio', 'anguilla', 'gatto'], bandito: ['corvo', 'gatto'], cavaliere: ['cane', 'fatuo'], musico: ['fantasmino', 'anguilla', 'corvo'],
+};
+const PET_NOMI = ['Briciola', 'Ombra', 'Pepe', 'Fumo', 'Lumino', 'Chela', 'Nebbiolo', 'Ruggine', 'Mirtillo', 'Zolfo', 'Biscotto', 'Spillo', 'Tizzone', 'Bruma', 'Cecco', 'Velluto'];
 const SPEED = 1.4;
 
 // numeri ripetibili da un seme
@@ -94,6 +100,12 @@ export function gente(day, k) {
         k, day, id: `g${k}`, mestiere: mid, name: `${nome} ${/^[AEIOU]/i.test(title) ? "l'" : sex === 'f' ? 'la ' : 'il '}${title}`,
         app, look: { ...look, weapon }, level, element, lines: M.lines, trade: pick(r, M.trade), fight: M.fight, route, offset: r() * 1000,
     };
+    // quattro viandanti su dieci si portano dietro un pet, scelto secondo il mestiere
+    const rp = rng('genti-pet:' + key);
+    if (rp() < 0.4) {
+        const sp = pick(rp, PET_PREF[mid] || ['corvo', 'cane', 'gatto', 'fantasmino', 'fatuo', 'granchio', 'anguilla']);
+        G.pet = { sp, name: pick(rp, PET_NOMI), lv: Math.max(1, Math.min(20, Math.round(level / 2 + rp() * 4))), ench: level >= 16 && rp() < 0.4 ? 1 + Math.floor(rp() * 2) : 0, health: 1 };
+    }
     CACHE.set(key, G);
     if (CACHE.size > 200) CACHE.delete(CACHE.keys().next().value);
     return G;

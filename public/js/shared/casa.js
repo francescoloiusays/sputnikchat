@@ -13,6 +13,10 @@ export const GW = 8, GD = 6;   // caselle: larghezza (x) e profondità (z), un m
 // l'angolo nord-ovest del lotto (le caselle vanno verso +x e +z; la facciata con la porta guarda +z)
 export const LOTTO = { x: TP.cantiere[0] - GW / 2, z: TP.cantiere[1] - GD / 2, y: 2.5 };
 export const WALL_H = 2.7;
+// il giardino: tutt'intorno alla casa, più largo davanti (dove c'è la porta). Caselle da x0 a x1-1, da z0 a z1-1
+export const GARDEN = { x0: -3, z0: -2, x1: GW + 3, z1: GD + 5 };
+export const inHouse = (x, z) => x >= 0 && x < GW && z >= 0 && z < GD;
+export const inGarden = (x, z) => x >= GARDEN.x0 && x < GARDEN.x1 && z >= GARDEN.z0 && z < GARDEN.z1;
 
 // i materiali dei muri (anche per porte e finestre)
 export const MURI = {
@@ -33,6 +37,9 @@ export const PAVIMENTI = {
     cotto: { name: 'Cotto', color: '#a85a3a', cost: { coins: 6 } },
     pietra: { name: 'Lastre di pietra', color: '#6e6a74', cost: { coins: 8 } },
     marmo: { name: 'Marmo della nebbia', color: '#d8d4e0', cost: { coins: 14, perla: 1 } },
+    ghiaia: { name: 'Vialetto di ghiaia', color: '#9a948a', cost: { coins: 3 }, out: true },
+    selciato: { name: 'Selciato', color: '#7a7480', cost: { coins: 7 }, out: true },
+    prato: { name: 'Prato rasato', color: '#4a6a32', cost: { coins: 2 }, out: true },
 };
 // gli arredi: w × d caselle (prima di girarli)
 export const ARREDI = {
@@ -49,13 +56,23 @@ export const ARREDI = {
     acquario: { name: 'Acquario della laguna', w: 1, d: 1, cost: { coins: 80, perla: 3 } },
     trofeo: { name: 'Trofeo d\'armi', w: 1, d: 1, cost: { coins: 70, frammento: 2 } },
     tecnigrafo: { name: 'Il tecnigrafo di Rob', w: 1, d: 1, cost: {}, gift: true, max: 1 },
+    // per il giardino (out: solo fuori casa)
+    aiuola: { name: 'Aiuola fiorita', w: 2, d: 1, cost: { coins: 20 }, out: true },
+    albero: { name: 'Albero da frutto', w: 1, d: 1, cost: { coins: 45 }, out: true },
+    panchina: { name: 'Panchina', w: 2, d: 1, cost: { coins: 30 }, out: true },
+    fontana: { name: 'Fontana di pietra', w: 2, d: 2, cost: { coins: 120, frammento: 2 }, out: true },
+    lampione: { name: 'Lampione', w: 1, d: 1, cost: { coins: 35 }, out: true },
+    staccionata: { name: 'Staccionata', w: 1, d: 1, cost: { coins: 6 }, out: true, max: 40 },
+    orto: { name: 'Orto', w: 2, d: 2, cost: { coins: 40 }, out: true, flat: true },
+    altalena: { name: 'Altalena', w: 2, d: 1, cost: { coins: 55 }, out: true },
+    pozzo: { name: 'Pozzo', w: 1, d: 1, cost: { coins: 80, frammento: 1 }, out: true },
 };
 // il baule: quanti posti per ogni baule in casa (un oggetto = un posto; un materiale = un posto, quanti che siano)
 export const BAULE_SLOTS = 40;
 export const casaCount = (L, id) => (L?.items || []).filter(it => it.id === id).length;
 export const bauleUsed = (B) => (B?.inv?.length || 0) + Object.values(B?.mats || {}).filter(n => n > 0).length;
 // sei dentro il lotto della casa? (per il baule e la cuccia)
-export const inCasa = (x, z) => x > LOTTO.x - 1 && x < LOTTO.x + GW + 1 && z > LOTTO.z - 1 && z < LOTTO.z + GD + 1;
+export const inCasa = (x, z) => x > LOTTO.x + GARDEN.x0 - 1 && x < LOTTO.x + GARDEN.x1 + 1 && z > LOTTO.z + GARDEN.z0 - 1 && z < LOTTO.z + GARDEN.z1 + 1;
 
 // la casa che lascia Rob: assi di legno, intonaco, una porta sulla facciata, due finestre, il suo tecnigrafo
 export function casaDiRob() {
@@ -105,16 +122,19 @@ export function cleanCasa(L) {
     }
     for (const [k, f] of Object.entries(L.floor || {})) {
         const [x, z] = k.split(',').map(Number);
-        if (!PAVIMENTI[f] || !(x >= 0 && x < GW && z >= 0 && z < GD)) return null;
+        if (!PAVIMENTI[f] || !inGarden(x, z) || (PAVIMENTI[f].out && inHouse(x, z))) return null;
         floor[k] = f;
     }
     const used = new Set();
     for (const [id, A] of Object.entries(ARREDI)) if (A.max && (L.items || []).filter(it => it?.id === id).length > A.max) return null;   // un tecnigrafo solo, tre bauli, tre cucce
-    for (const it of (L.items || []).slice(0, 40)) {
+    for (const it of (L.items || []).slice(0, 90)) {
         const c = { id: String(it.id), x: it.x | 0, z: it.z | 0, r: (it.r | 0) & 3 };
         if (!ARREDI[c.id]) return null;
-        for (const [x, z] of itemCells(c)) {
-            if (!(x >= 0 && x < GW && z >= 0 && z < GD)) return null;
+        const cells = itemCells(c);
+        if (ARREDI[c.id].out && cells.some(([x, z]) => inHouse(x, z))) return null;              // alberi e fontane stanno fuori
+        if (cells.some(([x, z]) => inHouse(x, z)) && cells.some(([x, z]) => !inHouse(x, z))) return null;   // a cavallo del muro no
+        for (const [x, z] of cells) {
+            if (!inGarden(x, z)) return null;
             if (!ARREDI[c.id].flat) { const k = x + ',' + z; if (used.has(k)) return null; used.add(k); }
         }
         items.push(c);

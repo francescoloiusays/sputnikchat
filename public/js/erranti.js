@@ -7,6 +7,7 @@
 // =====================================================================
 import { ERRANTI, ERRANTE_IDS, erranteAt } from './shared/erranti.js';
 import { Character } from './character.js';
+import { PetFollower } from './pets.js';
 import { characterLod } from './engine/stream.js';
 import { gx2 } from './shared/libro2.js';
 import { h, toast } from './util.js';
@@ -21,15 +22,17 @@ export class Erranti {
             const E = ERRANTI[id];
             const ch = new Character(E.app, E.look || {}, { name: E.name, sub: E.where, color: '#e8c08a' });
             app.scene.add(ch.root);
+            const PET = E.pet;
+            const petF = PET && new PetFollower(app, { pet: () => PET, element: () => E.fight?.element || 'fuoco', pos: () => ch.root.position, yaw: () => ch.root.rotation.y, show: () => ch.root.visible && (app.mode === 'world' || app.mode === 'fish'), fishing: () => false });
             const it = { id: 'errante', k: id, x: 0, z: 0, r: 2.4, label: `Parla con ${E.name}` };
             app.world.interactables.push(it);
-            return { id, E, ch, it, ry: 0, stop: 0 };
+            return { id, E, ch, it, ry: 0, stop: 0, petF };
         });
     }
     update(dt, camPos) {
         const W = this.app.world, P = this.app.player?.pos, now = Date.now();
         for (const n of this.list) {
-            if (this.app.cena) { n.ch.root.visible = false; continue; }   // durante la grande cena di Rob sono tutti a tavola
+            if (this.app.cena) { n.ch.root.visible = false; n.petF?.update(dt); continue; }   // durante la grande cena di Rob sono tutti a tavola
             const at = erranteAt(n.id, now), ch = n.ch;
             // se gli parli si ferma a guardarti (solo da te: per gli altri continua la sua strada)
             const near = P && Math.hypot(P.x - ch.root.position.x, P.z - ch.root.position.z) < 3;
@@ -51,6 +54,7 @@ export class Erranti {
             characterLod(ch, d);
             if (ch.tag) ch.tag.visible = d < 26;
             if (d < 80) ch.update(dt);
+            n.petF?.update(dt);
         }
     }
 }
@@ -85,7 +89,7 @@ export function startErranteDuel(app, id) {
     const foe = {
         id: 'errante:' + id, name: F.name, element: F.element, rating: 900 + lv * 30, level: lv, cardImage: null, gear: [],
         appearance: E.app, look: { ...(E.look || {}), weapon: { type: types[id.length % types.length], material: lv >= 10 ? 'ferro' : 'legno', handle: 'cuoio', gem: 'nessuna', name: 'Attrezzo da lavoro' } },
-        talents: { forza: Math.ceil(pts / 2), tempra: Math.floor(pts / 2), maestria: 0 },
+        talents: { forza: Math.ceil(pts / 2), tempra: Math.floor(pts / 2), maestria: 0 }, petSp: E.pet?.sp,
     };
     app.enterDuel({ id: 'practice', a: app.myFighterInfo(), b: foe, phase: 'fight', noRematch: true,
         texts: [`${E.name} ride e ti stringe la mano: «Bel duello. Domani rivincita.»`, `${E.name} ti aiuta a rialzarti: «Tutto a posto? Ti offro qualcosa al borgo.»`] }, 'local', 'a');

@@ -370,10 +370,22 @@ function privateView(p) {
         fountainUntil: p.fountain?.until || 0, tollToday: p.tollDay === d, ondaToday: p.ondaDay === d,
         veglia: p.veglia || null, kingWeek: p.kingWeek || null, watched: Object.keys(p.watched || {}), account: p.account?.user || null,
         story: storyOf(p), libro2: p.libro2 || newL2(),
-        friends: p.friends.map(id => ({ id, name: byPid(id)?.name || '???', online: sidByPid.has(id) })),
+        friends: p.friends.map(id => { const F = byPid(id); return { id, name: F?.name || '???', online: sidByPid.has(id), casa: !!F?.casa }; }),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
         collectionCount: p.collection.length,
     };
+}
+// quanti viandanti ci sono adesso sull'isola (e nella stanza di ognuno): lo dice la chat. Al massimo una volta al secondo
+let onlineT = null;
+function onlineNews() {
+    if (onlineT) return;
+    onlineT = setTimeout(() => {
+        onlineT = null;
+        const byRoom = new Map();
+        for (const S of online.values()) if (S.p) byRoom.set(S.room, (byRoom.get(S.room) || 0) + 1);
+        const all = [...online.values()].filter(S => S.p).length;
+        for (const S of online.values()) if (S.p) S.socket.emit('online', { all, room: byRoom.get(S.room) || 1 });
+    }, 1000);
 }
 function sendMe(S) { if (S) S.socket.emit('me', privateView(S.p)); }
 const sessionOf = pid => { const sid = sidByPid.get(pid); return sid ? online.get(sid) : null; };
@@ -494,6 +506,7 @@ function joinRoom(S, room) {
     const players = [...online.values()].filter(o => o.room === room && o !== S).map(publicPlayer);
     S.socket.emit('room:state', { room, name: roomName(room), private: room !== 'pub', players, duels: listDuels(room) });
     S.socket.to(room).emit('player:join', publicPlayer(S));
+    onlineNews();
 }
 function cleanupSession(room, leaving) {
     if (room === 'pub' || !sessions.has(room)) return;
@@ -985,6 +998,7 @@ io.on('connection', (socket) => {
         joinRoom(me, 'pub');
         for (const fid of p.friends) { const F = sessionOf(fid); if (F) F.socket.emit('friend:status', { id: p.id, name: p.name, online: true }); }
         console.log(`+ ${p.name} (${p.id}) — online: ${online.size}`);
+        onlineNews();
     });
 
     // --- ACCOUNT ---
@@ -1444,6 +1458,18 @@ io.on('connection', (socket) => {
         p.casa = L;
         save(p); sendMe(me);
         reply({ ok: true, pay, back });
+    });
+
+    // --- A CASA DI UN AMICO: si vede la sua casa (e il suo giardino) sul lotto del cantiere ---
+    on('casa:visit', (d, reply) => {
+        const p = me.p, id = String(d.id || '');
+        if (!p.friends.includes(id)) return fail(reply, 'Si va a trovare solo gli amici');
+        const F = byPid(id);
+        if (!F) return fail(reply, 'Non lo trovo più');
+        if (!F.casa) return fail(reply, `${F.name} non ha ancora una casa: Rob gliela lascerà dopo la grande cena`);
+        const S = sessionOf(id);
+        if (S) notify(S, `${p.name} è venuto a trovarti a casa`, 'ok');
+        reply({ ok: true, id, name: F.name, casa: F.casa, cuccia: (F.cuccia || []).map(P => ({ sp: P.sp, name: P.name })) });
     });
 
     // --- IL BAULE DI CASA: metti via e riprendi oggetti e materiali ---
@@ -2683,6 +2709,7 @@ io.on('connection', (socket) => {
         p.lastSeen = Date.now();
         save(p);
         console.log(`- ${p.name} — online: ${online.size}`);
+        onlineNews();
         me = null;
     });
 });

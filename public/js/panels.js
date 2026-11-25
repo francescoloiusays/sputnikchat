@@ -1275,6 +1275,7 @@ export class Panels {
                 h('span', { class: 'gem-dot' + (f.online ? ' on' : '') }),
                 h('div', { class: 'grow' }, h('div', { class: 'nm' }, f.name), h('div', { class: 'sub' }, f.online ? 'Sull\'isola' : 'Lontano')),
                 ib('portrait', 'Profilo', () => this.open('profilo', f.id)),
+                f.casa ? ib('door', 'A casa sua', () => { this.close(); this.app.casa?.visit(f.id); }) : null,
                 f.online && inPriv ? ib('lock', 'Invita', () => this.act('session:invite', { id: f.id }), 'btn-primary') : null,
                 ib('letter', 'Card', () => this.act('card:send', { to: f.id })),
                 h('button', { class: 'btn btn-sm btn-danger', title: 'Rompi l\'amicizia', html: iconSVG('close'), onclick: () => { if (confirm(`Rompere l'amicizia con ${f.name}?`)) this.act('friend:remove', { id: f.id }, 'Le vostre strade si separano'); } }))))

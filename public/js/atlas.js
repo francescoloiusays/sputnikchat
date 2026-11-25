@@ -13,6 +13,23 @@ import { drawIcon, iconSVG } from './icons.js';
 import { h, $ } from './util.js';
 import { clockText } from './sky.js';
 import { BARCA } from './shared/mare.js';
+import { TP } from './shared/terre.js';
+import { RIVA, RP, HUTS, rivaPt, rivaHeight, nearRiva } from './shared/riva.js';
+import { LOTTO, GW, GD } from './shared/casa.js';
+
+// --- IL RIQUADRO DELLA RIVA DI LÀ: la terra oltre il mare, in piccolo, nell'angolo in alto a sinistra ---
+// (sulla carta i suoi luoghi hanno coordinate «finte» dentro il riquadro: così si cliccano come gli altri)
+// (la terra della Riva è larga 152 metri, un po' spostata dal centro: -2, -4)
+const INSET = { x0: -173, z0: -194, x1: -110, z1: -131, k: 0.36, off: [-2, -4] };
+const INSET_C = [(INSET.x0 + INSET.x1) / 2, (INSET.z0 + INSET.z1) / 2];
+const toInset = (x, z) => [INSET_C[0] + (x - RIVA.x - INSET.off[0]) * INSET.k, INSET_C[1] + (z - RIVA.z - INSET.off[1]) * INSET.k];
+const rivaAt = (u, v) => toInset(...rivaPt(u, v));
+// le rotte della barca del Traghettatore, dal Molo
+const ROUTES = [
+    { name: 'alla Secca del Relitto', pts: [[-3, 98], [-60, 112], [-130, 116]] },
+    { name: 'al Faro Spento', pts: [[-3, 98], [-95, 80], [-125, -20], [-70, -140], [30, -158], [117, -152]] },
+    { name: 'alla Riva di Là', pts: [[-125, -20], [-140, -113]], arrow: true },
+];
 
 const BASE = 2048;                                   // lato della carta disegnata, in pixel
 const { MIN_X, MAX_X, MIN_Z } = WORLD;
@@ -46,6 +63,19 @@ const PLACES = [
     { id: 'stalla', cat: 'luoghi', ic: 'raven', p: 2, name: 'La Stalla delle Nebbie', x: 31, z: 28, desc: 'Sàlvia, il Medico delle Bestie, cura gli SputnikPet: dal livello 10 qui se ne adotta uno, lo si addestra, lo si incanta e lo si rimette in forze.' },
     { id: 'barca', cat: 'luoghi', ic: 'rod', p: 2, name: 'La Barca Rovesciata', x: BARCA.x, z: BARCA.z, desc: 'La casa della Retaia, sulla spiaggia accanto al Molo: una barca girata a pancia in su. Lì si migliora la canna da pesca, con perle e Corallo Nero.' },
     { id: 'relitto', cat: 'luoghi', ic: 'wave', p: 1, name: 'La Secca del Relitto', x: WORLD.RELITTO.x, z: WORLD.RELITTO.z, desc: 'Libro II. Un banco di sabbia a sud-ovest, dove si è arenata la vecchia barca del Traghettatore. Ci si arriva solo in barca.' },
+    // --- le Terre Nuove, a est ---
+    { id: 'studio', cat: 'luoghi', ic: 'quill', p: 1, name: 'Rolo Studio', x: TP.studio[0], z: TP.studio[1], desc: 'Lo studio tecnico di Rob il Righello: il tecnigrafo, le tavole dei rilievi, il teodolite fuori sulla porta.' },
+    { id: 'tavola', cat: 'luoghi', ic: 'tavern', p: 2, name: 'La Tavola Lunga', x: TP.tavola[0], z: TP.tavola[1], desc: "Nel prato, sotto l'unico albero in fiore dell'isola: qui si è fatta la grande cena di Rob." },
+    { id: 'borgo', cat: 'luoghi', ic: 'door', p: 2, name: 'Il Borgo', x: TP.borgo[0], z: TP.borgo[1], desc: 'Quattro case attorno a un pozzo: ci abitano Tito, Marta, Zia Gilda e Lino, quelli che vanno e vengono.' },
+    { id: 'casa', cat: 'luoghi', ic: 'armchair', p: 1, name: 'La tua casa', x: LOTTO.x + GW / 2, z: LOTTO.z + GD / 2, desc: "Il cantiere di Rob: dopo la grande cena è finito, ed è tuo. Si costruisce, si arreda e si fa il giardino dal tecnigrafo." },
+    { id: 'trig', cat: 'luoghi', ic: 'crystal', p: 2, name: 'Il Punto Trigonometrico', x: TP.trig[0], z: TP.trig[1], desc: 'In cima al colle delle Terre Nuove. Da sopra la nebbia si vede tutto: è un fatto di quote, non di coraggio.' },
+    { id: 'grotta', cat: 'luoghi', ic: 'ecto', p: 2, name: 'La Grotta delle Voci', x: TP.grotta[0], z: TP.grotta[1], desc: "Dentro lo sperone di roccia. Se parli, qualcuno risponde: a volte con la tua voce, a volte no." },
+    { id: 'pontile', cat: 'luoghi', ic: 'wave', p: 3, name: 'Il Pontile', x: TP.pontile[0], z: TP.pontile[1], desc: "In fondo alle Terre Nuove, verso il mare aperto." },
+    // --- la Riva di Là (nel riquadro) ---
+    { id: 'r_casa', cat: 'luoghi', ic: 'map', p: 1, name: 'La Cartografa', inset: true, x: rivaAt(...RP.casa)[0], z: rivaAt(...RP.casa)[1], desc: 'Libro III. La casa sul terrapieno, accanto al pontile: la Cartografa disegna ogni giorno l\'isola a memoria. Ci si arriva con la barca del Traghettatore, dal Molo.' },
+    { id: 'r_vill', cat: 'luoghi', ic: 'door', p: 2, name: 'Il villaggio dei Senza Nome', inset: true, x: rivaAt(...RP.village)[0], z: rivaAt(...RP.village)[1], desc: 'Cinque case in cerchio attorno a un cippo. Chi ci abitava aveva buttato via il proprio nome.' },
+    { id: 'r_pozzo', cat: 'luoghi', ic: 'orb', p: 2, name: 'Il Pozzo dei Nomi', inset: true, x: rivaAt(...RP.pozzo)[0], z: rivaAt(...RP.pozzo)[1], desc: 'Ai piedi del Monte Storto. Di giorno sembra un pozzo vecchio; di notte respira.' },
+    { id: 'r_monte', cat: 'luoghi', ic: 'castle', p: 3, name: 'Il Monte Storto', inset: true, x: rivaAt(...RP.monte)[0], z: rivaAt(...RP.monte)[1], desc: 'La cima della Riva di Là, con un cippo sul pianoro.' },
     { id: 'faro', cat: 'luoghi', ic: 'lantern', p: 1, name: 'Il Faro Spento', x: WORLD.FARO.x, z: WORLD.FARO.z, desc: 'Libro II. Uno scoglio a nord-est: ci porta la barca del Traghettatore. La Guardiana veglia una porta chiusa da trecento anni.' },
 ];
 const CATS = [['botteghe', 'Botteghe', 'anvil'], ['luoghi', 'Luoghi', 'castle'], ['abitanti', 'Abitanti', 'talk'], ['tavolette', 'Tavolette', 'runestone'], ['viandanti', 'Viandanti', 'friends']];
@@ -55,7 +85,7 @@ const DIRS = ['nord', 'nord-est', 'est', 'sud-est', 'sud', 'sud-ovest', 'ovest',
 const DOODLES = [
     { id: 'serpe', x: 116, z: 104, r: 16, title: 'Hic sunt Sputnik', text: 'Qui sotto dorme il Re Annegato. Il sabato sera russa così forte che le onde arrivano fino al molo.', sfx: 'roar' },
     { id: 'nave', x: -128, z: 42, r: 13, title: 'La nave del Traghettatore', text: "Non ha mai lasciato l'ormeggio, ma sulla carta fa la sua figura.", sfx: 'splash' },
-    { id: 'balena', x: -112, z: -126, r: 14, title: 'La balena di nebbia', text: "Ogni tanto la senti cantare, lontana. Nessuno l'ha mai vista: il cartografo giura di sì.", sfx: 'splash' },
+    { id: 'balena', x: -158, z: -62, r: 14, title: 'La balena di nebbia', text: "Ogni tanto la senti cantare, lontana. Nessuno l'ha mai vista: il cartografo giura di sì.", sfx: 'splash' },
     { id: 'tesoro', x: 0, z: 0, r: 4, title: 'X segna il punto', text: "Qui il cartografo ha sepolto la sua merenda. Inutile scavare: se l'è già mangiata.", sfx: 'dig' },
     { id: 'paperella', x: 8.5, z: 111, r: 3, zoom: 2.4, title: 'Una paperella di gomma', text: 'Nessuno sa come sia arrivata fin qui. Galleggia da tre stagioni e non ha mai perso un duello.', sfx: 'chat' },
     { id: 'sigillo', x: 84, z: -170, r: 9, title: 'Sigillo degli Sputnik Homies', text: 'Garantisce che questa carta è vera almeno al sessanta per cento.', sfx: 'coin' },
@@ -169,6 +199,8 @@ export class Atlas {
         $('#atlas-out').onclick = () => this.zoomAt(this.cw / 2, this.ch / 2, 1 / 1.6);
         $('#atlas-me').onclick = () => this.centerMe();
         $('#atlas-fit').onclick = () => this.fit();
+        $('#atlas-dl').onclick = () => this.download();
+        $('#atlas-print').onclick = () => this.print();
         $('#atlas-me').innerHTML = iconSVG('person');
         $('#atlas-fit').innerHTML = iconSVG('map');
         new ResizeObserver(() => { if (this.on) this.resize(); }).observe(cv);
@@ -208,7 +240,11 @@ export class Atlas {
     marks() {
         const z = this.view.s / this.fitS, out = [], F = this.filters, me = this.app.me || {};
         const narrow = this.cw < 600;
-        for (const p of PLACES) if (F[p.cat] && (p.p === 1 || (p.p === 2 && (!narrow || z >= 1.4)) || z >= (narrow ? 2.2 : 1.5))) out.push({ ...p, kind: 'poi' });
+        for (const p of PLACES) if (F[p.cat] && (p.p === 1 || (p.p === 2 && (!narrow || z >= 1.4)) || z >= (narrow ? 2.2 : 1.5))) {
+            // chi non ha ancora la casa vede il cantiere di Rob
+            if (p.id === 'casa' && !me.casa) out.push({ ...p, kind: 'poi', name: 'Il cantiere di Rob', desc: 'Due case a metà, i picchetti e le corde. Rob dice che un giorno, finita la sua storia, una sarà tua.' });
+            else out.push({ ...p, kind: 'poi' });
+        }
         if (F.abitanti && z >= 1.7) for (const [id, n] of Object.entries(NPCS)) {
             if (n.where === 'La Riva di Là' || n.where === 'Il villaggio dei Senza Nome') continue;   // fuori dalla carta dell'isola
             out.push({ kind: 'poi', id: 'npc:' + id, cat: 'abitanti', ic: 'talk', p: 3, small: true, name: n.name, x: n.x, z: n.z, where: n.where, desc: `«${n.lines[0]}»` });
@@ -365,7 +401,7 @@ export class Atlas {
         }
         // altri viandanti
         if (this.filters.viandanti) for (const p of this.app.players.values()) {
-            const q = p.ch.root.position, [x, y] = this.toScreen(q.x, q.z), fr = this.app.isFriend(p.info.id);
+            const q = p.ch.root.position, [x, y] = this.toScreen(...(nearRiva(q.x, q.z) ? toInset(q.x, q.z) : [q.x, q.z])), fr = this.app.isFriend(p.info.id);
             g.fillStyle = fr ? '#2a6a1a' : '#7a3a08'; g.strokeStyle = PAPER; g.lineWidth = 2;
             g.beginPath(); g.arc(x, y, 5.5, 0, Math.PI * 2); g.fill(); g.stroke();
             if (zr >= 2 || this.hover?.p === p) {
@@ -377,7 +413,7 @@ export class Atlas {
         // tu
         const P = this.app.player?.pos;
         if (P) {
-            const [x, y] = this.toScreen(P.x, P.z), k = (now / 900) % 1;
+            const [x, y] = this.toScreen(...(nearRiva(P.x, P.z) ? toInset(P.x, P.z) : [P.x, P.z])), k = (now / 900) % 1;
             g.strokeStyle = `rgba(138,36,22,${0.7 * (1 - k)})`; g.lineWidth = 2.2;
             g.beginPath(); g.arc(x, y, 8 + k * 22, 0, Math.PI * 2); g.stroke();
             g.save(); g.translate(x, y); g.rotate(Math.PI - this.app.player.yaw);
@@ -390,6 +426,51 @@ export class Atlas {
                 g.fillStyle = RED; g.fillText('sei qui', x + 15, y - 12); g.textAlign = 'center';
             }
         }
+    }
+    // --- LA CARTA DA PORTARE VIA: tutta, con i luoghi e i loro nomi (senza i viandanti), da scaricare o da stampare ---
+    exportCanvas() {
+        if (!this.base) this.base = this.buildBase();
+        const c = document.createElement('canvas'); c.width = c.height = BASE;
+        const g = c.getContext('2d');
+        g.drawImage(this.base, 0, 0);
+        g.textAlign = 'center'; g.textBaseline = 'top';
+        for (const m of PLACES) {
+            const x = bx(m.x), y = bz(m.z), r = m.inset ? 11 : 15;
+            g.fillStyle = '#f3e7c6'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+            g.strokeStyle = INK; g.lineWidth = 1.7; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
+            drawIcon(g, m.ic, x, y, r * 1.25, '#3a1a08');
+            g.font = `700 ${m.inset ? 15 : 19}px Almendra, serif`;
+            g.lineJoin = 'round'; g.strokeStyle = 'rgba(243,231,198,0.95)'; g.lineWidth = 5; g.strokeText(m.name, x, y + r + 3);
+            g.fillStyle = '#24140a'; g.fillText(m.name, x, y + r + 3);
+        }
+        // la rosa dei venti, ferma, in basso a destra
+        const cx = BASE - 150, cy = BASE - 170;
+        g.save(); g.translate(cx, cy); g.strokeStyle = INK; g.fillStyle = INK; g.lineWidth = 2;
+        g.beginPath(); g.arc(0, 0, 58, 0, Math.PI * 2); g.stroke();
+        for (let i = 0; i < 4; i++) { g.rotate(Math.PI / 2); g.beginPath(); g.moveTo(0, -70); g.lineTo(9, 0); g.lineTo(-9, 0); g.closePath(); i === 3 ? g.fill() : g.stroke(); }
+        g.font = '700 26px Cinzel, serif'; g.textBaseline = 'middle'; g.fillStyle = RED; g.fillText('N', 0, -88);
+        g.restore();
+        g.font = 'italic 18px Alegreya, serif'; g.fillStyle = INK; g.textAlign = 'right'; g.textBaseline = 'alphabetic';
+        g.fillText('SputnikChat · L\'Isola Fantasma · carta del Ratto dei Cronisti', BASE - 60, BASE - 48);
+        return c;
+    }
+    download() {
+        this.exportCanvas().toBlob(b => {
+            const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'isola-fantasma-carta.png';
+            document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        }, 'image/png');
+        this.app.audio?.play?.('open');
+    }
+    print() {
+        const url = this.exportCanvas().toDataURL('image/png');
+        const f = document.createElement('iframe');
+        Object.assign(f.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
+        document.body.append(f);
+        const d = f.contentWindow.document;
+        d.open(); d.write(`<!doctype html><html><head><title>L'Isola Fantasma</title><style>@page{size:A4 portrait;margin:8mm}html,body{margin:0;background:#fff}img{width:100%;height:auto;display:block}</style></head><body><img src="${url}"></body></html>`); d.close();
+        const img = d.querySelector('img');
+        const go = () => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 2000); };
+        if (img.complete) setTimeout(go, 100); else img.onload = () => setTimeout(go, 100);
     }
     // rosa dei venti: si può far girare
     drawCompass(g) {
@@ -478,11 +559,13 @@ export class Atlas {
         this.chapelAndStones(g);
         this.nature(g, W, R);
         this.castle(g);
-        // la costa a inchiostro, due passate come una mano che ripassa
+        this.terre(g);
+        this.routes(g);
         strokeSegs(g, coast, { w: 3.4, a: 0.92, amp: 2.4 });
         strokeSegs(g, coast, { w: 1.2, a: 0.55, amp: 3.4, s: 13 });
         this.doodles(g);
         this.labels(g);
+        this.rivaInset(g);
         this.paper(g, R);
         this.border(g);
         return c;
@@ -595,6 +678,75 @@ export class Atlas {
         // lo specchio
         g.save(); g.strokeStyle = INK; g.lineWidth = 1.8; g.fillStyle = 'rgba(190,210,220,0.8)';
         g.beginPath(); g.ellipse(bx(WORLD.MIRROR.x), bz(WORLD.MIRROR.z), 6, 9, 0.3, 0, Math.PI * 2); g.fill(); g.stroke(); g.restore();
+    }
+    // --- le Terre Nuove: lo studio, la Tavola Lunga, il borgo, la casa ---
+    terre(g) {
+        const rot = (x, z, ry, w, d) => house(g, bx(x), bz(z), ry, w * PPM, d * PPM);
+        rot(TP.studio[0], TP.studio[1], Math.atan2(96 - TP.studio[0], 25 - TP.studio[1]), 7, 5);
+        const [bxx, bzz] = TP.borgo;
+        for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.4, hx = bxx + Math.cos(a) * 6.5, hz = bzz + Math.sin(a) * 6.5; rot(hx, hz, Math.atan2(bxx - hx, bzz - hz), 3.4, 3.0); }
+        inkCircle(g, bx(bxx), bz(bzz), 0.9 * PPM, { w: 1.4, amp: 0.6 });   // il pozzo
+        rot(LOTTO.x + GW / 2, LOTTO.z + GD / 2, 0, GW, GD);                // la casa
+        g.save(); g.strokeStyle = INK; g.globalAlpha = 0.45; g.lineWidth = 1; g.setLineDash([4, 5]);   // il recinto del giardino
+        g.strokeRect(bx(LOTTO.x - 3), bz(LOTTO.z - 2), (GW + 6) * PPM, (GD + 7) * PPM); g.restore();
+        // la Tavola Lunga: un tavolo lungo e le lucine
+        const tx = bx(TP.tavola[0]), ty = bz(TP.tavola[1]);
+        g.save(); g.fillStyle = '#b8935a'; g.strokeStyle = INK; g.lineWidth = 1.4;
+        g.fillRect(tx - 9 * PPM, ty - 0.8 * PPM, 18 * PPM, 1.6 * PPM); g.strokeRect(tx - 9 * PPM, ty - 0.8 * PPM, 18 * PPM, 1.6 * PPM);
+        g.fillStyle = '#c8a040'; for (let i = 0; i < 9; i++) { g.beginPath(); g.arc(tx - 9 * PPM + i * 2.25 * PPM, ty - 3 * PPM, 2.2, 0, Math.PI * 2); g.fill(); }
+        g.restore();
+        label(g, 'L E   T E R R E   N U O V E', bx(132), bz(24), { font: '700 30px Cinzel, serif', a: 0.42 });
+    }
+    // --- le rotte della barca, tratteggiate in rosso ---
+    routes(g) {
+        g.save();
+        for (const R of ROUTES) {
+            const pts = R.pts.map(([x, z]) => [bx(x), bz(z)]);
+            g.strokeStyle = RED; g.globalAlpha = 0.55; g.lineWidth = 2.2; g.setLineDash([10, 9]);
+            g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke();
+            g.setLineDash([]);
+            if (R.arrow) { const [ax, ay] = pts.at(-1), [px, py] = pts.at(-2), a = Math.atan2(ay - py, ax - px);
+                g.fillStyle = RED; g.globalAlpha = 0.7; g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax - Math.cos(a - 0.4) * 16, ay - Math.sin(a - 0.4) * 16); g.lineTo(ax - Math.cos(a + 0.4) * 16, ay - Math.sin(a + 0.4) * 16); g.fill(); }
+            // il nome della rotta, a metà strada
+            const mid = pts[Math.floor(pts.length / 2)], prev = pts[Math.floor(pts.length / 2) - 1] || pts[0];
+            g.globalAlpha = 1;
+            label(g, R.name, (mid[0] + prev[0]) / 2, (mid[1] + prev[1]) / 2 - 14, { font: 'italic 700 27px Almendra, serif', color: '#6a1a0e', a: 0.9, halo: 6 });
+        }
+        g.restore();
+    }
+    // --- la Riva di Là, nel riquadro: la terra vera, rimpicciolita ---
+    rivaInset(g) {
+        const X0 = bx(INSET.x0), Y0 = bz(INSET.z0), X1 = bx(INSET.x1), Y1 = bz(INSET.z1), w = Math.round(X1 - X0), hh = Math.round(Y1 - Y0);
+        const c = document.createElement('canvas'); c.width = w; c.height = hh;
+        const cg = c.getContext('2d'), img = cg.createImageData(w, hh), H = new Float32Array(w * hh);
+        // per ogni pixel: dov'è sulla Riva, e quanto è alto
+        for (let j = 0; j < hh; j++) for (let i = 0; i < w; i++) {
+            const fx = INSET.x0 + i / PPM, fz = INSET.z0 + j / PPM;
+            H[j * w + i] = rivaHeight(RIVA.x + INSET.off[0] + (fx - INSET_C[0]) / INSET.k, RIVA.z + INSET.off[1] + (fz - INSET_C[1]) / INSET.k);
+        }
+        for (let j = 0; j < hh; j++) for (let i = 0; i < w; i++) {
+            const h = H[j * w + i], o = (j * w + i) * 4, land = h > 0.02;
+            const edge = land && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => { const ii = i + a, jj = j + b; return ii >= 0 && jj >= 0 && ii < w && jj < hh && H[jj * w + ii] <= 0.02; });
+            let col = land ? mix([214, 205, 160], [150, 128, 96], Math.min(1, h / 30)) : mix([196, 214, 200], [160, 186, 180], Math.min(1, -h / 6));
+            if (edge) col = [43, 26, 14];
+            img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
+        }
+        cg.putImageData(img, 0, 0);
+        g.save();
+        g.fillStyle = '#efe2bd'; g.fillRect(X0 - 6, Y0 - 6, w + 12, hh + 12);
+        g.drawImage(c, X0, Y0);
+        // le case del villaggio, la casa della Cartografa, il pontile, la cima
+        for (const [u, v, ry] of HUTS) { const [x, z] = rivaAt(u, v); house(g, bx(x), bz(z), ry, 2.4 * PPM * INSET.k * 1.6, 2.4 * PPM * INSET.k * 1.6); }
+        { const [x, z] = rivaAt(...RP.casa); house(g, bx(x), bz(z), 0, 1.6 * PPM, 1.2 * PPM); }
+        { const [a, b] = rivaAt(...RP.jetty0), [c2, d] = rivaAt(...RP.jetty1); g.strokeStyle = '#6a4a24'; g.lineWidth = 3; g.beginPath(); g.moveTo(bx(a), bz(b)); g.lineTo(bx(c2), bz(d)); g.stroke(); }
+        { const [x, z] = rivaAt(...RP.monte); g.fillStyle = INK; g.beginPath(); g.moveTo(bx(x), bz(z) - 9); g.lineTo(bx(x) + 8, bz(z) + 5); g.lineTo(bx(x) - 8, bz(z) + 5); g.closePath(); g.fill(); }
+        // la cornice e il titolo
+        g.strokeStyle = INK; g.lineWidth = 2.4; g.strokeRect(X0 - 6, Y0 - 6, w + 12, hh + 12);
+        g.lineWidth = 1; g.strokeRect(X0 - 1, Y0 - 1, w + 2, hh + 2);
+        g.restore();
+        // il titolo sotto il riquadro, sul mare
+        label(g, 'La Riva di Là', X0 + w / 2, Y1 + 30, { font: '700 36px Almendra, serif', color: '#3a1606', halo: 7 });
+        label(g, 'oltre il Mare della Nebbia · in barca dal Molo · in scala ridotta', X0 + w / 2, Y1 + 62, { font: 'italic 20px Alegreya, serif', a: 0.85, halo: 5 });
     }
     cemetery(g) {
         const C = WORLD.CEMETERY;

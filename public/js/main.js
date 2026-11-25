@@ -647,6 +647,16 @@ class Game {
             toast(h('div', {}, h('b', {}, e.ready ? 'Capitolo pronto da chiudere' : 'Un passo della storia'), h('div', {}, e.ready ? 'Hai fatto tutto: torna da chi ti ha aperto il capitolo (il filo sotto l\'orologio te lo ricorda).' : e.t)), { kind: 'ok', icon: 'openbook', duration: 6000 });
         });
         N.on('notify', (n) => { toast(n.text, { kind: n.kind === 'coin' ? 'coin' : n.kind === 'friend' ? 'ok' : 'info' }); this.audio.play('notify'); });
+        // quanti viandanti ci sono: il pallino verde sulla chat (clic: la lista)
+        N.on('online', (o) => {
+            this.onlineN = o;
+            const b = $('#chat-online');
+            if (!b) return;
+            b.classList.remove('hidden');
+            b.querySelector('span').textContent = o.all;
+            b.title = o.room !== o.all ? `${o.all} viandanti sull'isola, ${o.room} qui con te` : `${o.all} ${o.all === 1 ? 'viandante' : 'viandanti'} sull'isola`;
+            if (!b.onclick) b.onclick = () => { this.panels.tabs.fr = 'online'; this.openPanel('amici'); };
+        });
         N.on('room:state', (s) => {
             for (const p of this.players.values()) p.dispose();
             this.players.clear();
@@ -1558,6 +1568,7 @@ class Game {
         this.npcs?.update(dt, this.player.pos, this.camera.position);
         this.erranti?.update(dt, this.camera.position);
         this.genti?.update(dt, this.camera.position);
+        this.casa?.update(dt);
         this.petF?.update(dt);
         this.storySpots?.update(dt, this.world.t);
         this.onda?.update();

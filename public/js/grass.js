@@ -62,6 +62,7 @@ export class Grass {
             data[i * 4] = half(H[i]); data[i * 4 + 1] = half(mask(ix, iz)); data[i * 4 + 3] = half(1);
         }
         const map = new THREE.DataTexture(data, n, n, THREE.RGBAFormat, THREE.HalfFloatType);
+        this.data = data; this.map = map; this.grid = { n, minX, minZ, cw, cd }; this.holed = new Map();
         map.magFilter = map.minFilter = THREE.LinearFilter; map.needsUpdate = true;
         // un filo: tre tratti che si assottigliano fino alla punta
         const W = 0.028, ys = [0, 0.38, 0.72, 1], ws = [1, 0.8, 0.5, 0], pos = [], idx = [];
@@ -95,6 +96,23 @@ export class Grass {
             scene.add(mesh);
             this.mats.push(mat); this.meshes.push(mesh);
         }
+    }
+    // rects: [x0, z0, x1, z1] in metri: lì l'erba non cresce (quel che c'era prima torna come era)
+    setHoles(rects) {
+        const { n, minX, minZ, cw, cd } = this.grid, D = this.data, half = THREE.DataUtils.toHalfFloat;
+        for (const [i, v] of this.holed) D[i] = v;
+        this.holed.clear();
+        for (const [x0, z0, x1, z1] of rects) {
+            // i punti della griglia dentro il riquadro allargato di mezza casella: dentro non resta un filo
+            const i0 = Math.max(0, Math.ceil((x0 - minX) / cw - 0.5)), i1 = Math.min(n - 1, Math.floor((x1 - minX) / cw + 0.5));
+            const j0 = Math.max(0, Math.ceil((z0 - minZ) / cd - 0.5)), j1 = Math.min(n - 1, Math.floor((z1 - minZ) / cd + 0.5));
+            for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+                const k = (j * n + i) * 4 + 1;
+                if (!this.holed.has(k)) this.holed.set(k, D[k]);
+                D[k] = half(0);
+            }
+        }
+        this.map.needsUpdate = true;
     }
     update(t, player) { for (const m of this.mats) { m.uniforms.uTime.value = t; if (player) m.uniforms.uPlayer.value.copy(player); } }
     // S = stato del cielo (sky.js)

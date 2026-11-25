@@ -19,7 +19,7 @@ const SPEED = 1.5;   // metri al secondo: passo tranquillo
 // rotte: [x, z, sosta in secondi]; si va fino in fondo e si torna indietro per la stessa strada
 export const ERRANTI = {
     tito: {
-        name: 'Tito il Pescivendolo', where: 'Va e viene dal Molo', home: 0,
+        name: 'Tito il Pescivendolo', where: 'Va e viene dal Molo', home: 0, pet: { sp: 'granchio', name: 'Chela', lv: 7, ench: 0, health: 1 },
         route: [[...home(0), 40], ...TO_PLAZA.map(p => [...p, 0]), [0, 32, 0], [0, 60, 0], [1.2, 86, 70]],
         app: { species: 'umano', build: 'robusto', height: 1.0, skin: '#d8a888', eyes: 'tondi', eyeColor: '#4a6a8a', mouth: 'sorriso', hair: 'corti', hairColor: '#2a2018', beard: 'baffi', topStyle: 'tunica', top: '#3a5a7a', bottom: '#4a4038', shoes: '#2a2018' },
         look: { torso: 'grembiule' },
@@ -29,7 +29,7 @@ export const ERRANTI = {
     },
     marta: {
         name: 'Marta la Muratrice', where: 'Va e viene dal cantiere e dalla Forgia', home: 1,
-        route: [[...home(1), 30], [132, 36, 0], [131, 46, 90], [132, 36, 0], [118, 33, 0], [110, 31, 0], [96, 25, 0], [70, 21, 0], [44, 15, 0], [17, 10, 0], [-14, 10, 50]],
+        route: [[...home(1), 30], [132, 36, 0], [133.5, 47, 90], [132, 36, 0], [118, 33, 0], [110, 31, 0], [96, 25, 0], [70, 21, 0], [44, 15, 0], [17, 10, 0], [-14, 10, 50]],
         app: { sex: 'f', species: 'umano', build: 'robusto', height: 1.0, skin: '#c89878', eyes: 'fieri', eyeColor: '#6a4a2a', mouth: 'neutro', hair: 'codino', hairColor: '#5a3a20', beard: 'nessuna', topStyle: 'giacca', top: '#a05a3a', bottom: '#4a4a4a', shoes: '#2a2018' },
         look: { head: 'elmo' },
         lines: ['Le case a metà del cantiere le tiro su io. Senza fretta: un muro storto resta storto per cent\'anni.', 'Vado da Mastro Brace per i chiodi. Lui dice che li consumo. Io dico che lui li fa corti.', 'Rob passava a misurare quello che avevo fatto. Diceva sempre: «Brava. Un centimetro più in là.»'],
@@ -37,7 +37,7 @@ export const ERRANTI = {
         fight: { element: 'pietra', level: 10, name: 'Marta la Muratrice' },
     },
     gilda: {
-        name: 'Zia Gilda', where: 'Va e viene dal Cimitero Sommerso', home: 2,
+        name: 'Zia Gilda', where: 'Va e viene dal Cimitero Sommerso', home: 2, pet: { sp: 'fantasmino', name: 'Lumino', lv: 12, ench: 1, health: 1 },
         route: [[...home(2), 60], ...TO_PLAZA.map(p => [...p, 0]), [0, 32, 0], [-14, 36, 0], [-27, 40, 120]],
         app: { sex: 'f', species: 'umano', build: 'snello', height: 0.92, skin: '#e0c0a8', eyes: 'assonnati', eyeColor: '#7a8a9a', mouth: 'sorriso', hair: 'codino', hairColor: '#dcdce6', beard: 'nessuna', topStyle: 'veste', top: '#4a3a5a', bottom: '#2a2030', shoes: '#1a1418' },
         look: { cape: 'mantello_viola' },
@@ -46,7 +46,7 @@ export const ERRANTI = {
         fight: null,
     },
     lino: {
-        name: 'Lino il Garzone', where: 'Corre per le Terre Nuove', home: 3,
+        name: 'Lino il Garzone', where: 'Corre per le Terre Nuove', home: 3, pet: { sp: 'cane', name: 'Briciola', lv: 5, ench: 0, health: 1 },
         route: [[...home(3), 20], [132, 36, 0], [118, 33, 0], [112, 31, 25], [96, 25, 0], [114, 16, 0], [121, 13, 30], [140, 8, 0], [152, 18, 0], [163, 22, 45]],
         app: { species: 'umano', build: 'snello', height: 0.82, skin: '#e8c0a0', eyes: 'tondi', eyeColor: '#5a8a4a', mouth: 'sorriso', hair: 'ciuffo', hairColor: '#c87a3a', beard: 'nessuna', topStyle: 'tunica', top: '#e8c23a', bottom: '#3a4a6a', shoes: '#4a2a1a' },
         look: {},

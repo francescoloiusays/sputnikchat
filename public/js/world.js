@@ -16,7 +16,6 @@ import { rivaHeight, rivaShore, nearRiva } from './shared/riva.js';
 import { buildBazar, buildBarca, buildStalla } from './bancarelle.js';
 import { terreMask, terreRelief, PADS, TERRE_PATHS, nearTerreBuild, inTerre } from './shared/terre.js';
 import { buildTerre } from './terre.js';
-import { LOTTO, GW, GD } from './shared/casa.js';
 import { Relief, tileHeights, roughRock } from './realism.js';
 import { Grass } from './grass.js';
 import { buildWeapon } from './character.js';
@@ -595,7 +594,7 @@ export class World {
             m *= 1 - smooth(0.4, 0.75, Math.hypot(hx, hz) / this.cw);
             if (Math.abs(x - 30) < 4.6 && Math.abs(z - 52) < 7) m *= 0.12;   // dentro la cappella: lastre, solo qualche ciuffo tra le fughe
             if (nearTerreBuild(x, z, -1.5)) m *= 0.15;   // dentro le case delle Terre Nuove
-            if (x > LOTTO.x - 2 && x < LOTTO.x + GW + 2 && z > LOTTO.z - 2 && z < LOTTO.z + GD + 2) m = 0;   // il lotto della casa: niente erba dal pavimento
+            // (la casa e i pavimenti del giardino si tolgono l'erba da soli: Grass.setHoles)
             return m * (0.55 + 0.45 * smooth(-0.35, 0.3, fbm(x * 0.11 + 3, z * 0.11)));   // a chiazze, non un prato all'inglese
         };
         this.grass = new Grass(this.scene, { H: this.H, n, mask, minX: MIN_X, minZ: MIN_Z, cw: this.cw, cd: this.cd });
@@ -732,7 +731,7 @@ export class World {
             const h = this.terrainAt(x, z);
             if (h < minH) return false;
             if (pathDist(x, z) < 4) return false;
-            if (nearFaroWay(x, z, 1) || nearRelitto(x, z) || nearTerreBuild(x, z, 1)) return false;
+            if (nearFaroWay(x, z, 1) || nearRelitto(x, z) || nearTerreBuild(x, z, 1, true)) return false;
             if (Math.hypot(x - WORLD.PLAZA.x, z - WORLD.PLAZA.z) < WORLD.PLAZA.r + 4) return false;
             for (const s of Object.values(WORLD.SHOPS)) if (Math.hypot(x - s.x, z - s.z) < 10) return false;
             if (Math.abs(x - WORLD.CASTLE.x) < 30 && Math.abs(z - WORLD.CASTLE.z) < 30) return false;
@@ -800,7 +799,7 @@ export class World {
             const x = WORLD.MIN_X + r() * (WORLD.MAX_X - WORLD.MIN_X), z = WORLD.MIN_Z + r() * (WORLD.MAX_Z - WORLD.MIN_Z);
             const h = this.terrainAt(x, z);
             if (h < -1.2 || h > 5) continue;
-            if (pathDist(x, z) < 3.5 || this.onBridge(x, z) || Math.abs(x) < 3 && z > 80 || nearFaroWay(x, z, 0.5) || nearRelitto(x, z) || nearTerreBuild(x, z)) continue;
+            if (pathDist(x, z) < 3.5 || this.onBridge(x, z) || Math.abs(x) < 3 && z > 80 || nearFaroWay(x, z, 0.5) || nearRelitto(x, z) || nearTerreBuild(x, z, 0, true)) continue;
             if (Math.abs(x - WORLD.CASTLE.x) < 22 && Math.abs(z - WORLD.CASTLE.z) < 22) continue;
             if (h > 0.6 && !okSpot(x, z, 0.6)) continue;
             rocks.push([x, h, z, 0.3 + r() * (h < 0.4 ? 1.3 : 0.8)]);
@@ -827,7 +826,7 @@ export class World {
         while (reeds.length < 700 && tries++ < 20000) {
             const x = WORLD.MIN_X + r() * (WORLD.MAX_X - WORLD.MIN_X), z = WORLD.MIN_Z + r() * (WORLD.MAX_Z - WORLD.MIN_Z);
             const h = this.terrainAt(x, z);
-            if (h < -0.9 || h > 0.25 || this.onBridge(x, z) || Math.abs(x) < 4 && z > 84 || nearFaroWay(x, z) || nearRelitto(x, z) || nearTerreBuild(x, z)) continue;
+            if (h < -0.9 || h > 0.25 || this.onBridge(x, z) || Math.abs(x) < 4 && z > 84 || nearFaroWay(x, z) || nearRelitto(x, z) || nearTerreBuild(x, z, 0, true)) continue;
             for (let k = 0; k < 4 && reeds.length < 700; k++) reeds.push([x + (r() - 0.5) * 1.2, h, z + (r() - 0.5) * 1.2, 0.7 + r() * 0.9]);
         }
         const reedG = new THREE.ConeGeometry(0.025, 1.4, 4); reedG.translate(0, 0.7, 0);
