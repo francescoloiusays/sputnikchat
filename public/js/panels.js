@@ -29,6 +29,7 @@ import { PETS, PET_IDS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH
 import { STORY_SPOTS } from './shared/story.js';
 import { ritratto } from './story-text.js';
 import { BAULE_SLOTS, casaCount, bauleUsed } from './shared/casa.js';
+import { palestraView } from './palestra-ui.js';
 
 export function itemInfo(e) {
     if (e.kind === 'weapon') {
@@ -96,7 +97,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'scambio', 'gente', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro', 'cuccia'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'scambio', 'gente', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro', 'cuccia', 'palestra'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('open');
@@ -963,6 +964,7 @@ export class Panels {
                 side('Nella bisaccia', 'bag', me.inventory || [], me.mats || {}, 'put', h('span', { class: 'muted small' }, ` (${(me.inventory || []).length}/80)`)),
                 side('Nel baule', 'bag', B.inv || [], B.mats || {}, 'take'))));
     }
+    p_palestra() { palestraView(this); }
     // --- LA CUCCIA: chi resta a casa e chi viene con te ---
     p_cuccia() {
         const app = this.app, me = app.me, T = 'La cuccia';

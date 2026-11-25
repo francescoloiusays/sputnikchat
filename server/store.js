@@ -18,9 +18,9 @@ export async function createStore(baseDir) {
 }
 
 function fileStore(file) {
-    let db = { profiles: {}, listings: [] };
+    let db = { profiles: {}, listings: [], world: {} };
     try { db = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* primo avvio */ }
-    db.profiles ||= {}; db.listings ||= [];
+    db.profiles ||= {}; db.listings ||= []; db.world ||= {};
     let timer = null;
     const flush = () => {
         timer = null;
@@ -40,6 +40,8 @@ function fileStore(file) {
         del: token => { delete db.profiles[token]; schedule(); },
         listings: () => db.listings,
         saveListings: schedule,
+        world: () => db.world,
+        saveWorld: schedule,
         flush,
     };
 }
@@ -54,6 +56,8 @@ async function mongoStore(uri) {
     const cache = {};
     for await (const doc of col.find({})) { delete doc._id; cache[doc.token] = doc; }
     const listings = (await meta.findOne({ _id: 'market' }))?.listings || [];
+    const world = (await meta.findOne({ _id: 'world' }))?.data || {};
+    let worldDirty = false;
     const dirty = new Set();
     let listingsDirty = false, timer = null;
     const flush = async () => {
@@ -64,6 +68,7 @@ async function mongoStore(uri) {
                 await col.bulkWrite(toks.map(t => ({ replaceOne: { filter: { token: t }, replacement: { ...cache[t] }, upsert: true } })));
             }
             if (listingsDirty) { listingsDirty = false; await meta.updateOne({ _id: 'market' }, { $set: { listings } }, { upsert: true }); }
+            if (worldDirty) { worldDirty = false; await meta.updateOne({ _id: 'world' }, { $set: { data: world } }, { upsert: true }); }
         } catch (e) { console.error('[store] MongoDB scrittura fallita:', e.message); }
     };
     const schedule = () => { if (!timer) timer = setTimeout(flush, 1500); };
@@ -76,6 +81,8 @@ async function mongoStore(uri) {
         del: token => { delete cache[token]; dirty.delete(token); col.deleteOne({ token }).catch(e => console.error('[store] MongoDB cancellazione fallita:', e.message)); },
         listings: () => listings,
         saveListings: () => { listingsDirty = true; schedule(); },
+        world: () => world,
+        saveWorld: () => { worldDirty = true; schedule(); },
         flush,
     };
 }

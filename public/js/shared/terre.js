@@ -24,11 +24,13 @@ export const TP = {
     cs1: [94, 22],            // i tre capisaldi di Rob: al collo di terra,
     cs2: [133, 55],           // in fondo al borgo,
     cs3: [152, 13],           // sotto il colle
+    palestra: [106, 6],       // la Palestra di Sansone, sul sentiero della Tavola Lunga
 };
 // i sentieri delle Terre Nuove, e quelli nuovi dell'isola grande (si aggiungono a WORLD.SIDE_PATHS)
 export const TERRE_PATHS = [
     [[17, 10], [44, 15]], [[44, 15], [70, 21]], [[70, 21], [96, 25]], [[96, 25], [110, 31]],
     [[96, 25], [114, 16]], [[114, 16], [123, 11]], [[110, 31], [118, 33]], [[118, 33], [132, 36]], [[132, 36], [140, 42]],
+    [[114, 16], [107, 9]],   // alla Palestra di Sansone
     [[123, 11], [140, 8]], [[140, 8], [147, 3]], [[140, 42], [150, 33]], [[140, 8], [152, 18]], [[152, 18], [164, 22]],
     [[0, 32], [29, 28]],      // alla Stalla delle Nebbie
     [[0, 88], [-10, 89]],     // alla Barca Rovesciata
@@ -38,7 +40,8 @@ export const PADS = [
     { at: TP.studio, r: 6, h: 2.4 },
     { at: TP.tavola, r: 9, h: 2.2 },
     { at: TP.borgo, r: 9, h: 2.6 },
-    { at: TP.cantiere, r: 11, h: 2.5, b: 6 },     // la casa (b: dove ci sono i muri) e il suo giardino, tutto in piano
+    { at: TP.cantiere, r: 11, h: 2.5, b: 6 },
+    { at: TP.palestra, r: 9, h: 1.9 },     // la casa (b: dove ci sono i muri) e il suo giardino, tutto in piano
 ];
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };

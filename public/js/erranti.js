@@ -8,6 +8,7 @@
 import { ERRANTI, ERRANTE_IDS, erranteAt } from './shared/erranti.js';
 import { Character } from './character.js';
 import { PetFollower } from './pets.js';
+import { npcLevel } from './shared/palestra.js';
 import { characterLod } from './engine/stream.js';
 import { gx2 } from './shared/libro2.js';
 import { h, toast } from './util.js';
@@ -83,7 +84,7 @@ export function erranteView(panels, id) {
 
 // un duello amichevole: conta come un allenamento
 export function startErranteDuel(app, id) {
-    const E = ERRANTI[id], F = E.fight, lv = F.level, pts = Math.max(0, lv - 1);
+    const E = ERRANTI[id], F = E.fight, lv = npcLevel(id, app.me?.npcForma), pts = Math.max(0, lv - 1);   // con la forma della palestra
     app.localKind = 'practice'; app.practiceLevel = 0.6 + lv / 25; app.practiceEl = F.element;
     const types = ['spada', 'lancia', 'ascia', 'martello', 'pugnale'];
     const foe = {

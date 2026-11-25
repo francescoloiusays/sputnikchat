@@ -23,6 +23,7 @@ import { installTheme, icon, iconSVG, drawIcon } from './icons.js';
 import { ITEMS, ELEMENTS, ELEMENT_IDS, WEAPON_TYPES, MATERIALS, GEMS, sanitizeCard, sanitizeAppearance, STARTER_WEAPON, levelProgress, titleFor, talentPoints, TALENT_IDS, plusOf, MATS, SEALS, gradeOf } from './shared/catalog.js';
 import { Fishing } from './fishing.js';
 import { PetFollower } from './pets.js';
+import { Palestra } from './palestra-ui.js';
 import { Input } from './input.js';
 import { Interiors } from './interiors.js';
 import { Casa, CasaEditor } from './casa.js';
@@ -346,6 +347,7 @@ class Game {
         this.casaEditor = new CasaEditor(this);
         this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
         this.erranti = new Erranti(this);
+        this.palestra = new Palestra(this);   // la Palestra di Sansone, nelle Terre Nuove
         this.genti = new Genti(this);        // le genti di passaggio: nascono ogni giorno dal motore dei personaggi    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
         this.storySpots = buildStorySpots(this);
         // luce di riempimento: il personaggio non resta mai in controluce
@@ -576,7 +578,7 @@ class Game {
         this.setHolo(p.grade || 0);
         if ((p.grade || 0) >= 4 && !this.vivaFrames && this.local.cardSig === this.cardSignature()) this.buildViva();
         else if ((p.grade || 0) < 4 && this.vivaFrames) this.startViva(null);
-        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria', 'altare', 'bacheca', 'tombe', 'npc', 'pedaggio', 'baule', 'cuccia']);
+        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria', 'altare', 'bacheca', 'tombe', 'npc', 'pedaggio', 'baule', 'cuccia', 'palestra']);
     }
     // riflesso olografico della carta in alto a sinistra (Filigrana, Aurora, Incisa)
     setHolo(grade) {
@@ -853,7 +855,7 @@ class Game {
         return { dur: W.dur, reserve: W.reserve, pet: this.me?.offline ? null : petDuel(this.me?.pet), petSp: this.me?.pet?.sp, ...this._fighterInfo(look) };
     }
     _fighterInfo(look) {
-        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look, element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), gearPlus: this.gearPlus(), seals: this.me.sealsOn || [], grade: this.me.grade || 0, cardImage: this.local.cardImage };
+        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look, element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), gearPlus: this.gearPlus(), seals: this.me.sealsOn || [], grade: this.me.grade || 0, cardImage: this.local.cardImage, gym: this.me.gym?.lv || 0 };
     }
     enterDuel(info, role, side) {
         this.fishing?.stop(true);
@@ -1295,6 +1297,8 @@ class Game {
         else if (it.id === 'robspot') this.robW?.find(it.k);
         else if (it.id === 'casa') this.casaEditor?.open();
         else if (it.id === 'baule') this.openPanel('baule');
+        else if (it.id === 'palestra') this.openPanel('palestra');
+        else if (it.id === 'gym') this.palestra?.train(it.k);
         else if (it.id === 'cuccia') this.openPanel('cuccia');
         else if (it.id === 'errante') this.openPanel('errante', { id: it.k });
         else if (it.id === 'gente') this.openPanel('gente', { k: it.k });
@@ -1569,6 +1573,7 @@ class Game {
         this.erranti?.update(dt, this.camera.position);
         this.genti?.update(dt, this.camera.position);
         this.casa?.update(dt);
+        this.palestra?.update(dt, this.camera.position);
         this.petF?.update(dt);
         this.storySpots?.update(dt, this.world.t);
         this.onda?.update();

@@ -21,7 +21,7 @@ function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; l
 export const STUDIO_YAW = Math.atan2(96 - TP.studio[0], 25 - TP.studio[1]);   // la porta guarda il sentiero
 
 // un gruppo girato di ry in (x, y, z), con i collider in coordinate locali
-function kit(W, x, z, ry, y = W.terrainAt(x, z)) {
+export function kit(W, x, z, ry, y = W.terrainAt(x, z)) {
     const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = ry; W.scene.add(g);
     const L = (lx, lz) => [x + lx * Math.cos(ry) + lz * Math.sin(ry), z - lx * Math.sin(ry) + lz * Math.cos(ry)];
     const put = (geo, mat, lx, ly, lz, rot = null, parent = g) => {
