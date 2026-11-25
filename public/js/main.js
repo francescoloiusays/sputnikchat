@@ -578,7 +578,7 @@ class Game {
         this.setHolo(p.grade || 0);
         if ((p.grade || 0) >= 4 && !this.vivaFrames && this.local.cardSig === this.cardSignature()) this.buildViva();
         else if ((p.grade || 0) < 4 && this.vivaFrames) this.startViva(null);
-        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria', 'altare', 'bacheca', 'tombe', 'npc', 'pedaggio', 'baule', 'cuccia', 'palestra']);
+        this.panels.refresh(['inventario', 'sartoria', 'armadio', 'forgia', 'amici', 'maestria', 'altare', 'bacheca', 'tombe', 'npc', 'pedaggio', 'baule', 'cuccia', 'palestra', 'rivano']);
     }
     // riflesso olografico della carta in alto a sinistra (Filigrana, Aurora, Incisa)
     setHolo(grade) {
@@ -1298,6 +1298,8 @@ class Game {
         else if (it.id === 'casa') this.casaEditor?.open();
         else if (it.id === 'baule') this.openPanel('baule');
         else if (it.id === 'palestra') this.openPanel('palestra');
+        else if (it.id === 'rivano') this.openPanel('rivano', it.k);
+        else if (it.id === 'rivagame') import('./regions/riva-vita.js').then(m => m.playRiva(this, it.k));
         else if (it.id === 'gym') this.palestra?.train(it.k);
         else if (it.id === 'cuccia') this.openPanel('cuccia');
         else if (it.id === 'errante') this.openPanel('errante', { id: it.k });

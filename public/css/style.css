@@ -1222,3 +1222,8 @@ body.building #hud > :not(#toasts), body.building #vignette, body.building #pane
 .gym-row { margin: 4px 0; }
 .gym-list .nm { color: #f2e2b8 !important; }
 .gym-list .sub { color: #c8b48c !important; }
+
+/* --- i giochi della Riva --- */
+#gym-game .riva-sym { width: 92px; height: 92px; border-radius: 12px; display: grid; place-items: center; transition: transform 0.1s, background 0.1s; }
+#gym-game .riva-sym svg.gi { width: 54px; height: 54px; }
+#gym-game .riva-sym.lit { background: #ffd86a; color: #2a1a08; transform: scale(1.08); box-shadow: 0 0 22px #ffd86a; }

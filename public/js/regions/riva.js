@@ -17,6 +17,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Grass } from '../grass.js';
 import { RIVA, RP, HUTS, rivaPt, rivaUV, rivaHeight, rfbm } from '../shared/riva.js';
 import { l2At, L2AT } from '../shared/libro2.js';
+import { buildRivaVita } from './riva-vita.js';
 
 const [TX, TZ] = RIVA.t;
 const JETTY_YAW = Math.atan2(TX, TZ);   // un gruppo girato così ha il suo +z verso l'isola
@@ -504,9 +505,12 @@ export function buildRiva(app) {
         lumeCore.material.color.set(names ? '#ffe9a0' : '#ffd27a');
         thread.visible = names;
     };
+    // la gente tornata alla Riva: gli abitanti, il banco del pesce, i panni, le galline, i giochi
+    const vita = buildRivaVita(app, { g, add, mat, geo, box, circ, ground, P, interactables, wood, disposables });
     let time = 0, surfT = 2, refreshT = 0;
     const tick = (dt) => {
         time += dt;
+        vita.tick(dt, time);
         if ((refreshT -= dt) <= 0) { refreshT = 0.5; refresh(); }
         for (const f of ticks) f(dt);
         const night = 1 - (W.envS?.day ?? 0);
@@ -555,6 +559,7 @@ export function buildRiva(app) {
             drop(W.colliders, colliders);
             drop(W.interactables, interactables);
             for (const I of interiors) if (I) app.interiors?.remove(I);
+            vita.dispose();
             const gi = W.grassX.indexOf(grass);
             if (gi >= 0) W.grassX.splice(gi, 1);
             for (const m of grass.meshes) { W.scene.remove(m); m.geometry.dispose(); }

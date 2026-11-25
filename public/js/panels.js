@@ -97,7 +97,7 @@ export class Panels {
         if (this.current) this.cleanup();
         this.current = id; this.arg = arg;
         this.root.classList.remove('hidden');
-        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'scambio', 'gente', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro', 'cuccia', 'palestra'].includes(id));
+        this.panel.classList.toggle('narrow', ['amici', 'impostazioni', 'classifica', 'bazar', 'baratto', 'canna', 'pet', 'errante', 'scambio', 'gente', 'arena', 'bacheca', 'pedaggio', 'tavoletta', 'storia', 'nomevero', 'libro', 'cuccia', 'palestra', 'rivano'].includes(id));
         this.app.onPanelOpen();
         this.render();
         this.app.audio.play('open');
@@ -965,6 +965,7 @@ export class Panels {
                 side('Nel baule', 'bag', B.inv || [], B.mats || {}, 'take'))));
     }
     p_palestra() { palestraView(this); }
+    p_rivano(id) { import('./regions/riva-vita.js').then(m => { if (this.current === 'rivano') m.rivanoView(this, id); }); }
     // --- LA CUCCIA: chi resta a casa e chi viene con te ---
     p_cuccia() {
         const app = this.app, me = app.me, T = 'La cuccia';

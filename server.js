@@ -33,6 +33,8 @@ import { gente, genteAt, premio, bottinoOggetto, GENTI_PER_DAY, GENTI_FIGHT_DAIL
 import { islandNight } from './public/js/shared/clock.js';
 // è notte quando è notte sull'isola: conta solo il ciclo del gioco (24 minuti), mai l'ora vera
 const nightNow = () => islandNight() || process.env.SPUTNIK_NOTTE === '1';
+import { RIVA_GAMES, rivaPrize } from './public/js/shared/riva-vita.js';
+import { nearRiva } from './public/js/shared/riva.js';
 import { PALESTRA, ATTREZZI, GYM_DAILY, GYM_MAX, GYM_MIN_MS, gymToNext, gymReward, GYM_NPC_DAILY, GYM_NPC_MAX, npcGymCost, npcFighters, npcLevel } from './public/js/shared/palestra.js';
 import { casaDiRob, cleanCasa, casaValue, casaCount, bauleUsed, inCasa, BAULE_SLOTS } from './public/js/shared/casa.js';
 import { ROB_CHAPTERS, ROB_SPOTS, ROB_LEVEL, newRob, robStep } from './public/js/shared/rob.js';
@@ -362,7 +364,7 @@ function privateView(p) {
         inventory: p.inventory, equipment: p.equipment,
         mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
-        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), gym: p.gym || { lv: 0, pts: 0 }, gymLeft: Math.max(0, GYM_DAILY - (dayc(p).gym || 0)), gymNpcLeft: Math.max(0, GYM_NPC_DAILY - (dayc(p).gymNpc || 0)), npcForma: store.world().npcForma || {}, casa: p.casa || null, baule: p.baule || { inv: [], mats: {} }, cuccia: p.cuccia || [], errToday: dayc(p).err || {}, gentiToday: gentiToday(p), pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
+        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), gym: p.gym || { lv: 0, pts: 0 }, gymLeft: Math.max(0, GYM_DAILY - (dayc(p).gym || 0)), gymNpcLeft: Math.max(0, GYM_NPC_DAILY - (dayc(p).gymNpc || 0)), rivaLeft: Object.fromEntries(Object.entries(RIVA_GAMES).map(([k, G]) => [k, Math.max(0, G.daily - (dayc(p).riva?.[k] || 0))])), rivaBest: p.rivaBest || {}, npcForma: store.world().npcForma || {}, casa: p.casa || null, baule: p.baule || { inv: [], mats: {} }, cuccia: p.cuccia || [], errToday: dayc(p).err || {}, gentiToday: gentiToday(p), pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
         episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
@@ -1471,6 +1473,33 @@ io.on('connection', (socket) => {
         const S = sessionOf(id);
         if (S) notify(S, `${p.name} è venuto a trovarti a casa`, 'ok');
         reply({ ok: true, id, name: F.name, casa: F.casa, cuccia: (F.cuccia || []).map(P => ({ sp: P.sp, name: P.name })) });
+    });
+
+    // --- LA RIVA VIVA: i giochi del villaggio (il forno, i sassi, la mappa) ---
+    on('riva:start', (d, reply) => {
+        const p = me.p, c = dayc(p), G = RIVA_GAMES[d.g];
+        if (!G) return fail(reply, 'Questo gioco non c\'è');
+        if (!me.pos || !nearRiva(me.pos[0], me.pos[2])) return fail(reply, 'Si gioca alla Riva di Là');
+        if ((c.riva?.[d.g] || 0) >= G.daily) return fail(reply, 'Per oggi basta: torna domani');
+        me.rivaRun = { g: d.g, t: Date.now() };
+        reply({ ok: true });
+    });
+    on('riva:done', (d, reply) => {
+        const p = me.p, c = dayc(p), R = me.rivaRun, G = RIVA_GAMES[d.g];
+        if (!G || !R || R.g !== d.g) return fail(reply, 'Prima comincia a giocare');
+        me.rivaRun = null;
+        if (Date.now() - R.t < G.minMs) return fail(reply, 'Troppo in fretta');
+        c.riva ||= {};
+        if ((c.riva[d.g] || 0) >= G.daily) return fail(reply, 'Per oggi basta');
+        c.riva[d.g] = (c.riva[d.g] || 0) + 1;
+        const P = rivaPrize(d.g, d.score);
+        p.coins += P.coins;
+        for (const [k, n] of Object.entries(P.mats)) addMat(p, k, n);
+        const xp = grantXp(p, P.xp);
+        const B = p.rivaBest ||= {}, sc = +d.score || 0, best = sc > (B[d.g] || 0);
+        if (best) B[d.g] = Math.round(sc * 100) / 100;
+        save(p); sendMe(me);
+        reply({ ok: true, coins: P.coins, xp, mats: P.mats, best });
     });
 
     // --- LA PALESTRA DI SANSONE ---
