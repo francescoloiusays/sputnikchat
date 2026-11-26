@@ -14,6 +14,7 @@ import { h, $ } from './util.js';
 import { clockText } from './sky.js';
 import { BARCA } from './shared/mare.js';
 import { TP } from './shared/terre.js';
+import { BP } from './shared/bosco.js';
 import { RIVA, RP, HUTS, rivaPt, rivaHeight, nearRiva } from './shared/riva.js';
 import { LOTTO, GW, GD } from './shared/casa.js';
 
@@ -72,6 +73,13 @@ const PLACES = [
     { id: 'grotta', cat: 'luoghi', ic: 'ecto', p: 2, name: 'La Grotta delle Voci', x: TP.grotta[0], z: TP.grotta[1], desc: "Dentro lo sperone di roccia. Se parli, qualcuno risponde: a volte con la tua voce, a volte no." },
     { id: 'palestra', cat: 'luoghi', ic: 'fist', p: 1, name: 'La Palestra di Lorenzone', x: WORLD.KEEP.x + 3, z: WORLD.KEEP.z - 2, desc: 'Al secondo piano del mastio, sopra la Stanza Bianca (si sale con la seconda rampa della scala). Il sacco, i pesi, la corda: sei allenamenti al giorno fanno crescere il tuo livello di palestra. Tito, Marta e Lino ci si allenano da soli: più passa il tempo, più è dura batterli.' },
     { id: 'pontile', cat: 'luoghi', ic: 'wave', p: 3, name: 'Il Pontile', x: TP.pontile[0], z: TP.pontile[1], desc: "In fondo alle Terre Nuove, verso il mare aperto." },
+    // --- il Bosco che Profuma (Libro IV), a ovest oltre il collo di terra ---
+    { id: 'locanda', cat: 'luoghi', ic: 'cauldron', p: 1, name: 'Il Tofu della Nebbia', x: BP.locanda[0], z: BP.locanda[1], desc: "Libro IV. La locanda in mezzo al bosco: Nonna Lux cucina, e cinque viandanti di una volta si raccontano le loro avventure per non dimenticarle. Qui si cucinano i piatti che danno forza nei duelli." },
+    { id: 'fonte', cat: 'luoghi', ic: 'wave', p: 2, name: 'La fonte della nebbia', x: BP.fonte[0], z: BP.fonte[1], desc: "Sul poggio a ovest. All'alba dell'isola ci si raccoglie l'acqua della nebbia, quella del tofu." },
+    { id: 'fungaia', cat: 'luoghi', ic: 'orb', p: 3, name: 'I funghi sotto gli abeti', x: BP.fungaia[0], z: BP.fungaia[1], desc: 'Funghi del sottobosco, per la dispensa di Nonna Lux.' },
+    { id: 'prato', cat: 'luoghi', ic: 'vial', p: 3, name: 'Il prato delle erbe', x: BP.prato_erbe[0], z: BP.prato_erbe[1], desc: 'Erbe del prato, per il tofu e per il pane.' },
+    { id: 'roveto', cat: 'luoghi', ic: 'pearl', p: 3, name: 'Il roveto', x: BP.roveto[0], z: BP.roveto[1], desc: 'Bacche di rovo, per la Cena Lunga.' },
+    { id: 'radura', cat: 'luoghi', ic: 'sparkles', p: 3, name: 'La radura dei faggi', x: BP.radura[0], z: BP.radura[1], desc: 'Dove Pippo portava tutti a guardare le stelle.' },
     // --- la Riva di Là (nel riquadro) ---
     { id: 'r_casa', cat: 'luoghi', ic: 'map', p: 1, name: 'La Cartografa', inset: true, x: rivaAt(...RP.casa)[0], z: rivaAt(...RP.casa)[1], desc: 'Libro III. La casa sul terrapieno, accanto al pontile: la Cartografa disegna ogni giorno l\'isola a memoria. Ci si arriva con la barca del Traghettatore, dal Molo.' },
     { id: 'r_vill', cat: 'luoghi', ic: 'door', p: 2, name: 'Il villaggio dei Senza Nome', inset: true, x: rivaAt(...RP.village)[0], z: rivaAt(...RP.village)[1], desc: 'Cinque case in cerchio attorno a un cippo. Chi ci abitava aveva buttato via il proprio nome.' },
@@ -441,8 +449,8 @@ export class Atlas {
         g.fillStyle = '#efe2bd'; g.fillRect(0, 0, PW, PH);
         g.drawImage(this.base, M, M, MAP, MAP);
         // i luoghi: numerati nell'ordine della leggenda
-        const zone = (p) => p.inset ? 'La Riva di Là' : ['faro', 'relitto'].includes(p.id) ? 'In barca, al largo' : p.x > 60 ? 'Le Terre Nuove' : "L'Isola Fantasma";
-        const ZONES = ["L'Isola Fantasma", 'Le Terre Nuove', 'In barca, al largo', 'La Riva di Là'];
+        const zone = (p) => p.inset ? 'La Riva di Là' : ['faro', 'relitto'].includes(p.id) ? 'In barca, al largo' : p.x > 60 ? 'Le Terre Nuove' : p.x < -70 ? 'Il Bosco che Profuma' : "L'Isola Fantasma";
+        const ZONES = ["L'Isola Fantasma", 'Le Terre Nuove', 'Il Bosco che Profuma', 'In barca, al largo', 'La Riva di Là'];
         const items = PLACES.map(p => ({ ...p, name: p.id === 'casa' && !me.casa ? 'Il cantiere di Rob' : p.name, zone: zone(p) }))
             .sort((p, q) => ZONES.indexOf(p.zone) - ZONES.indexOf(q.zone));
         items.forEach((p, i) => { p.n = i + 1; p.r = p.inset ? 19 : 24; p.ox = M + bx(p.x) * k; p.oy = M + bz(p.z) * k; p.cx = p.ox; p.cy = p.oy; });
@@ -491,23 +499,28 @@ export class Atlas {
         g.fillText('Leggenda', PW / 2, LY + 50);
         g.font = 'italic 26px Alegreya, serif'; g.fillStyle = INK; g.globalAlpha = 0.8;
         g.fillText('Ogni cerchio sulla carta ha un numero: qui sotto trovi che luogo è.', PW / 2, LY + 98); g.globalAlpha = 1;
-        // le voci scorrono in tre colonne, con il titolo della zona quando cambia
-        const COLS = 3, CW = (MAP - 60) / COLS, top = LY + 140, bottom = PH - 120, RH = 58, HH = 62;
+        // le voci scorrono in tre colonne, con il titolo della zona quando cambia;
+        // se i luoghi sono tanti, righe e caratteri si stringono quanto basta perché stiano in tre colonne
+        const COLS = 3, CW = (MAP - 60) / COLS, top = LY + 140, bottom = PH - 120;
+        const colsFor = (k) => { let c = 0, yy = top, z = null; const nx = (hh) => { if (yy + hh > bottom) { c++; yy = top; } };
+            for (const p of items) { if (p.zone !== z) { nx((62 + 58) * k); z = p.zone; yy += 62 * k; } nx(58 * k); yy += 58 * k; } return c + 1; };
+        let K = 1; while (K > 0.6 && colsFor(K) > COLS) K -= 0.02;
+        const RH = 58 * K, HH = 62 * K;
         let col = 0, y = top, last = null;
         const next = (hgt) => { if (y + hgt > bottom) { col++; y = top; } };
         for (const p of items) {
             if (p.zone !== last) {
                 next(HH + RH); last = p.zone;
                 const x = M + 30 + col * CW;
-                g.fillStyle = RED; g.font = '700 32px Cinzel, Georgia, serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+                g.fillStyle = RED; g.font = `700 ${Math.round(32 * K)}px Cinzel, Georgia, serif`; g.textAlign = 'left'; g.textBaseline = 'middle';
                 g.fillText(p.zone, x, y + HH / 2 - 4, CW - 40);
                 g.strokeStyle = RED; g.globalAlpha = 0.5; g.lineWidth = 1.4; g.beginPath(); g.moveTo(x, y + HH - 8); g.lineTo(x + CW - 40, y + HH - 8); g.stroke(); g.globalAlpha = 1;
                 y += HH;
             }
             next(RH);
             const x = M + 30 + col * CW;
-            disc(x + 30, y + RH / 2, 22, p);
-            g.fillStyle = '#24140a'; g.font = '600 29px Almendra, Georgia, serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+            disc(x + 30, y + RH / 2, 22 * K, p);
+            g.fillStyle = '#24140a'; g.font = `600 ${Math.round(29 * K)}px Almendra, Georgia, serif`; g.textAlign = 'left'; g.textBaseline = 'middle';
             g.fillText(p.name, x + 74, y + RH / 2 + 2, CW - 90);
             y += RH;
         }
