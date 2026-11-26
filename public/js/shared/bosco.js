@@ -14,6 +14,25 @@ export const NECK_B = { a: [-46, 17], b: [-138, 10], w: 12 };
 // la locanda: la porta (lato +z locale) guarda a est, verso il collo di terra
 export const INN = { x: -206, z: 8, ry: Math.PI / 2, y: 2.4, w: 14, d: 10, h: 4.2 };
 
+// dalla sala (lx lungo la larghezza, lz verso la porta) al mondo
+export const innPt = (lx, lz) => [INN.x + lx * Math.cos(INN.ry) + lz * Math.sin(INN.ry), INN.z - lx * Math.sin(INN.ry) + lz * Math.cos(INN.ry)];
+// com'è messa la sala: il bancone e la cucina in fondo a sinistra, due tavoli lunghi a destra
+export const INN_ROOM = {
+    counter: { lx: -2.4, lz: -2.9, w: 5.4, d: 0.8 },             // il bancone aperto sulla cucina
+    stove: { lx: -4.6, lz: -4.3 },                                // la stufa
+    tables: [{ lx: 2.6, lz: -1.2, w: 4.4, d: 0.9 }, { lx: 2.6, lz: 2.0, w: 4.4, d: 0.9 }],
+    bench: 0.75,                                                  // le panche, a questa distanza dal centro del tavolo
+};
+// dove stanno Lux e i cinque (lry: verso dove guardano, nella sala)
+export const INN_SEATS = {
+    lux: { lx: -2.4, lz: -4.0, lry: 0 },
+    ettore: { lx: 1.6, lz: -1.95, lry: 0, sit: true },
+    rina: { lx: 2.9, lz: -1.95, lry: 0, sit: true },
+    pippo: { lx: 2.25, lz: -0.45, lry: Math.PI, sit: true },
+    nando: { lx: 1.9, lz: 1.25, lry: 0, sit: true },
+    greta: { lx: 3.2, lz: 1.25, lry: 0, sit: true },
+};
+
 // i luoghi: [x, z]
 export const BP = {
     locanda: [INN.x, INN.z],

@@ -5,6 +5,9 @@
 // =====================================================================
 import { RP, RIVA, RIVA_YAW, rivaPt } from './riva.js';
 const [CAR_X, CAR_Z] = rivaPt(RIVA.r - 13.5, 5.5), [FOR_X, FOR_Z] = rivaPt(RP.village[0] + 3, RP.village[1] + 3);
+import { innPt, INN, INN_SEATS } from './bosco.js';
+// Libro IV: dentro la locanda Il Tofu della Nebbia (coordinate locali della sala → mondo)
+const inn = (id) => { const S = INN_SEATS[id], [x, z] = innPt(S.lx, S.lz); return { x, z, y: INN.y + (S.sit ? 0.05 : 0), ry: INN.ry + S.lry, sit: !!S.sit }; };
 
 // --- IL PEDAGGIO DELLO SPETTRO: a ogni insulto la sua risposta (stesso indice) ---
 export const INSULTS = [
@@ -168,6 +171,60 @@ export const NPCS = {
         look: {},
         lines: ['Impasto. Non c\'è farina, ma le mani se lo ricordano.', 'Qui siamo arrivati tutti con la luce. Poi la luce si è spenta, e abbiamo cominciato a perdere le cose. Prima le piccole.',
             'Hai visto il pozzo? Non guardarci troppo dentro. Ti chiama.'],
+        actions: [],
+    },
+    // Libro IV: la locanda Il Tofu della Nebbia, nel Bosco che Profuma
+    lux: {
+        name: 'Nonna Lux', where: 'Il Tofu della Nebbia', ...inn('lux'), teach: null,
+        app: { sex: 'f', species: 'umano', build: 'robusto', height: 0.92, skin: '#d8b49a', eyes: 'tondi', eyeColor: '#6a4a2a', mouth: 'sorriso', hair: 'codino', hairColor: '#e8e0c8', beard: 'nessuna', topStyle: 'tunica', top: '#7a4a5a', bottom: '#3a2e2a', shoes: '#2a1e18' },
+        look: { torso: 'grembiule' },
+        lines: ['Siediti. Prima si mangia, poi mi dici come ti chiami. O anche no: il nome non serve, per la minestra.',
+            "Un sapore è un ricordo che si può rifare. Basta averlo scritto bene.",
+            "Il tofu lo faccio con l'acqua della nebbia, quella che si raccoglie all'alba. Il resto è pazienza."],
+        actions: [['cucina', 'La cucina di Nonna Lux'], ['dispensa', 'La dispensa']],
+    },
+    ettore: {
+        name: 'Ettore', where: 'Il Tofu della Nebbia', ...inn('ettore'), teach: null,
+        app: { species: 'umano', build: 'robusto', height: 1.06, skin: '#e0c4b0', eyes: 'fieri', eyeColor: '#6ab0e8', mouth: 'neutro', hair: 'corti', hairColor: '#d9a441', beard: 'pizzetto', topStyle: 'tunica', top: '#4a6a8a', bottom: '#2a3340', shoes: '#1a1e24' },
+        look: { torso: 'cotta' },
+        lines: ['Avevo giurato di non tornare a casa finché non avessi perso un duello. Poi ho trovato questa panca. Il giuramento può aspettare.',
+            'Rina dice che le ho chiesto di sposarmi. Io dico che le ho chiesto indietro la borsa. Forse era la stessa domanda.',
+            'Qui dentro non si duella. Regola di Greta. La rispetto: lei fa più paura di un drago.'],
+        actions: [],
+    },
+    rina: {
+        name: 'Rina', where: 'Il Tofu della Nebbia', ...inn('rina'), teach: null,
+        app: { sex: 'f', species: 'umano', build: 'snello', height: 0.96, skin: '#c8987a', eyes: 'sottili', eyeColor: '#5a8a3a', mouth: 'ghigno', hair: 'lunghi', hairColor: '#3a2414', beard: 'nessuna', topStyle: 'giacca', top: '#5a4a2a', bottom: '#2b2018', shoes: '#1e1612' },
+        look: {},
+        lines: ["La borsa di Ettore? Ce l'ho ancora. Non gliela ridò: se no non avrebbe più niente da chiedermi.",
+            "Ho rubato un po' a tutti, sull'isola. Mai a Nonna Lux. Ci ho provato una volta: mi ha dato da mangiare.",
+            'Ho paura di svegliarmi e non ricordarmi perché mi sono fermata. Allora resto sveglia, e mangio.'],
+        actions: [],
+    },
+    nando: {
+        name: 'Nando', where: 'Il Tofu della Nebbia', ...inn('nando'), teach: null,
+        app: { species: 'umano', build: 'robusto', height: 1.0, skin: '#a8714c', eyes: 'assonnati', eyeColor: '#3a2414', mouth: 'neutro', hair: 'calvo', hairColor: '#1a1210', beard: 'folta', topStyle: 'tunica', top: '#2a4a5a', bottom: '#2b2633', shoes: '#14121a' },
+        look: { head: 'cappuccio' },
+        lines: ['…', 'La zuppa di oggi è buona. Ci manca il sale. Non dirlo a Lux.',
+            'Avevo una barca. Adesso ho una sedia. La sedia non affonda.'],
+        actions: [],
+    },
+    greta: {
+        name: 'Greta', where: 'Il Tofu della Nebbia', ...inn('greta'), teach: null,
+        app: { sex: 'f', species: 'umano', build: 'robusto', height: 1.02, skin: '#e8c8b0', eyes: 'fieri', eyeColor: '#3a3a5a', mouth: 'neutro', hair: 'codino', hairColor: '#8b1a1a', beard: 'nessuna', topStyle: 'giacca', top: '#5a5462', bottom: '#2a2830', shoes: '#18161c' },
+        look: {},
+        lines: ['Regola numero uno: in locanda non si duella. Regola numero due: il pane non si spreca. Le altre le scrivo stasera.',
+            "Facevo la guardia al Ponte. Ho multato metà dell'isola. Nando due volte.",
+            'Non ho paura di dimenticare. Ho paura che dimentichi lui. Per questo gli ricordo le regole.'],
+        actions: [],
+    },
+    pippo: {
+        name: 'Pippo', where: 'Il Tofu della Nebbia', ...inn('pippo'), teach: null,
+        app: { species: 'umano', build: 'snello', height: 1.04, skin: '#d0a888', eyes: 'tondi', eyeColor: '#8a5a2a', mouth: 'sorriso', hair: 'ciuffo', hairColor: '#6b3a1e', beard: 'nessuna', topStyle: 'giacca', top: '#8a6a2a', bottom: '#3a3020', shoes: '#2a2018' },
+        look: {},
+        lines: ["Ho venduto un ombrello alla nebbia, una volta. Non l'ha mai usato, ma ha pagato.",
+            "Io c'ero, quando Ettore ha conosciuto Rina. E quando Nando è arrivato sotto il ponte. Io c'ero sempre. Strano, no?",
+            'Chiedimi pure qualcosa di loro: me la ricordo io. Di me, invece… quello è più difficile.'],
         actions: [],
     },
 };

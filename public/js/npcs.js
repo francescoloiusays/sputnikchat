@@ -42,10 +42,11 @@ export class Npcs {
             characterLod(n.ch, d);
             if (d > 70) { if (n.ch.tag) n.ch.tag.visible = false; continue; }
             const dp = Math.hypot(player.x - p.x, player.z - p.z);
-            const want = dp < 6 ? Math.atan2(player.x - p.x, player.z - p.z) : n.N.ry;
+            // chi è seduto al tavolo (i clienti della locanda) resta girato verso il tavolo
+            const want = dp < 6 && !n.N.sit ? Math.atan2(player.x - p.x, player.z - p.z) : n.N.ry;
             n.ry = lerpAngle(n.ry, want, Math.min(1, dt * 3));
             n.ch.root.rotation.y = n.ry;
-            n.ch.state = 'idle';
+            n.ch.state = n.N.sit ? 'sit' : 'idle';
             if (n.ch.tag) n.ch.tag.visible = d < 26;
             n.talkT = Math.max(0, n.talkT - dt);
             n.ch.update(dt);

@@ -6,6 +6,7 @@
 // =====================================================================
 import { WORLD } from '../world.js';
 import { RIVA } from '../shared/riva.js';
+import { BOSCO } from '../shared/bosco.js';
 
 export function registerRegions(stream, app) {
     // Il Faro Spento: lo scoglio a nord-est, ci si arriva con la barca del Traghettatore
@@ -25,5 +26,10 @@ export function registerRegions(stream, app) {
     stream.region('Riva di Là', { x: RIVA.x, z: RIVA.z }, 85, async () => {
         const { buildRiva } = await import('./riva.js');
         return buildRiva(app);
+    });
+    // Libro IV · il Bosco che Profuma: a ovest, oltre il collo di terra (ci si arriva a piedi)
+    stream.region('Bosco che Profuma', { x: BOSCO.x, z: BOSCO.z }, BOSCO.r + 70, async () => {
+        const { buildBosco } = await import('./bosco.js');
+        return buildBosco(app);
     });
 }
