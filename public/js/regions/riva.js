@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Grass } from '../grass.js';
-import { RIVA, RP, HUTS, rivaPt, rivaUV, rivaHeight, rfbm } from '../shared/riva.js';
+import { RIVA, RP, HUTS, RIVA_PATHS, rivaPt, rivaUV, rivaHeight, rfbm } from '../shared/riva.js';
 import { l2At, L2AT } from '../shared/libro2.js';
 import { buildRivaVita } from './riva-vita.js';
 
@@ -36,7 +36,7 @@ function distSeg(px, pz, ax, az, bx, bz) {
     return Math.hypot(px - ax - dx * t, pz - az - dz * t);
 }
 // i sentieri (in coordinate di riva): dall'approdo al villaggio, al pozzo, alla cima
-const PATHS = [[RP.landing, [40, -12]], [[40, -12], RP.village], [RP.village, RP.pozzo], [RP.pozzo, [-26, 0]], [[-26, 0], [-34, 6]], [RP.landing, [52, -40]], [[52, -40], RP.spiaggia]];
+const PATHS = RIVA_PATHS;
 function pathDistUV(u, v) { let d = Infinity; for (const [a, b] of PATHS) d = Math.min(d, distSeg(u, v, a[0], a[1], b[0], b[1])); return d; }
 
 export function buildRiva(app) {

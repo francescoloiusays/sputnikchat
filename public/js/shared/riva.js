@@ -28,6 +28,8 @@ export const RP = {
     monte: [-40, 10],
     spiaggia: [42, -58],
 };
+// i sentieri (u, v): dal pontile al villaggio, al pozzo, al monte; e giù alla spiaggia
+export const RIVA_PATHS = [[RP.landing, [40, -12]], [[40, -12], RP.village], [RP.village, RP.pozzo], [RP.pozzo, [-26, 0]], [[-26, 0], [-34, 6]], [RP.landing, [52, -40]], [[52, -40], RP.spiaggia]];
 
 // le cinque case vuote del villaggio, in cerchio intorno al cippo, con la porta verso il centro: [u, v, yaw]
 export const HUTS = [0, 1, 2, 3, 4].map(i => {

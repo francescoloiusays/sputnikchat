@@ -75,6 +75,7 @@ const PLACES = [
     // --- la Riva di Là (nel riquadro) ---
     { id: 'r_casa', cat: 'luoghi', ic: 'map', p: 1, name: 'La Cartografa', inset: true, x: rivaAt(...RP.casa)[0], z: rivaAt(...RP.casa)[1], desc: 'Libro III. La casa sul terrapieno, accanto al pontile: la Cartografa disegna ogni giorno l\'isola a memoria. Ci si arriva con la barca del Traghettatore, dal Molo.' },
     { id: 'r_vill', cat: 'luoghi', ic: 'door', p: 2, name: 'Il villaggio dei Senza Nome', inset: true, x: rivaAt(...RP.village)[0], z: rivaAt(...RP.village)[1], desc: 'Cinque case in cerchio attorno a un cippo. Chi ci abitava aveva buttato via il proprio nome.' },
+    { id: 'r_forno', cat: 'luoghi', ic: 'fuoco', p: 2, name: 'Il Forno di Tobia', inset: true, x: rivaAt(HUTS[4][0], HUTS[4][1])[0], z: rivaAt(HUTS[4][0], HUTS[4][1])[1], desc: "L'unica casa aperta del villaggio: la tiene Pina, la nipote di Tobia. Dentro, il forno di mattoni e il pane sugli scaffali; fuori, il forno a cupola dove si gioca a sfornare." },
     { id: 'r_pozzo', cat: 'luoghi', ic: 'orb', p: 2, name: 'Il Pozzo dei Nomi', inset: true, x: rivaAt(...RP.pozzo)[0], z: rivaAt(...RP.pozzo)[1], desc: 'Ai piedi del Monte Storto. Di giorno sembra un pozzo vecchio; di notte respira.' },
     { id: 'r_monte', cat: 'luoghi', ic: 'castle', p: 3, name: 'Il Monte Storto', inset: true, x: rivaAt(...RP.monte)[0], z: rivaAt(...RP.monte)[1], desc: 'La cima della Riva di Là, con un cippo sul pianoro.' },
     { id: 'faro', cat: 'luoghi', ic: 'lantern', p: 1, name: 'Il Faro Spento', x: WORLD.FARO.x, z: WORLD.FARO.z, desc: 'Libro II. Uno scoglio a nord-est: ci porta la barca del Traghettatore. La Guardiana veglia una porta chiusa da trecento anni.' },
@@ -429,46 +430,127 @@ export class Atlas {
         }
     }
     // --- LA CARTA DA PORTARE VIA: tutta, con i luoghi e i loro nomi (senza i viandanti), da scaricare o da stampare ---
+    // --- LA CARTA DA STAMPARE: un foglio A3 in verticale ---
+    // sopra la carta, con i luoghi segnati da un'icona e un numero (niente scritte che si accavallano);
+    // sotto, la leggenda: numero, icona, nome, divisi per zona.
     exportCanvas() {
         if (!this.base) this.base = this.buildBase();
-        const c = document.createElement('canvas'); c.width = c.height = BASE;
-        const g = c.getContext('2d');
-        g.drawImage(this.base, 0, 0);
-        g.textAlign = 'center'; g.textBaseline = 'top';
-        for (const m of PLACES) {
-            const x = bx(m.x), y = bz(m.z), r = m.inset ? 11 : 15;
-            g.fillStyle = '#f3e7c6'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-            g.strokeStyle = INK; g.lineWidth = 1.7; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke();
-            drawIcon(g, m.ic, x, y, r * 1.25, '#3a1a08');
-            g.font = `700 ${m.inset ? 15 : 19}px Almendra, serif`;
-            g.lineJoin = 'round'; g.strokeStyle = 'rgba(243,231,198,0.95)'; g.lineWidth = 5; g.strokeText(m.name, x, y + r + 3);
-            g.fillStyle = '#24140a'; g.fillText(m.name, x, y + r + 3);
+        const PW = 2480, PH = 3508, M = 90, MAP = PW - 2 * M, k = MAP / BASE;   // 297 x 420 mm a 212 punti per pollice
+        const c = document.createElement('canvas'); c.width = PW; c.height = PH;
+        const g = c.getContext('2d'), me = this.app.me || {};
+        g.fillStyle = '#efe2bd'; g.fillRect(0, 0, PW, PH);
+        g.drawImage(this.base, M, M, MAP, MAP);
+        // i luoghi: numerati nell'ordine della leggenda
+        const zone = (p) => p.inset ? 'La Riva di Là' : ['faro', 'relitto'].includes(p.id) ? 'In barca, al largo' : p.x > 60 ? 'Le Terre Nuove' : "L'Isola Fantasma";
+        const ZONES = ["L'Isola Fantasma", 'Le Terre Nuove', 'In barca, al largo', 'La Riva di Là'];
+        const items = PLACES.map(p => ({ ...p, name: p.id === 'casa' && !me.casa ? 'Il cantiere di Rob' : p.name, zone: zone(p) }))
+            .sort((p, q) => ZONES.indexOf(p.zone) - ZONES.indexOf(q.zone));
+        items.forEach((p, i) => { p.n = i + 1; p.r = p.inset ? 19 : 24; p.ox = M + bx(p.x) * k; p.oy = M + bz(p.z) * k; p.cx = p.ox; p.cy = p.oy; });
+        // i cerchi non si sovrappongono: si spingono un poco, e una linea sottile porta al punto vero
+        for (let it = 0; it < 120; it++) {
+            let moved = false;
+            for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+                const A = items[i], B = items[j], dx = B.cx - A.cx, dy = B.cy - A.cy, d = Math.hypot(dx, dy) || 0.01, need = A.r + B.r + 8;
+                if (d < need) { const push = (need - d) / 2, ux = dx / d, uy = dy / d; A.cx -= ux * push; A.cy -= uy * push; B.cx += ux * push; B.cy += uy * push; moved = true; }
+            }
+            for (const p of items) { p.cx = Math.max(M + p.r + 30, Math.min(M + MAP - p.r - 30, p.cx)); p.cy = Math.max(M + p.r + 30, Math.min(M + MAP - p.r - 30, p.cy)); }
+            if (!moved) break;
         }
-        // la rosa dei venti, ferma, in basso a destra
-        const cx = BASE - 150, cy = BASE - 170;
-        g.save(); g.translate(cx, cy); g.strokeStyle = INK; g.fillStyle = INK; g.lineWidth = 2;
+        const disc = (x, y, r, p) => {
+            g.fillStyle = '#f6ecd0'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+            g.strokeStyle = INK; g.lineWidth = 2.2; g.stroke();
+            drawIcon(g, p.ic, x, y, r * 1.2, '#3a1a08');
+            // il numero, in una medaglietta rossa in alto a destra
+            const nx = x + r * 0.78, ny = y - r * 0.78, nr = r * 0.52;
+            g.fillStyle = RED; g.beginPath(); g.arc(nx, ny, nr, 0, Math.PI * 2); g.fill();
+            g.strokeStyle = '#f6ecd0'; g.lineWidth = 2; g.stroke();
+            g.fillStyle = '#fff4dc'; g.font = `700 ${Math.round(nr * 1.15)}px Alegreya, Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+            g.fillText(String(p.n), nx, ny + 1);
+        };
+        for (const p of items) if (Math.hypot(p.cx - p.ox, p.cy - p.oy) > 6) {
+            g.strokeStyle = INK; g.lineWidth = 1.6; g.beginPath(); g.moveTo(p.ox, p.oy); g.lineTo(p.cx, p.cy); g.stroke();
+            g.fillStyle = INK; g.beginPath(); g.arc(p.ox, p.oy, 3.5, 0, Math.PI * 2); g.fill();
+        }
+        for (const p of items) disc(p.cx, p.cy, p.r, p);
+        // la rosa dei venti, in basso a destra sulla carta
+        const rx = M + MAP - 150, ry = M + MAP - 170;
+        g.save(); g.translate(rx, ry); g.strokeStyle = INK; g.fillStyle = INK; g.lineWidth = 2;
         g.beginPath(); g.arc(0, 0, 58, 0, Math.PI * 2); g.stroke();
         for (let i = 0; i < 4; i++) { g.rotate(Math.PI / 2); g.beginPath(); g.moveTo(0, -70); g.lineTo(9, 0); g.lineTo(-9, 0); g.closePath(); i === 3 ? g.fill() : g.stroke(); }
-        g.font = '700 26px Cinzel, serif'; g.textBaseline = 'middle'; g.fillStyle = RED; g.fillText('N', 0, -88);
+        g.font = '700 26px Cinzel, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = RED; g.fillText('N', 0, -88);
         g.restore();
-        g.font = 'italic 18px Alegreya, serif'; g.fillStyle = INK; g.textAlign = 'right'; g.textBaseline = 'alphabetic';
-        g.fillText('SputnikChat · L\'Isola Fantasma · carta del Ratto dei Cronisti', BASE - 60, BASE - 48);
+        // la scala: 50 metri
+        { const L = 50 * PPM * k, x0 = M + 70, y0 = M + MAP - 70;
+          g.fillStyle = INK; g.fillRect(x0, y0, L / 2, 8); g.strokeStyle = INK; g.lineWidth = 2; g.strokeRect(x0, y0, L, 8);
+          g.font = 'italic 24px Alegreya, serif'; g.textAlign = 'left'; g.textBaseline = 'bottom'; g.fillText('50 metri', x0, y0 - 6); }
+        // --- LA LEGGENDA ---
+        const LY = M + MAP + 60;
+        g.strokeStyle = INK; g.lineWidth = 2.4; g.strokeRect(M, LY - 10, MAP, PH - LY - 70);
+        g.lineWidth = 1; g.strokeRect(M + 8, LY - 2, MAP - 16, PH - LY - 86);
+        g.fillStyle = '#3a1606'; g.font = '700 54px Almendra, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText('Leggenda', PW / 2, LY + 50);
+        g.font = 'italic 26px Alegreya, serif'; g.fillStyle = INK; g.globalAlpha = 0.8;
+        g.fillText('Ogni cerchio sulla carta ha un numero: qui sotto trovi che luogo è.', PW / 2, LY + 98); g.globalAlpha = 1;
+        // le voci scorrono in tre colonne, con il titolo della zona quando cambia
+        const COLS = 3, CW = (MAP - 60) / COLS, top = LY + 140, bottom = PH - 120, RH = 58, HH = 62;
+        let col = 0, y = top, last = null;
+        const next = (hgt) => { if (y + hgt > bottom) { col++; y = top; } };
+        for (const p of items) {
+            if (p.zone !== last) {
+                next(HH + RH); last = p.zone;
+                const x = M + 30 + col * CW;
+                g.fillStyle = RED; g.font = '700 32px Cinzel, Georgia, serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+                g.fillText(p.zone, x, y + HH / 2 - 4, CW - 40);
+                g.strokeStyle = RED; g.globalAlpha = 0.5; g.lineWidth = 1.4; g.beginPath(); g.moveTo(x, y + HH - 8); g.lineTo(x + CW - 40, y + HH - 8); g.stroke(); g.globalAlpha = 1;
+                y += HH;
+            }
+            next(RH);
+            const x = M + 30 + col * CW;
+            disc(x + 30, y + RH / 2, 22, p);
+            g.fillStyle = '#24140a'; g.font = '600 29px Almendra, Georgia, serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+            g.fillText(p.name, x + 74, y + RH / 2 + 2, CW - 90);
+            y += RH;
+        }
+        g.font = 'italic 24px Alegreya, serif'; g.fillStyle = INK; g.textAlign = 'right'; g.textBaseline = 'alphabetic';
+        g.fillText("SputnikChat · L'Isola Fantasma · carta del Ratto dei Cronisti · foglio A3", PW - M, PH - 34);
         return c;
     }
-    download() {
-        this.exportCanvas().toBlob(b => {
-            const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'isola-fantasma-carta.png';
-            document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-        }, 'image/png');
-        this.app.audio?.play?.('open');
+    // il PDF A3: una pagina con la carta dentro (un JPEG), scritto a mano senza librerie
+    async pdfBlob() {
+        await document.fonts?.ready;
+        const c = this.exportCanvas();
+        const jpg = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+        const img = new Uint8Array(await jpg.arrayBuffer());
+        const PWpt = 841.89, PHpt = 1190.55, enc = new TextEncoder(), parts = [], offs = [];
+        let len = 0;
+        const put = (x) => { const b = typeof x === 'string' ? enc.encode(x) : x; parts.push(b); len += b.length; };
+        const obj = (n, body) => { offs[n] = len; put(`${n} 0 obj\n`); body(); put('\nendobj\n'); };
+        put('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+        const draw = `q ${PWpt} 0 0 ${PHpt} 0 0 cm /Im0 Do Q`;
+        obj(1, () => put('<< /Type /Catalog /Pages 2 0 R >>'));
+        obj(2, () => put('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'));
+        obj(3, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PWpt} ${PHpt}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`));
+        obj(4, () => { put(`<< /Type /XObject /Subtype /Image /Width ${c.width} /Height ${c.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.length} >>\nstream\n`); put(img); put('\nendstream'); });
+        obj(5, () => put(`<< /Length ${draw.length} >>\nstream\n${draw}\nendstream`));
+        obj(6, () => put("<< /Title (L'Isola Fantasma - carta A3) /Creator (SputnikChat) >>"));
+        const xref = len;
+        put(`xref\n0 7\n0000000000 65535 f \n${offs.slice(1).map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('')}trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+        return new Blob(parts, { type: 'application/pdf' });
     }
-    print() {
-        const url = this.exportCanvas().toDataURL('image/png');
+    async download() {
+        this.app.audio?.play?.('open');
+        const b = await this.pdfBlob();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'isola-fantasma-carta-A3.pdf';
+        document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000);
+    }
+    async print() {
+        await document.fonts?.ready;
+        const url = this.exportCanvas().toDataURL('image/jpeg', 0.92);
         const f = document.createElement('iframe');
         Object.assign(f.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
         document.body.append(f);
         const d = f.contentWindow.document;
-        d.open(); d.write(`<!doctype html><html><head><title>L'Isola Fantasma</title><style>@page{size:A4 portrait;margin:8mm}html,body{margin:0;background:#fff}img{width:100%;height:auto;display:block}</style></head><body><img src="${url}"></body></html>`); d.close();
+        d.open(); d.write(`<!doctype html><html><head><title>L'Isola Fantasma</title><style>@page{size:A3 portrait;margin:0}html,body{margin:0;background:#fff}img{width:297mm;height:420mm;display:block}</style></head><body><img src="${url}"></body></html>`); d.close();
         const img = d.querySelector('img');
         const go = () => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 2000); };
         if (img.complete) setTimeout(go, 100); else img.onload = () => setTimeout(go, 100);
@@ -747,7 +829,7 @@ export class Atlas {
         g.restore();
         // il titolo sotto il riquadro, sul mare
         label(g, 'La Riva di Là', X0 + w / 2, Y1 + 30, { font: '700 36px Almendra, serif', color: '#3a1606', halo: 7 });
-        label(g, 'oltre il Mare della Nebbia · in barca dal Molo · in scala ridotta', X0 + w / 2, Y1 + 62, { font: 'italic 20px Alegreya, serif', a: 0.85, halo: 5 });
+        label(g, 'in barca dal Molo · in scala ridotta', X0 + w / 2, Y1 + 62, { font: 'italic 20px Alegreya, serif', a: 0.85, halo: 5 });
     }
     cemetery(g) {
         const C = WORLD.CEMETERY;

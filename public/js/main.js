@@ -9,6 +9,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { World, WORLD, makeSky } from './world.js';
+import { nearRiva, RIVA } from './shared/riva.js';
 import { Streamer, characterLod } from './engine/stream.js';
 import { registerRegions } from './regions/index.js';
 import { Character, setCharacterQuality, CHARACTERS } from './character.js';
@@ -1514,15 +1515,18 @@ class Game {
     drawMinimap() {
         const g = this.mm, S = 360, W = this.world, P = this.player.pos;
         const ppm = 3.2;
-        const k = ppm / (W.mapImage.width / (WORLD.MAX_X - WORLD.MIN_X));
-        const [mx, mz] = W.mapToPx(P.x, P.z, W.mapImage.width);
+        // alla Riva di Là la minimappa passa alla sua carta (è fuori dai confini dell'isola)
+        const riva = nearRiva(P.x, P.z, 30), RM = riva ? W.rivaMap() : null;
+        const img = RM ? RM.img : W.mapImage, toPx = RM ? RM.toPx : W.mapToPx, span = RM ? RIVA.r * 2.7 : WORLD.MAX_X - WORLD.MIN_X;
+        const k = ppm / (img.width / span);
+        const [mx, mz] = toPx(P.x, P.z, img.width);
         g.save();
         g.fillStyle = '#160a24'; g.fillRect(0, 0, S, S);
         g.translate(S / 2, S / 2);
-        g.drawImage(W.mapImage, -mx * k, -mz * k, W.mapImage.width * k, W.mapImage.height * k);
+        g.drawImage(img, -mx * k, -mz * k, img.width * k, img.height * k);
         g.font = '26px Planewalker, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
         const R = S / 2 - 18;
-        for (const m of W.mapMarkers) {
+        for (const m of RM ? RM.markers : W.mapMarkers) {
             let x = (m.x - P.x) * ppm, y = (m.z - P.z) * ppm;
             const d = Math.hypot(x, y);
             if (d > R) { x *= R / d; y *= R / d; }

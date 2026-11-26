@@ -12,7 +12,7 @@ import { TABLETS } from './shared/lore.js';
 import { FireSet, makeSconce, makeBrazier, Gallery, makeWindow } from './decor.js';
 import { buildKeep, buildWhiteRoom, buildGarden, GARDENS } from './room.js';
 import { addSkyExtras, addSnowCover, SNOW_COVER } from './sky.js';
-import { rivaHeight, rivaShore, nearRiva } from './shared/riva.js';
+import { rivaHeight, rivaShore, nearRiva, RIVA, RP, HUTS, RIVA_PATHS, rivaPt, rivaUV } from './shared/riva.js';
 import { buildBazar, buildBarca, buildStalla } from './bancarelle.js';
 import { terreMask, terreRelief, PADS, TERRE_PATHS, nearTerreBuild, inTerre } from './shared/terre.js';
 import { buildTerre } from './terre.js';
@@ -1530,6 +1530,44 @@ export class World {
         }
     }
 
+    // --- MINIMAPPA DELLA RIVA DI LÀ (fuori dai confini dell'isola: un'immagine sua, fatta la prima volta che serve) ---
+    rivaMap() {
+        if (this._rivaMap) return this._rivaMap;
+        const S = 360, half = RIVA.r * 1.35, x0 = RIVA.x - half, z0 = RIVA.z - half, span = half * 2;
+        const c = document.createElement('canvas'); c.width = c.height = S;
+        const g = c.getContext('2d'), img = g.createImageData(S, S);
+        const seg = (u, v, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], t = Math.max(0, Math.min(1, ((u - a[0]) * dx + (v - a[1]) * dz) / (dx * dx + dz * dz))); return Math.hypot(u - a[0] - dx * t, v - a[1] - dz * t); };
+        for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+            const x = x0 + (px + 0.5) / S * span, z = z0 + (py + 0.5) / S * span, h = rivaHeight(x, z);
+            let col;
+            if (h < -2.5) col = [22, 10, 38];
+            else if (h < 0) col = [42, 24, 64];
+            else if (h < 0.5) col = [92, 78, 70];
+            else { const k = Math.min(1, h / 14); col = [60 + k * 50, 70 + k * 30, 52 + k * 50]; }
+            if (h > 0) { const [u, v] = rivaUV(x, z); if (RIVA_PATHS.some(([a, b]) => seg(u, v, a, b) < 1.6)) col = [128, 104, 76]; }
+            const k = (py * S + px) * 4;
+            img.data[k] = col[0]; img.data[k + 1] = col[1]; img.data[k + 2] = col[2]; img.data[k + 3] = 255;
+        }
+        g.putImageData(img, 0, 0);
+        const toPx = (x, z) => [(x - x0) / span * S, (z - z0) / span * S], m = S / span;
+        // le case (piccoli quadrati girati), la casa della Cartografa, il pontile
+        const house = (x, z, ry, w, col) => { const [X, Y] = toPx(x, z); g.save(); g.translate(X, Y); g.rotate(-ry); g.fillStyle = col; g.fillRect(-w * m / 2, -w * m / 2, w * m, w * m); g.restore(); };
+        HUTS.forEach(([u, v, ry], i) => house(...rivaPt(u, v), ry, 4.4, i === 4 ? '#e0a050' : '#8a8090'));
+        house(...rivaPt(...RP.casa), 0, 5, '#d8d2c8');
+        const [ja, jb] = toPx(...rivaPt(...RP.jetty0)), [jc, jd] = toPx(...rivaPt(...RP.jetty1));
+        g.strokeStyle = '#7a5a3a'; g.lineWidth = 3; g.beginPath(); g.moveTo(ja, jb); g.lineTo(jc, jd); g.stroke();
+        const at = (p) => rivaPt(...p);
+        const markers = [
+            { p: at(RP.casa), ic: 'map', label: 'La Cartografa' },
+            { p: at(RP.village), ic: 'door', label: 'Il villaggio' },
+            { p: rivaPt(HUTS[4][0], HUTS[4][1]), ic: 'fuoco', label: 'Il Forno di Tobia' },
+            { p: at(RP.pozzo), ic: 'orb', label: 'Il Pozzo dei Nomi' },
+            { p: at(RP.monte), ic: 'castle', label: 'Il Monte Storto' },
+            { p: at(RP.spiaggia), ic: 'wave', label: 'La spiaggia' },
+        ].map(M => ({ x: M.p[0], z: M.p[1], ic: M.ic, label: M.label }));
+        return (this._rivaMap = { img: c, toPx: (x, z, size) => [(x - x0) / span * size, (z - z0) / span * size], markers });
+    }
+
     // --- MINIMAPPA (immagine di base) ---
     buildMapImage() {
         const S = 320;
@@ -1559,7 +1597,7 @@ export class World {
         for (const r of GARDENS) rect(r.x0, r.z0, r.x1, r.z1, '#2f5a3a');
         const K = WORLD.KEEP;
         rect(K.x - K.w / 2, K.z - K.d / 2, K.x + K.w / 2, K.z + K.d / 2, '#d8d2c8');
-        rect(K.x - K.w / 2 - 2.2, K.z - 1.9, K.x - K.w / 2, K.z + 7.2, '#6a6278');
+        rect(K.x - K.w / 2 - 4.4, K.z - 1.9, K.x - K.w / 2, K.z + 7.2, '#6a6278');   // le due rampe della scala
         const [ax, az] = toPx(WORLD.ARENA.x, WORLD.ARENA.z);
         g.strokeStyle = '#b37aff'; g.lineWidth = 2; g.beginPath(); g.arc(ax, az, WORLD.ARENA.r / (MAX_X - MIN_X) * S, 0, Math.PI * 2); g.stroke();
         const B = WORLD.BRIDGE; const [b0x, b0z] = toPx(B.x, B.z0), [, b1z] = toPx(B.x, B.z1);
