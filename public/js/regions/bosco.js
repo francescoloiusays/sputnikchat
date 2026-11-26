@@ -273,6 +273,8 @@ export function buildBosco(app) {
     // i muri della locanda (con il varco della porta)
     wbx(0, -ID / 2, IW, T, WH); wbx(-IW / 2, 0, T, ID, WH); wbx(IW / 2, 0, T, ID, WH);
     wbx(-(DOOR / 2 + side / 2), ID / 2, side, T, WH); wbx(DOOR / 2 + side / 2, ID / 2, side, T, WH);
+    // Libro IV: la prima volta che arrivi alla porta (il passo «find soglia»)
+    interactables.push({ id: 'l2spot', k: 'soglia', x: BP.soglia[0], z: BP.soglia[1], y: INN.y, r: 3.2, label: 'Il Tofu della Nebbia: entra', when: () => app.l2?.want('soglia') });
     // l'interno: quando entri si vede solo la sala (con Lux e i cinque)
     const people = ['lux', 'ettore', 'rina', 'nando', 'greta', 'pippo'].map(id => app.npcs?.list.find(n => n.id === id)?.ch.root).filter(Boolean);
     interiors.push(app.interiors?.add({ name: 'Il Tofu della Nebbia', outName: 'Il Bosco che Profuma', x: INN.x, z: INN.z, ry: INN.ry, y: INN.y, w: IW, d: ID, h: WH, groups: [ig, ...people], camDist: 2.8 }));

@@ -14,6 +14,7 @@
 // =====================================================================
 
 import { RP, rivaPt, hutInside } from './riva.js';
+import { BP } from './bosco.js';
 const R3 = (k) => rivaPt(...RP[k]);
 const HUT3 = (i) => rivaPt(...hutInside(i, 3.1));   // sulla soglia: le case vuote sono chiuse
 
@@ -35,6 +36,13 @@ export const L2_SPOTS = {
     lapide: { x: -27, z: 47, glow: 'lapide', name: 'La lapide senza nome', hint: 'in fondo al Prato dei Morti, la pietra che brilla di verde', label: 'Leggi la lapide senza nome', msg: 'Sulla pietra, graffiato con un coccio di vetro verde: «I. Sono tornato. La luce era spenta.»' },
     // ---------------- LIBRO III · LA RIVA DI LÀ ----------------
     lume_riva: { x: R3('lume')[0], z: R3('lume')[1], r: 3.5, name: 'La lanterna della riva', hint: 'sulla Riva di Là, accanto al pontile (il Traghettatore ti ci porta dal Molo)', msg: '' },
+    // Libro IV · il Bosco che Profuma
+    soglia: { x: BP.soglia[0], z: BP.soglia[1], r: 3.2, name: 'La porta della locanda', hint: "a ovest, oltre il collo di terra: segui il profumo e le lanterne fino alla locanda nel bosco", msg: '' },
+    borsa_ponte: { x: 2.6, z: -35.5, glow: 'ricordo', name: 'La borsa di Ettore', hint: "ai piedi del Ponte dei Sospiri, dalla parte dell'isola: dove Greta faceva la guardia", label: 'Raccogli la borsa di cuoio', msg: "Una borsa di cuoio vecchio, vuota. Dentro, cucito nella fodera, c'è un biglietto: «Se la trovi, riportala a chi l'ha rubata. Lei sa perché.»" },
+    pz_ettore: { x: -16.6, z: 13.2, glow: 'ricordo', name: 'Il pezzo di Ettore', hint: "davanti alla Forgia di Vulcano: lì Pippo vendette a Ettore la sua prima spada", label: 'Raccogli il pezzo di Pippo', msg: "Un'etichetta di cartone, scritta a mano: «Spada quasi nuova. Prezzo da amico.» La calligrafia è quella di Pippo." },
+    pz_rina: { x: 0.6, z: 95.4, glow: 'ricordo', name: 'Il pezzo di Rina', hint: "in fondo al Molo: lì Pippo insegnò a Rina a contare le monete senza farsi vedere", label: 'Raccogli il pezzo di Pippo', msg: "Una moneta bucata, legata a uno spago. «Questa non si spende» dice un nodo fatto apposta." },
+    pz_nando: { x: -11.4, z: 86.6, glow: 'ricordo', name: 'Il pezzo di Nando', hint: "alla Barca Rovesciata, vicino al Molo: lì Pippo aiutò Nando a girare la sua barca", label: 'Raccogli il pezzo di Pippo', msg: "Un remo piccolo, intagliato a mano: sul manico ci sono due iniziali, e una terza grattata via." },
+    pz_greta: { x: BP.radura[0], z: BP.radura[1], glow: 'ricordo', name: 'Il pezzo di Greta', hint: "nella radura dei faggi, nel Bosco che Profuma: lì Pippo portava tutti a guardare le stelle", label: 'Raccogli il pezzo di Pippo', msg: "Un foglio di regole di Greta. In fondo, con un'altra mano: «Regola numero cento: Pippo può restare.»" },
     cippo_spiaggia: { x: R3('spiaggia')[0], z: R3('spiaggia')[1], glow: 'cippo', name: 'Il cippo della spiaggia', hint: 'sulla spiaggia lunga della Riva, dalla parte del villaggio', label: 'Tocca il cippo della spiaggia', msg: 'Una pietra alta come un bambino, con una freccia incisa che punta verso il faro. È calda, come se qualcuno ci avesse appena appoggiato la mano.' },
     cippo_villaggio: { x: R3('village')[0], z: R3('village')[1], glow: 'cippo', name: 'Il cippo del villaggio', hint: 'in mezzo al villaggio dei Senza Nome', label: 'Tocca il cippo del villaggio', msg: 'Sulla pietra ci sono decine di tacche, una sopra l\'altra. Ognuna, forse, una persona arrivata.' },
     cippo_monte: { x: R3('monte')[0], z: R3('monte')[1], r: 4, glow: 'cippo', name: 'Il cippo del Monte Storto', hint: 'in cima al Monte Storto', label: 'Tocca il cippo della cima', msg: 'Da quassù si vede tutto: la riva, il villaggio, il pozzo che fuma. E lontano, piccolissimo, il faro d\'oro.' },
@@ -240,12 +248,121 @@ export const L2_CHAPTERS = [
                 q: 'Che ne facciamo degli altri nomi del pozzo?', a: ['Ridiamoli a tutti: anche il dolore fa parte di un nome', 'Solo a chi viene a chiederlo', 'Al faro: li tenga accesi la luce, finché qualcuno li cerca'] },
         ],
     },
+    // =================================================================
+    //  LIBRO IV · IL LAB DEI RICORDI
+    //  Nel Bosco che Profuma, la locanda Il Tofu della Nebbia: Nonna Lux
+    //  cucina, e cinque viandanti di una volta si raccontano le avventure
+    //  per non dimenticarle. Un piatto, cucinato bene, fa tornare un ricordo.
+    // =================================================================
+    {
+        id: 'bosco', book: 4, title: 'Il Bosco che Profuma', lv: 11, xp: 1100, coins: 520,
+        steps: [
+            { k: 'talk', who: 'traghettatore', t: 'Ascolta il Traghettatore: una nebbia che profuma',
+                say: ["I nomi sono tornati a casa. Ma senti l'aria, stanotte? Non sa più di sale. Sa di pane, e di brodo.",
+                    "Viene da ovest, oltre il collo di terra, dove nessuno va perché «là c'è solo nebbia e alberi». Io non scendo dalla barca. Tu segui il profumo."],
+                btn: 'Seguirò il profumo' },
+            { k: 'find', spots: ['soglia'], t: 'Attraversa il collo di terra e segui il profumo fino alla locanda nel bosco',
+                after: ['Il Tofu della Nebbia', "In mezzo al bosco c'è una casa bassa di legno, con le finestre gialle e il fumo che sale dritto. Sopra la porta, una tavola incisa: Il Tofu della Nebbia. Da dentro arrivano voci, e un cucchiaio che batte su una pentola."] },
+            { k: 'talk', who: 'lux', t: 'Entra e parla con Nonna Lux',
+                say: ['Eccoti. Siediti. No, prima mangi, poi mi dici come ti chiami. O anche no.',
+                    "Quei cinque? Viandanti. Sono arrivati come tutti, e come tutti dovevano ripartire. Si sono fermati qui perché finché mangiano insieme e si raccontano le cose, le cose restano. Hanno paura di dimenticare.",
+                    "Io scrivo tutto. Ogni piatto ha la sua ricetta, e ogni ricetta ha in margine il ricordo di chi l'ha mangiato la prima volta. Un sapore è un ricordo che si può rifare. Vuoi imparare? Cominciamo dal tofu: due mani d'acqua della nebbia, quella dell'alba, e un ciuffo d'erbe del prato."],
+                btn: 'Voglio imparare' },
+            { k: 'cook', dish: 'tofu', t: "Cucina il Tofu della Nebbia con Nonna Lux (due Acque della nebbia, raccolte all'alba alla fonte, e un ciuffo d'Erbe del prato)" },
+            { k: 'talk', who: 'lux', t: 'Porta il tofu in tavola',
+                say: ["Guarda le loro facce. Pippo ha chiuso gli occhi. Rina ha smesso di prendere in giro Ettore, per un minuto intero.",
+                    "Hai mano. Torna quando vuoi: c'è sempre qualcosa da ricordare, qui. Comincia da quei due, Ettore e Rina. Litigano da anni sul perché si sono fermati."],
+                btn: 'Tornerò',
+                after: ['Il quaderno di Lux', "Lux scrive «Tofu della Nebbia» in cima a una pagina, con la calligrafia tonda. In margine, piccolo: «La prima volta di qualcuno che non sapeva ancora il suo posto.» Poi chiude il quaderno e sorride."] },
+        ],
+    },
+    {
+        id: 'borsa', book: 4, title: 'La Borsa Rubata', lv: 12, xp: 1150, coins: 540,
+        steps: [
+            { k: 'talk', who: 'rina', t: 'Chiedi a Rina come ha conosciuto Ettore',
+                say: ["Gli ho rubato la borsa, il primo giorno. Ricordo benissimo come: sul ponte, mentre faceva il gradasso con la guardia.",
+                    "Quello che non ricordo è perché mi sono fermata. Avevo la borsa, potevo sparire. E invece sono qui da… quanto? Chiedi a lui. Lui dice di ricordare il resto."],
+                btn: 'Chiederò a Ettore' },
+            { k: 'talk', who: 'ettore', t: 'Chiedi a Ettore cosa ricorda',
+                say: ["Ricordo di averla rincorsa. Giù dal ponte, per tutta l'isola. Ricordo che rideva. Non ricordo dove l'ho presa, né se l'ho presa.",
+                    "La borsa l'ha nascosta lei, da qualche parte ai piedi del ponte, quel giorno. Non me l'ha mai detto dove. Forse se la ritrovi…"],
+                btn: 'La cercherò' },
+            { k: 'find', spots: ['borsa_ponte'], t: 'Ritrova la borsa di Ettore ai piedi del Ponte dei Sospiri' },
+            { k: 'cook', dish: 'zuppa', t: 'Cucina con Lux la Zuppa della Borsa Rubata (un Luccio delle Canne dal Molo e tre manciate di Funghi del sottobosco)',
+                say: ["Una borsa vuota e un biglietto. Allora so cosa cucinare: la zuppa di quella sera. Me l'hanno ordinata così tante volte che la so a memoria. Luccio e funghi, e pazienza."] },
+            { k: 'talk', who: 'rina', t: 'Porta la zuppa a Ettore e Rina',
+                say: ["Questo sapore… Ettore. Ettore, guarda me.",
+                    "Mi ha presa all'ingresso del bosco. Non mi ha chiesto la borsa: mi ha chiesto se avevo fame. Con i suoi soldi, gli ho offerto la cena. Qui. Questa zuppa. Ecco perché mi sono fermata."],
+                btn: 'Lasciali parlare',
+                after: ['La prima cena', "Rina ed Ettore mangiano dalla stessa scodella, come quella sera. Lui dice che la borsa se la può tenere. Lei dice che lo sa già. Lux, al bancone, scrive in margine: «Pagata coi soldi della borsa. Mai restituiti. Va bene così.»"] },
+        ],
+    },
+    {
+        id: 'ponte', book: 4, title: 'La Barca e il Ponte', lv: 13, xp: 1200, coins: 560,
+        steps: [
+            { k: 'talk', who: 'nando', t: 'Ascolta Nando, che non parla quasi mai',
+                say: ['…', "Avevo una barca. Si è rotta. Ricordo l'acqua che entrava, e un ponte sopra la testa. Poi più niente. Greta dice che la storia la sa lei. Io dico di chiederle il resto."],
+                btn: 'Chiederò a Greta' },
+            { k: 'talk', who: 'greta', t: 'Chiedi a Greta del ponte',
+                say: ["Facevo la guardia al Ponte. Una notte, sotto, è arrivata una barca mezza affondata con dentro un uomo che stringeva una carpa che faceva luce.",
+                    "Gli ho fatto la multa: non si attracca sotto il ponte. Questo lo ricordo. Quello che non ricordo è cosa è successo dopo. So che c'entra il pane. Il pane di un fornaio che non c'è più… o forse sì."],
+                btn: 'Cercherò quel pane' },
+            { k: 'talk', who: 'fornaio', grant: 'paneTobia', t: 'Vai sulla Riva di Là: chiedi a Tobia il suo pane',
+                say: ["Il pane per una guardia e un barcaiolo? Sì, una volta ne lasciai una pagnotta al ponte, per chi faceva la notte.",
+                    "Prendine. Il forno è acceso, adesso, e i nomi sono tornati: impasto tutti i giorni. Torna quando vuoi, te ne do un paio ogni giorno."],
+                btn: 'Prendi il pane di Tobia' },
+            { k: 'cook', dish: 'pane_ponte', t: 'Cucina con Lux il Pane del Ponte (il Pane di Tobia, una Carpa Lanterna pescata di notte e due ciuffi di Erbe del prato)',
+                say: ['Pane di Tobia e Carpa Lanterna. Quella che faceva luce. Adesso capisco. Scalda il forno.'] },
+            { k: 'talk', who: 'greta', t: 'Porta il Pane del Ponte a Nando e Greta',
+                say: ["Gli ho fatto la multa. Poi gli ho portato la cena. Pane e carpa, cotti sul mio fuoco da guardia. Perché faceva freddo, e lui tremava, e…",
+                    "…e lui ha detto che non avrebbe pagato la multa. Che avrebbe pagato con le sere. Una alla volta. Sono passati tanti anni, Nando. Hai finito di pagare?",
+                    "Nando dice: «Non ancora.»"],
+                btn: 'Lasciali parlare',
+                after: ['La multa', "Nando mangia piano, come se volesse farlo durare. Greta scrive una regola nuova sul suo foglio e lo piega in quattro. Lux, in margine: «La multa più lunga dell'isola. Ancora da pagare.»"] },
+        ],
+    },
+    {
+        id: 'pippo', book: 4, title: 'I Pezzi di Pippo', lv: 14, xp: 1250, coins: 580,
+        steps: [
+            { k: 'talk', who: 'pippo', t: 'Siediti vicino a Pippo',
+                say: ["Hai visto? Le loro storie sono tornate. E in tutte e due c'ero anch'io, di lato: io che vendevo la spada, io che reggevo la lanterna, io che dicevo «dai, fermiamoci qui».",
+                    "Strano. Delle loro avventure ricordo tutto. Della mia… niente. Come se io fossi stato sempre il bordo del quadro.",
+                    "Ognuno di loro ha un pezzo di me, da qualche parte sull'isola. Me l'hanno detto ridendo. Me li riporti?"],
+                btn: 'Ritroverò i tuoi pezzi' },
+            { k: 'find', spots: ['pz_ettore', 'pz_rina', 'pz_nando', 'pz_greta'], t: 'Ritrova i quattro pezzi di Pippo che gli altri hanno lasciato sull\'isola' },
+            { k: 'talk', who: 'lux', t: 'Porta a Lux i pezzi di Pippo',
+                say: ["Un'etichetta, una moneta bucata, un remo piccolo, un foglio di regole. Tutto quello che Pippo ha dato agli altri.",
+                    "Per lui ci vuole un piatto diverso. Non una ricetta sola: un po' di tutte. La Cena Lunga. Si cucina in cinque, e ci vuole tutto il bosco, il Molo e la Riva. Anche un'Anguilla di Nebbia: quelle si prendono solo di notte.",
+                    "Porta quello che serve. Io apparecchio."],
+                btn: 'Porterò quello che serve' },
+        ],
+    },
+    {
+        id: 'cena', book: 4, title: 'La Cena Lunga', lv: 15, xp: 1500, coins: 800, title_id: 'lab', end: 'Fine del Libro IV.',
+        steps: [
+            { k: 'talk', who: 'lux', t: 'Apparecchia con Nonna Lux',
+                say: ["Il tavolo lungo, stasera: uno solo, attaccato all'altro. Ettore taglia, Rina mescola, Nando sta al fuoco, Greta controlla che nessuno rubi gli assaggi. Pippo apparecchia. E tu cucini con me."],
+                btn: 'Ai fornelli' },
+            { k: 'cook', dish: 'cena', t: "Cucina La Cena Lunga con tutti (Acqua della nebbia, Funghi, Erbe, Bacche, un'Anguilla di Nebbia e il Pane di Tobia)",
+                say: ['Tutto il libro in una pentola. Fai piano. Questa è per Pippo.'] },
+            { k: 'talk', who: 'pippo', t: 'Guarda Pippo assaggiare',
+                say: ["Questo sapore… c'era una cucina, piccola. Una finestra sul bosco. C'era qualcuno che…",
+                    "…c'era qualcuno che…",
+                    "No. Non importa. Mangiamo, che si fredda. Siete tutti qui: per stasera mi basta."],
+                btn: 'Resta a tavola' },
+            { k: 'answer', who: 'lux', t: 'Nonna Lux ha una domanda per te',
+                say: ['Bella cena. Adesso la scrivo. Ma il margine lo lascio a te, stavolta.'],
+                q: 'Che cosa scrivo in margine?', a: ['Che eravamo tutti qui', 'Il sapore, e basta', 'Niente: lo ricorderemo noi'],
+                after: ['Il quaderno di Lux', "Mentre i cinque mangiano, sfogli il quaderno di Nonna Lux. In fondo c'è una ricetta senza nome, con la sua grafia: ingredienti che non hai mai sentito, e in margine un ricordo che non riesci a capire di chi sia. Lux se la ricorda benissimo. Ti toglie il quaderno dalle mani, piano, e dice soltanto: «Quella la cuciniamo un'altra volta.» Poi sorride e va a sparecchiare."] },
+        ],
+    },
 ];
-// dove finisce ciascun libro (il Libro III continua lo stesso stato, dal capitolo 5)
+// dove finisce ciascun libro (il Libro III e il Libro IV continuano lo stesso stato)
 export const L2_END = 5;
-export const L3_END = L2_CHAPTERS.length;
-export const bookOf = (ch) => (ch < L2_END ? 2 : 3);
-export const chapterNo = (ch) => (ch < L2_END ? ch : ch - L2_END);
+export const L3_END = L2_CHAPTERS.findIndex(C => C.book === 4);
+export const L4_END = L2_CHAPTERS.length;
+export const bookOf = (ch) => (ch < L2_END ? 2 : ch < L3_END ? 3 : 4);
+export const chapterNo = (ch) => (ch < L2_END ? ch : ch < L3_END ? ch - L2_END : ch - L3_END);
 
 export function newL2() { return { ch: 0, i: 0, got: [], cnt: 0, ans: [] }; }
 // il vecchio formato (solo capitolo I: { s, cocci }) diventa quello nuovo

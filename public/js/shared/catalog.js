@@ -816,6 +816,7 @@ export const TITLES = {
     approdato: { name: 'Oltre il Mare Aperto', how: 'Attraversa il mare aperto fino alla Riva di Là (Libro III)' },
     robcena: { name: 'Seduto alla Tavola Lunga', how: 'Cena con Rob il Righello, alla fine del suo racconto' },
     nomi: { name: 'Chi Restituisce i Nomi', how: 'Riporta a Nives il suo nome (fine del Libro III)' },
+    lab: { name: 'Chi Ricorda i Sapori', how: 'Cucina La Cena Lunga per Pippo (fine del Libro IV)' },
     // il Romanzo della Nebbia: un titolo per capitolo
     scintilla: { name: 'Scintilla', how: 'Chiudi il capitolo della Brace' },
     brina: { name: 'Brina', how: 'Chiudi il capitolo della Brina' },

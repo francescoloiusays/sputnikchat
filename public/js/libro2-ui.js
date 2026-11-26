@@ -8,7 +8,7 @@
 //  stessi passi, stessi bagliori; la sua terra è in regions/riva.js.
 // =====================================================================
 import * as THREE from 'three';
-import { L2_CHAPTERS, L2_SPOTS, L2_END, L3_END, bookOf, chapterNo, l2Step, l2Next, l2At, L2AT, gx2 } from './shared/libro2.js';
+import { L2_CHAPTERS, L2_SPOTS, L2_END, L3_END, L4_END, bookOf, chapterNo, l2Step, l2Next, l2At, L2AT, gx2 } from './shared/libro2.js';
 import { nearRiva } from './shared/riva.js';
 import { MATS } from './shared/catalog.js';
 import { h, toast } from './util.js';
@@ -16,7 +16,7 @@ import { islandNight, minutesToIslandNight } from './shared/clock.js';
 import { iconSVG } from './icons.js';
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
-const BOOK = { 2: ['II', 'Il Faro Spento'], 3: ['III', 'La Riva di Là'] };
+const BOOK = { 2: ['II', 'Il Faro Spento'], 3: ['III', 'La Riva di Là'], 4: ['IV', 'Il Lab dei Ricordi'] };
 const stOf = (app) => app.me && !app.me.offline ? app.me.libro2 || { ch: 0, i: 0, got: [], cnt: 0 } : null;
 const sexOf = (app) => app.me?.appearance?.sex;
 const head = (ch) => `Libro ${BOOK[bookOf(ch)][0]} · Capitolo ${ROMAN[chapterNo(ch)]} · ${L2_CHAPTERS[ch].title}`;
@@ -59,7 +59,11 @@ export function l2Box(app, who) {
     if (!st) return null;
     const S = l2Step(st), C = L2_CHAPTERS[st.ch];
     let lines = null, buttons = [], ask = false, q = null;
-    if (S && S.who === who && ['talk', 'give', 'answer'].includes(S.k)) {
+    if (S && S.k === 'cook' && who === 'lux') {
+        const lv = app.me.level || 1;
+        if (st.i === 0 && lv < C.lv) lines = [`Torna quando la nebbia ti avrà messo un po' di peso addosso. Al livello ${C.lv} ti racconto il resto.`];
+        else { lines = S.say || ['Le mani lavate? Allora vieni ai fornelli.']; ask = true; buttons = [{ label: 'Ai fornelli', ic: 'flask', fn: () => app.panels.open('cucina') }]; }
+    } else if (S && S.who === who && ['talk', 'give', 'answer'].includes(S.k)) {
         const lv = app.me.level || 1;
         if (st.i === 0 && lv < C.lv) lines = [`Torna quando la nebbia ti avrà messo un po\' di peso addosso. Al livello ${C.lv} ti racconto il resto.`];
         else {
@@ -80,6 +84,12 @@ export function l2Box(app, who) {
             'Mia sorella mi ha mandato un messaggio, con il Traghettatore. Una riga sola: «Lo stoppino tienilo asciutto». Come se non lo sapessi.'];
     } else if (who === 'fornaio' && l2At(st) >= L2AT(7, 5)) {
         lines = ['Tobia. Mi chiamo Tobia. Lo dico ogni mattina appena sveglio, per sicurezza.', 'Ho rifatto il forno. Il pane della Riva sa di sale e di nebbia, ma si mangia. Prendine un pezzo, per il viaggio: come facevo con il barcaiolo.'];
+        // Libro IV: dopo il primo pane, Tobia te ne dà due al giorno per la cucina di Nonna Lux
+        if (app.me.paneTobia) buttons = [{ label: `Prendi il pane di Tobia (${app.me.paneLeft ?? 2}/2 oggi)`, ic: 'cauldron', disabled: (app.me.paneLeft ?? 2) <= 0, fn: async () => {
+            const r = await app.net.request('riva:pane', {});
+            if (!r.ok) return toast(r.msg, { kind: 'bad' });
+            app.audio.play('pick'); toast(`+1 ${r.name} nella dispensa`, { kind: 'ok', icon: 'cauldron' });
+        } }];
     } else if (who === 'guardiana' && st.ch >= L2_END) {
         const a = st.ans?.[L2_END - 1];
         lines = ['Ilario dice che la luce è più calda di come la ricordava. Io dico che è uguale. Litighiamo così, adesso, ogni notte.',
@@ -89,7 +99,7 @@ export function l2Box(app, who) {
     }
     if (!lines) return null;
     return h('div', { class: 'st-box' + (ask ? ' ask' : '') },
-        h('div', { class: 'st-head', html: iconSVG('lantern') }, S && ask ? head(st.ch) : who === 'guardiana' ? 'Libro II · Il Faro Spento' : 'Libro III · La Riva di Là'),
+        h('div', { class: 'st-head', html: iconSVG(S && bookOf(st.ch) === 4 ? 'flask' : 'lantern') }, S && ask ? head(st.ch) : who === 'guardiana' ? 'Libro II · Il Faro Spento' : 'Libro III · La Riva di Là'),
         lines.map(l => h('p', { class: 'st-line' }, `«${l}»`)),
         q ? h('p', { class: 'st-q' }, q) : null,
         buttons.length ? h('div', { class: 'btn-row' + (q ? ' st-answers' : '') }, buttons.map(b => h('button', {
@@ -124,11 +134,17 @@ const PAGES = [
     'Nel villaggio della Riva vivevano i Senza Nome. Uno impastava senza farina. Un nodo, una scarpa piccola e un odore di pane, più una riga del registro del Traghettatore, gli hanno restituito il suo nome: Tobia.',
     'Ai piedi del Monte Storto c\'era il Pozzo dei Nomi: chi arrivava ci buttava il proprio nome, per non portarsi dietro il dolore. Ma i nomi buttati diventano nebbia. La Madre della Nebbia lo difendeva, e ha perso. Il secchio è tornato su pieno.',
     'La Cartografa aveva una sorella che non era partita. La Guardiana del faro aveva una sorella che non era tornata. Si chiamava Nives. Fra le due rive, adesso, c\'è un filo di luce, e sulla mappa di Nives, in un angolo, è comparsa un\'isola che nessuno ha mai visto.',
+    // Libro IV · Il Lab dei Ricordi
+    "Quando i nomi tornarono a casa, la nebbia cominciò a profumare di pane. A ovest, oltre il collo di terra, in mezzo a un bosco fitto, c'era una locanda: Il Tofu della Nebbia. Nonna Lux cucinava, e cinque viandanti di una volta si raccontavano le loro avventure per non dimenticarle. Il primo piatto fu il tofu, con l'acqua della nebbia raccolta all'alba.",
+    "Rina aveva rubato la borsa di Ettore sul Ponte, il primo giorno, e lui l'aveva rincorsa per tutta l'isola. Nessuno dei due ricordava perché lei si fosse fermata. La borsa era ancora ai piedi del ponte, con un biglietto nella fodera. La zuppa di quella sera, luccio e funghi, glielo ricordò: lui le aveva chiesto se aveva fame.",
+    "Nando era arrivato sotto il Ponte con la barca che affondava e una Carpa Lanterna fra le braccia. Greta, di guardia, gli aveva fatto la multa, e poi gli aveva portato la cena: pane e carpa. Il pane era di Tobia, sulla Riva di Là. Nando, da allora, paga la multa una sera alla volta. Non ha ancora finito.",
+    "Nei ricordi degli altri Pippo c'era sempre, ma di lato: vendeva la spada, reggeva la lanterna, diceva «fermiamoci qui». Di sé non ricordava niente. Gli altri avevano lasciato sull'isola un pezzo di lui ciascuno: un'etichetta, una moneta bucata, un remo piccolo, un foglio di regole.",
+    "La Cena Lunga si cucinò in cinque, con tutto il bosco, il Molo e la Riva. Pippo assaggiò, e per un attimo ricordò una cucina piccola con una finestra sul bosco, e qualcuno. Poi disse che non importava, e mangiarono. In fondo al quaderno di Lux c'era una ricetta senza nome, che lei ricorda benissimo. «Quella la cuciniamo un'altra volta.»",
 ];
 function bookSection(st, b) {
-    const [from, to] = b === 2 ? [0, L2_END] : [L2_END, L3_END];
+    const [from, to] = b === 2 ? [0, L2_END] : b === 3 ? [L2_END, L3_END] : [L3_END, L4_END];
     if (st.ch < from) return null;
-    return [h('div', { class: 'st-head', html: iconSVG(b === 2 ? 'lantern' : 'wave') }, `Libro ${BOOK[b][0]} · ${BOOK[b][1]}`),
+    return [h('div', { class: 'st-head', html: iconSVG(b === 2 ? 'lantern' : b === 3 ? 'wave' : 'flask') }, `Libro ${BOOK[b][0]} · ${BOOK[b][1]}`),
         L2_CHAPTERS.slice(from, to).map((C, n) => {
             const ch = from + n, done = ch < st.ch, now = ch === st.ch;
             if (!done && !now) return h('p', { class: 'bk-empty' }, `${ROMAN[n]}. Ancora da scrivere.`);
@@ -141,7 +157,7 @@ function bookSection(st, b) {
 export function l2Book(app) {
     const st = stOf(app);
     if (!st || (st.ch === 0 && st.i === 0)) return null;
-    return h('div', { class: 'bk-l2' }, bookSection(st, 2), bookSection(st, 3));
+    return h('div', { class: 'bk-l2' }, bookSection(st, 2), bookSection(st, 3), bookSection(st, 4));
 }
 
 // --- la porta del faro ---
@@ -239,7 +255,7 @@ export class L2World {
             if (l2At(r.libro2) === l2At(before)) return;
             app.audio.play('quest');
             celebrate(app, done, r);
-            if (r.chapter == null) toast(h('div', {}, h('b', {}, 'Libro II · un passo avanti'), h('div', {}, l2Next(r.libro2) || '')), { kind: 'ok', icon: 'openbook', duration: 6000 });
+            if (r.chapter == null) toast(h('div', {}, h('b', {}, `Libro ${BOOK[bookOf(r.libro2.ch)]?.[0] || 'II'} · un passo avanti`), h('div', {}, l2Next(r.libro2) || '')), { kind: 'ok', icon: 'openbook', duration: 6000 });
         });
         this.refresh();
     }

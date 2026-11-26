@@ -379,7 +379,7 @@ function privateView(p) {
         cantoLeft: Math.max(0, CANTO.daily - (dayc(p).canto || 0)), cantoBest: p.cantoBest || 0, wishedToday: p.wishDay === d,
         fountainUntil: p.fountain?.until || 0, tollToday: p.tollDay === d, ondaToday: p.ondaDay === d,
         veglia: p.veglia || null, kingWeek: p.kingWeek || null, watched: Object.keys(p.watched || {}), account: p.account?.user || null,
-        story: storyOf(p), libro2: p.libro2 || newL2(), dispensa: p.dispensa || {},
+        story: storyOf(p), libro2: p.libro2 || newL2(), dispensa: p.dispensa || {}, paneTobia: !!p.paneTobia, paneLeft: Math.max(0, 2 - (dayc(p).pane || 0)),
         ricette: p.ricette || [], ricetteStelle: p.ricetteStelle || {}, food: p.food && p.food.until > Date.now() ? p.food : null, cookLeft: Math.max(0, COOK.daily - (dayc(p).cook || 0)),
         friends: p.friends.map(id => { const F = byPid(id); return { id, name: F?.name || '???', online: sidByPid.has(id), casa: !!F?.casa }; }),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
@@ -2441,6 +2441,8 @@ io.on('connection', (socket) => {
                 if (d.n == null) return fail(reply, 'Scegli una risposta');
                 (st.ans ||= [])[st.ch] = int(d.n, 0, S.a.length - 1);
             }
+            // Libro IV: Tobia ti dà il primo pane, e da qui in poi te ne dà due al giorno
+            if (S.grant === 'paneTobia') { p.paneTobia = true; out.ingr = addIngr(p, 'pane_tobia', 1); }
             l2Advance(p, out);
         } else if (a === 'give') {
             if (!nearNpc(S.who)) return fail(reply, 'Troppo lontano');
@@ -2456,6 +2458,8 @@ io.on('connection', (socket) => {
             st.got.push(k); out.got = k;
             if (S.spots.length > 1) out.xp = grantXp(p, 25);
             if (S.spots.every(s => st.got.includes(s))) l2Advance(p, out);
+        } else if (a === 'cook') {
+            return fail(reply, 'Si cucina da Nonna Lux, al Tofu della Nebbia');
         } else if (a === 'boss') {
             if (Date.now() - (me.lastBoss || 0) < 20000) return fail(reply, 'Riprendi fiato');
             me.lastBoss = Date.now();
