@@ -576,7 +576,7 @@ export class Panels {
             sartoria: () => this.open('sartoria'), bazar: () => this.open('bazar'), bacheca: () => this.open('bacheca'), altare: () => this.open('altare'),
             tombe: () => { this.tabs.tombe = 'prato'; this.open('tombe'); }, veglia: () => { this.tabs.tombe = 'veglia'; this.open('tombe'); }, pedaggio: () => this.open('pedaggio'),
             faro: () => { this.close(); app.travel('faro'); }, relitto: () => { this.close(); app.travel('relitto'); }, baratto: () => this.open('baratto'), canna: () => this.open('canna'), pet: () => this.open('pet'), tavole: () => this.open('tavole'), riva: () => { this.close(); app.travel('riva'); }, molo: () => { this.close(); app.travel('molo'); },
-            dispensa: () => this.open('dispensa'), cucina: () => (app.cucina ? app.cucina.open() : this.open('dispensa')) };
+            dispensa: () => this.open('dispensa'), cucina: () => this.open('cucina') };
         const portrait = h('canvas', { class: 'npc-portrait', width: 220, height: 220 });
         requestAnimationFrame(() => { try { portrait.getContext('2d').drawImage(app.studio.portrait(N.app, N.look || {}, 220, 'bust'), 0, 0); } catch { /* ok */ } });
         this.set('talk', N.name,
@@ -602,12 +602,12 @@ export class Panels {
             h('div', { class: 'grow' }, h('div', { class: 'nm' }, I.name, h('span', { class: 'muted small' }, ' · ne hai ' + (D[id] || 0))), h('div', { class: 'sub' }, I.where))); };
         const group = (title, ids) => ids.length ? [sect('cauldron', title), h('div', { class: 'list' }, ids.map(row))] : null;
         const fish = INGR_IDS.filter(id => INGR[id].fish && (D[id] || 0) > 0);
-        this.set('cauldron', 'La dispensa di Nonna Lux', h('div', { class: 'parchment' },
+        this.set('cauldron', 'La dispensa di Nonna Lux',
             lore('«Quello che porti, io lo scrivo. Quello che scrivo, non si perde.» Al massimo ' + DISPENSA_MAX + ' per ingrediente.'),
             group('Dal bosco', ['funghi', 'erbe', 'bacche', 'acqua_nebbia']),
             group('Dal Molo', fish),
             fish.length ? null : h('p', { class: 'muted small' }, 'Nessun pesce, per ora: quelli che peschi al Molo finiscono anche qui.'),
-            group('Dalla Riva di Là', ['pane_tobia'])));
+            group('Dalla Riva di Là', ['pane_tobia']));
     }
 
     // =================================================================
@@ -982,6 +982,7 @@ export class Panels {
                 side('Nel baule', 'bag', B.inv || [], B.mats || {}, 'take'))));
     }
     p_palestra() { palestraView(this); }
+    p_cucina() { this.app.cucina?.render(this); }
     p_rivano(id) { import('./regions/riva-vita.js').then(m => { if (this.current === 'rivano') m.rivanoView(this, id); }); }
     // --- LA CUCCIA: chi resta a casa e chi viene con te ---
     p_cuccia() {

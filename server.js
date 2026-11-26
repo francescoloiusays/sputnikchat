@@ -31,7 +31,7 @@ import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENC
 import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
 import { gente, genteAt, premio, bottinoOggetto, GENTI_PER_DAY, GENTI_FIGHT_DAILY } from './public/js/shared/genti.js';
 import { islandNight } from './public/js/shared/clock.js';
-import { INGR, BOSCO_NODES, BOSCO_GATHER, addIngr, dawn, minutesToDawn } from './public/js/shared/cucina.js';
+import { INGR, BOSCO_NODES, BOSCO_GATHER, addIngr, hasIngr, takeIngr, dawn, minutesToDawn, RICETTE, COOK, cookStars } from './public/js/shared/cucina.js';
 // è notte quando è notte sull'isola: conta solo il ciclo del gioco (24 minuti), mai l'ora vera
 const nightNow = () => islandNight() || process.env.SPUTNIK_NOTTE === '1';
 import { RIVA_GAMES, rivaPrize } from './public/js/shared/riva-vita.js';
@@ -380,6 +380,7 @@ function privateView(p) {
         fountainUntil: p.fountain?.until || 0, tollToday: p.tollDay === d, ondaToday: p.ondaDay === d,
         veglia: p.veglia || null, kingWeek: p.kingWeek || null, watched: Object.keys(p.watched || {}), account: p.account?.user || null,
         story: storyOf(p), libro2: p.libro2 || newL2(), dispensa: p.dispensa || {},
+        ricette: p.ricette || [], ricetteStelle: p.ricetteStelle || {}, food: p.food && p.food.until > Date.now() ? p.food : null, cookLeft: Math.max(0, COOK.daily - (dayc(p).cook || 0)),
         friends: p.friends.map(id => { const F = byPid(id); return { id, name: F?.name || '???', online: sidByPid.has(id), casa: !!F?.casa }; }),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
         collectionCount: p.collection.length,
@@ -1422,6 +1423,56 @@ io.on('connection', (socket) => {
         save(p); sendMe(me);
         reply({ ok: true, kind: n.kind, ingr: true, got, xp, full, name: INGR[n.kind].name });
     }
+    // --- LA CUCINA DI NONNA LUX: il gioco ai fornelli (la prima volta, o quando lo chiede il libro) ---
+    const atLux = () => nearNpcId('lux', 6);
+    const storyDish = (p) => { const S = l2Step(l2Of(p)); return S?.k === 'cook' ? S.dish : null; };
+    on('cook:start', (d, reply) => {
+        const p = me.p, dish = String(d.dish), R = RICETTE[dish];
+        if (!R) return fail(reply, 'Questa ricetta non esiste');
+        if (me.duelId) return fail(reply, 'Non durante un duello');
+        if (!atLux()) return fail(reply, 'Si cucina da Nonna Lux, al Tofu della Nebbia');
+        if (storyDish(p) !== dish && !(p.ricette || []).includes(dish)) return fail(reply, 'Questa ricetta Lux non te l\'ha ancora insegnata');
+        const miss = hasIngr(p, R.need);
+        if (miss) return fail(reply, 'Ti manca: ' + miss);
+        me.cooking = { id: uid(), dish, at: Date.now() };
+        reply({ ok: true, id: me.cooking.id, phases: COOK.phases });
+    });
+    on('cook:done', (d, reply) => {
+        const p = me.p, C = me.cooking;
+        if (!C || C.id !== d.id) return fail(reply, 'Il fuoco si è spento');
+        me.cooking = null;
+        if (Date.now() - C.at < COOK.minMs) return fail(reply, 'Troppo in fretta: Lux scuote la testa');
+        const R = RICETTE[C.dish], miss = hasIngr(p, R.need);
+        if (miss) return fail(reply, 'Ti manca: ' + miss);
+        takeIngr(p, R.need);
+        const stars = cookStars(Number(d.score) || 0), out = {};
+        const learned = !(p.ricette ||= []).includes(C.dish);
+        if (learned) p.ricette.push(C.dish);
+        p.ricetteStelle = { ...(p.ricetteStelle || {}), [C.dish]: Math.max(stars, p.ricetteStelle?.[C.dish] || 0) };
+        p.food = { dish: C.dish, stars, until: Date.now() + COOK.durMs };
+        const story = storyDish(p) === C.dish;
+        if (story) l2Advance(p, out);
+        out.xp = (out.xp || 0) + grantXp(p, learned ? 40 : 10);
+        save(p); sendMe(me);
+        if (story) me.socket.emit('l2:step', { libro2: p.libro2, ...out });   // il libro va avanti: lo racconta libro2-ui
+        reply({ ok: true, dish: C.dish, stars, learned, food: p.food, libro2: p.libro2, ...out });
+    });
+    // dalla seconda volta: cucina Lux (con i tuoi ingredienti), tre piatti al giorno
+    on('cook:lux', (d, reply) => {
+        const p = me.p, dish = String(d.dish), R = RICETTE[dish];
+        if (!R) return fail(reply, 'Questa ricetta non esiste');
+        if (!atLux()) return fail(reply, 'Si cucina da Nonna Lux, al Tofu della Nebbia');
+        if (!(p.ricette || []).includes(dish)) return fail(reply, 'Questa ricetta Lux non te l\'ha ancora insegnata');
+        const c = dayc(p);
+        if ((c.cook || 0) >= COOK.daily) return fail(reply, 'Per oggi basta: Lux dice che a tavola si torna domani');
+        const miss = hasIngr(p, R.need);
+        if (miss) return fail(reply, 'Ti manca: ' + miss);
+        takeIngr(p, R.need);
+        c.cook = (c.cook || 0) + 1;
+        p.food = { dish, stars: p.ricetteStelle?.[dish] || 1, until: Date.now() + COOK.durMs };
+        save(p); sendMe(me);
+        reply({ ok: true, dish, food: p.food, left: COOK.daily - c.cook });
+    });
     // il pane di Tobia: dopo che te l'ha dato la prima volta (Libro IV, capitolo III), due al giorno
     on('riva:pane', (d, reply) => {
         const p = me.p;

@@ -38,6 +38,7 @@ import { VEGLIA, PHONE_SPOT, FOUNTAIN, RESERVE_WEAPON, weaponWearLeft } from './
 import { Environment, Precipitation, applySky, clockText } from './sky.js';
 import { Atlas } from './atlas.js';
 import { INGR } from './shared/cucina.js';
+import { Cucina } from './cucina-ui.js';
 import { Prologue } from './prologue.js';
 import { SkyProbe, ContactShade } from './realism.js';
 import { buildStorySpots, storyBeat, storyInteract, storyVoice, updateThread } from './story-ui.js';
@@ -349,6 +350,7 @@ class Game {
         this.casaEditor = new CasaEditor(this);
         this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
         this.erranti = new Erranti(this);
+        this.cucina = new Cucina(this);       // Libro IV: la cucina di Nonna Lux, al Tofu della Nebbia
         this.palestra = new Palestra(this);   // la Palestra di Lorenzone, al secondo piano del mastio
         this.genti = new Genti(this);        // le genti di passaggio: nascono ogni giorno dal motore dei personaggi    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
         this.storySpots = buildStorySpots(this);

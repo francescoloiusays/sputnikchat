@@ -50,3 +50,27 @@ export function hasIngr(p, need) {
 export function takeIngr(p, need) {
     for (const [id, n] of Object.entries(need)) p.dispensa[id] = (p.dispensa[id] || 0) - n;
 }
+
+// --- LE RICETTE: un piatto per capitolo; dalla seconda volta le cucina Nonna Lux, per i duelli ---
+// mods: come quelli del pet (shared/fight.js): hp, atk, meter (carica della super), regen (punti vita al secondo)
+export const RICETTE = {
+    tofu: { name: 'Tofu della Nebbia', need: { acqua_nebbia: 2, erbe: 1 }, mods: { hp: 0.04 },
+        desc: 'Morbido, quasi senza sapore: sa di mattina presto. Un po\' più di vita nei duelli.' },
+    zuppa: { name: 'Zuppa della Borsa Rubata', need: { luccio: 1, funghi: 3 }, mods: { atk: 0.03 },
+        desc: 'Quella della prima cena di Ettore e Rina, pagata coi soldi della borsa. Colpi un po\' più forti.' },
+    pane_ponte: { name: 'Pane del Ponte', need: { pane_tobia: 1, lanterna: 1, erbe: 2 }, mods: { regen: 0.25 },
+        desc: 'Il pane di Tobia con la Carpa Lanterna: la cena che Greta portò a Nando sotto il ponte. Recuperi vita piano piano.' },
+    cena: { name: 'La Cena Lunga', need: { acqua_nebbia: 1, funghi: 2, erbe: 2, bacche: 2, anguilla: 1, pane_tobia: 1 }, mods: { meter: 0.08, hp: 0.02 },
+        desc: 'Un po\' di tutto il libro, cucinato in cinque. La super si carica prima, e un filo di vita in più.' },
+};
+export const RICETTE_IDS = Object.keys(RICETTE);
+// il gioco ai fornelli: tre fasi; dalla seconda volta cucina Lux, al massimo tre piatti al giorno
+export const COOK = { phases: ['taglia', 'mescola', 'fuoco'], minMs: 6000, daily: 3, durMs: 30 * 60 * 1000, star: [0.8, 0.9, 1] };
+export const cookStars = (score) => (score >= 0.85 ? 3 : score >= 0.5 ? 2 : 1);
+// gli effetti del piatto che hai mangiato (null se è finito)
+export function foodMods(food, now = Date.now()) {
+    if (!food || !RICETTE[food.dish] || now >= food.until) return null;
+    const k = COOK.star[Math.max(1, Math.min(3, food.stars | 0)) - 1], out = {};
+    for (const [m, v] of Object.entries(RICETTE[food.dish].mods)) out[m] = v * k;
+    return out;
+}
