@@ -264,6 +264,8 @@ export function buildBosco(app) {
             const fl = sprite('#ffcf8a', 0.5, 0.8); fl.position.set(Tb.lx, 1.03, Tb.lz); ig.add(fl);
             wbx(Tb.lx, Tb.lz, Tb.w, Tb.d, 0.85);
         }
+        // lo sgabello di Pippo, a capotavola del primo tavolo
+        { const T0 = INN_ROOM.tables[0], sx = T0.lx + T0.w / 2 + 0.55; L(new THREE.Mesh(geo(new THREE.CylinderGeometry(0.2, 0.22, 0.08, 10)), counterM), sx, 0.45, T0.lz); for (const [ax, az] of [[0.12, 0.12], [-0.12, 0.12], [0.12, -0.12], [-0.12, -0.12]]) B(0.05, 0.44, 0.05, sx + ax, 0.22, T0.lz + az, beam); }
         // due lumi caldi e bassi
         for (const [lx, lz] of [[-2.4, -1.6], [2.6, 0.4]]) {
             const lt = new THREE.PointLight('#ffb070', 5, 9, 1.8); lt.position.set(lx, WH - 0.7, lz); ig.add(lt);

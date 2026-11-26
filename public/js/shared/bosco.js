@@ -28,11 +28,12 @@ export const INN_ROOM = {
 // dove stanno Lux e i cinque (lry: verso dove guardano, nella sala)
 export const INN_SEATS = {
     lux: { lx: -2.4, lz: -4.0, lry: 0 },
-    ettore: { lx: 1.6, lz: -1.95, lry: 0, sit: true },
-    rina: { lx: 2.9, lz: -1.95, lry: 0, sit: true },
-    pippo: { lx: 2.25, lz: -0.45, lry: Math.PI, sit: true },
-    nando: { lx: 1.9, lz: 1.25, lry: 0, sit: true },
-    greta: { lx: 3.2, lz: 1.25, lry: 0, sit: true },
+    // tutti e cinque allo stesso tavolo: le due coppie una di fronte all'altra, Pippo a capotavola, in mezzo a loro
+    ettore: { lx: 1.9, lz: -1.95, lry: 0, sit: true },
+    rina: { lx: 3.1, lz: -1.95, lry: 0, sit: true },
+    nando: { lx: 1.9, lz: -0.45, lry: Math.PI, sit: true },
+    greta: { lx: 3.1, lz: -0.45, lry: Math.PI, sit: true },
+    pippo: { lx: 5.35, lz: -1.2, lry: -Math.PI / 2, sit: true },
 };
 
 // i luoghi: [x, z]
