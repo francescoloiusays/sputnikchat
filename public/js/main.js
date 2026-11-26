@@ -37,6 +37,7 @@ import { INSULTS, TABLETS, NPCS } from './shared/lore.js';
 import { VEGLIA, PHONE_SPOT, FOUNTAIN, RESERVE_WEAPON, weaponWearLeft } from './shared/catalog.js';
 import { Environment, Precipitation, applySky, clockText } from './sky.js';
 import { Atlas } from './atlas.js';
+import { INGR } from './shared/cucina.js';
 import { Prologue } from './prologue.js';
 import { SkyProbe, ContactShade } from './realism.js';
 import { buildStorySpots, storyBeat, storyInteract, storyVoice, updateThread } from './story-ui.js';
@@ -1121,6 +1122,12 @@ class Game {
         const r = await this.net.request('gather:pick', { id: it.node });
         this.picking = false;
         if (!r.ok) { toast(r.msg, { kind: 'bad', duration: 2500 }); return; }
+        if (r.ingr) {   // il Bosco che Profuma: va nella dispensa di Nonna Lux
+            this.myChar.play('light', 0.4); this.audio.play('pick');
+            const I = INGR[r.kind];
+            toast(r.got ? '+' + r.got + ' ' + I.name + ' nella dispensa' + (r.xp ? ' · +' + r.xp + ' esperienza' : '') : 'Per oggi qui hai raccolto abbastanza: il bosco ha bisogno di ricrescere', { kind: r.got ? 'ok' : 'info', icon: I.icon, duration: 2600 });
+            return;
+        }
         this.world.gatherFx(it.node);
         this.myChar.play('light', 0.4);
         this.audio.play('pick');

@@ -31,6 +31,7 @@ import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENC
 import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
 import { gente, genteAt, premio, bottinoOggetto, GENTI_PER_DAY, GENTI_FIGHT_DAILY } from './public/js/shared/genti.js';
 import { islandNight } from './public/js/shared/clock.js';
+import { INGR, BOSCO_NODES, BOSCO_GATHER, addIngr, dawn, minutesToDawn } from './public/js/shared/cucina.js';
 // è notte quando è notte sull'isola: conta solo il ciclo del gioco (24 minuti), mai l'ora vera
 const nightNow = () => islandNight() || process.env.SPUTNIK_NOTTE === '1';
 import { RIVA_GAMES, rivaPrize } from './public/js/shared/riva-vita.js';
@@ -131,6 +132,7 @@ function migrate(p) {
     }
     if (!p.story) { p.story = newStory(true); changed = true; }
     if (!p.libro2 || p.libro2.ch == null) { p.libro2 = fixL2(p.libro2); changed = true; }
+    if (!p.dispensa) { p.dispensa = {}; changed = true; }   // Libro IV: la dispensa di Nonna Lux
     if (p.rod == null) { p.rod = 0; changed = true; }
     // rimborsi una tantum: ognuno arriva una volta sola, a chi c'era già quando è successo il guaio
     for (const R of REFUNDS) {
@@ -321,7 +323,7 @@ function newProfile(d) {
         cardImage: isCardImage(d?.cardImage) ? d.cardImage : null,
         coins: ECONOMY.START_COINS, rating: 1000, wins: 0, losses: 0, draws: 0,
         xp: 0, talents: { forza: 0, tempra: 0, maestria: 0 }, respecs: 0, rest: { n: 0 }, practice: { day: '', n: 0 },
-        mats: {}, grade: 0, cardWins: 0, seals: [], sealsOn: [], fishLog: {}, diary: [], gather: {},
+        mats: {}, grade: 0, cardWins: 0, seals: [], sealsOn: [], fishLog: {}, diary: [], gather: {}, dispensa: {},
         inventory: [weapon], equipment: { weapon: weapon.uid },
         friends: [], requests: [], collection: [],
         lastDaily: Date.now(), createdAt: Date.now(), lastSeen: Date.now(),
@@ -377,7 +379,7 @@ function privateView(p) {
         cantoLeft: Math.max(0, CANTO.daily - (dayc(p).canto || 0)), cantoBest: p.cantoBest || 0, wishedToday: p.wishDay === d,
         fountainUntil: p.fountain?.until || 0, tollToday: p.tollDay === d, ondaToday: p.ondaDay === d,
         veglia: p.veglia || null, kingWeek: p.kingWeek || null, watched: Object.keys(p.watched || {}), account: p.account?.user || null,
-        story: storyOf(p), libro2: p.libro2 || newL2(),
+        story: storyOf(p), libro2: p.libro2 || newL2(), dispensa: p.dispensa || {},
         friends: p.friends.map(id => { const F = byPid(id); return { id, name: F?.name || '???', online: sidByPid.has(id), casa: !!F?.casa }; }),
         requests: p.requests.map(id => ({ id, name: byPid(id)?.name || '???' })),
         collectionCount: p.collection.length,
@@ -1382,6 +1384,7 @@ io.on('connection', (socket) => {
 
     // --- RACCOLTA: frammenti nel Cerchio di Pietre, fuochi fatui nel cimitero ---
     on('gather:pick', (d, reply) => {
+        if (BOSCO_NODES.some(x => x.id === d.id)) return boscoPick(d, reply);
         const n = GATHER.nodes.find(x => x.id === d.id);
         if (!n) return fail(reply, 'Non c\'è niente qui');
         if (me.duelId) return fail(reply, 'Non durante un duello');
@@ -1398,6 +1401,38 @@ io.on('connection', (socket) => {
         if (got) progress(p, 'gather', got, { mat: n.kind });
         save(p); sendMe(me);
         reply({ ok: true, kind: n.kind, got, xp, seal, full });
+    });
+
+    // --- IL BOSCO CHE PROFUMA: funghi, erbe, bacche e, all'alba, l'acqua della nebbia (vanno nella dispensa) ---
+    function boscoPick(d, reply) {
+        const n = BOSCO_NODES.find(x => x.id === d.id);
+        if (me.duelId) return fail(reply, 'Non durante un duello');
+        if (Math.hypot(me.pos[0] - n.x, me.pos[2] - n.z) > 3.2) return fail(reply, 'Troppo lontano');
+        if (n.kind === 'acqua_nebbia' && !dawn()) return fail(reply, `L'acqua della nebbia si raccoglie all'alba: mancano ${minutesToDawn()} minuti`);
+        const p = me.p, now = Date.now();
+        for (const [k, t] of Object.entries(p.gather)) if (t <= now) delete p.gather[k];
+        if (p.gather[n.id] > now) return fail(reply, n.kind === 'acqua_nebbia' ? "La fonte è già vuota: torna all'alba di domani" : 'Qui hai già raccolto: ricresce fra poco');
+        // l'acqua si può riprendere all'alba dopo; il resto ricresce in un quarto d'ora
+        p.gather[n.id] = now + (n.kind === 'acqua_nebbia' ? 6 * 60 * 1000 : BOSCO_GATHER.cooldown);
+        const c = dayc(p), key = 'b_' + n.kind, full = (c[key] || 0) < BOSCO_GATHER.daily;
+        c[key] = (c[key] || 0) + 1;
+        const got = addIngr(p, n.kind, full ? (n.kind === 'funghi' && Math.random() < 0.2 ? 2 : 1) : Math.random() < 0.25 ? 1 : 0);
+        const xp = full ? grantXp(p, GATHER.xp) : 0;
+        if (got) progress(p, 'gather', got, { mat: n.kind });
+        save(p); sendMe(me);
+        reply({ ok: true, kind: n.kind, ingr: true, got, xp, full, name: INGR[n.kind].name });
+    }
+    // il pane di Tobia: dopo che te l'ha dato la prima volta (Libro IV, capitolo III), due al giorno
+    on('riva:pane', (d, reply) => {
+        const p = me.p;
+        if (!nearNpcId('fornaio', 6)) return fail(reply, 'Troppo lontano');
+        if (!p.paneTobia) return fail(reply, 'Tobia impasta. Non ti ha ancora chiesto niente');
+        const c = dayc(p);
+        if ((c.pane || 0) >= 2) return fail(reply, 'Per oggi Tobia ha finito il pane: torna domani');
+        if (!addIngr(p, 'pane_tobia', 1)) return fail(reply, 'La tua dispensa di pane è piena');
+        c.pane = (c.pane || 0) + 1;
+        save(p); sendMe(me);
+        reply({ ok: true, name: INGR.pane_tobia.name, left: 2 - c.pane });
     });
 
     // --- LA PESCA NELLA NEBBIA (il Molo) ---
@@ -1441,6 +1476,7 @@ io.on('connection', (socket) => {
             const k = full ? 1 : 0.25;
             out.xp = grantXp(p, R.xp * k);
             out.coins = Math.round(R.coins * k); p.coins += out.coins;
+            out.ingr = addIngr(p, F.fish, 1);   // il pesce va anche nella dispensa di Nonna Lux
             let perle = R.perla >= 1 ? R.perla : Math.random() < R.perla ? 1 : 0;
             if (!full) perle = Math.random() < 0.25 ? Math.min(1, perle) : 0;
             if (perle) out.loot.perla = addMat(p, 'perla', perle);

@@ -10,7 +10,8 @@
 // =====================================================================
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BOSCO, BP, INN, INN_ROOM, innPt, boscoMask, nearBoscoBuild, pathDistBosco } from '../shared/bosco.js';
+import { BOSCO, BP, INN, INN_ROOM, innPt, boscoMask, nearBoscoBuild } from '../shared/bosco.js';
+import { BOSCO_NODES, INGR, dawn } from '../shared/cucina.js';
 
 function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
@@ -112,6 +113,47 @@ export function buildBosco(app) {
             add(new THREE.Mesh(lampG, lampM), x, y + 1.8, z);
             const glow = sprite('#ffcf8a', 1.6, 0.55); glow.position.set(x, y + 1.8, z); g.add(glow);
         }
+    }
+
+    // =================================================================
+    //  I PUNTI DI RACCOLTA: funghi sotto gli abeti, erbe nel prato, bacche
+    //  nel roveto, e la fonte dove all'alba si raccoglie l'acqua della nebbia
+    // =================================================================
+    {
+        const capM = [mat({ color: '#b8432e', roughness: 0.6 }), mat({ color: '#8a5a32', roughness: 0.7 }), mat({ color: '#d8c8a0', roughness: 0.7 })];
+        const stemM = mat({ color: '#ece2cc', roughness: 0.8 });
+        const herbM = mat({ color: '#6a9a44', roughness: 0.9, flatShading: true }), flowerM = mat({ color: '#e8e0f8', emissive: '#6a5a8a', emissiveIntensity: 0.3 });
+        const berryM = mat({ color: '#8a1a3a', roughness: 0.4, emissive: '#3a0a18', emissiveIntensity: 0.4 });
+        const waterM = mat({ color: '#9ab8c8', roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.75 });
+        const cap = geo(new THREE.SphereGeometry(0.16, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2)), stem = geo(new THREE.CylinderGeometry(0.04, 0.05, 0.16, 6));
+        const blade = geo(new THREE.ConeGeometry(0.05, 0.45, 4)), bud = geo(new THREE.SphereGeometry(0.05, 6, 4));
+        const bush = geo(new THREE.IcosahedronGeometry(0.5, 1)), berry = geo(new THREE.SphereGeometry(0.06, 6, 4));
+        const poolG = geo(new THREE.CircleGeometry(0.9, 16));
+        const springs = [];
+        for (const n of BOSCO_NODES) {
+            const y = ground(n.x, n.z), ng = new THREE.Group(); ng.position.set(n.x, y, n.z); g.add(ng);
+            const r = rng(n.id.charCodeAt(1) * 31 + n.id.charCodeAt(2));
+            if (n.kind === 'funghi') for (let k = 0; k < 4; k++) {
+                const a = r() * 6.28, d = r() * 0.35, s = 0.7 + r() * 0.6;
+                add(new THREE.Mesh(stem, stemM), Math.cos(a) * d, 0.08 * s, Math.sin(a) * d, ng).scale.setScalar(s);
+                add(new THREE.Mesh(cap, capM[k % 3]), Math.cos(a) * d, 0.15 * s, Math.sin(a) * d, ng).scale.setScalar(s);
+            } else if (n.kind === 'erbe') for (let k = 0; k < 9; k++) {
+                const a = r() * 6.28, d = r() * 0.3, m = add(new THREE.Mesh(blade, herbM), Math.cos(a) * d, 0.2, Math.sin(a) * d, ng);
+                m.rotation.z = (r() - 0.5) * 0.5;
+                if (k % 3 === 0) add(new THREE.Mesh(bud, flowerM), Math.cos(a) * d, 0.44, Math.sin(a) * d, ng);
+            } else if (n.kind === 'bacche') {
+                add(new THREE.Mesh(bush, beechLeaf), 0, 0.35, 0, ng).scale.set(1, 0.75, 1);
+                for (let k = 0; k < 12; k++) { const a = r() * 6.28, e = r() * 1.2; add(new THREE.Mesh(berry, berryM), Math.cos(a) * 0.48 * Math.cos(e - 0.6), 0.35 + Math.sin(e) * 0.34, Math.sin(a) * 0.48 * Math.cos(e - 0.6), ng); }
+            } else {
+                const pool = add(new THREE.Mesh(poolG, waterM), 0, 0.06, 0, ng); pool.rotation.x = -Math.PI / 2; pool.castShadow = false;
+                const gl = sprite('#cfe8ff', 2.2, 0); gl.position.y = 0.6; ng.add(gl); springs.push(gl);
+            }
+            const nm = INGR[n.kind].name;
+            interactables.push({ id: 'raccogli', node: n.id, kind: n.kind, ingr: true, x: n.x, z: n.z, y, r: 1.7,
+                label: () => n.kind === 'acqua_nebbia' ? (dawn() ? "Raccogli l'acqua della nebbia" : "La fonte: l'acqua della nebbia si raccoglie all'alba") : 'Raccogli: ' + nm });
+        }
+        // la fonte brilla all'alba
+        ticks.push(() => { const on = dawn(); for (const s of springs) s.material.opacity += ((on ? 0.6 : 0.08) - s.material.opacity) * 0.05; });
     }
 
     // =================================================================

@@ -1,6 +1,7 @@
 // =====================================================================
 //  FINESTRE DEL GIOCO: bisaccia, botteghe, Bazar, Albo, Compagnia...
 // =====================================================================
+import { INGR, INGR_IDS, DISPENSA_MAX } from './shared/cucina.js';
 import { h, $, coin, fmt, toast, SOCKET_URL, loadImage, store } from './util.js';
 import {
     ITEMS, SLOTS, SLOT_NAMES, WEAPON_TYPES, MATERIALS, HANDLES, GEMS, ELEMENTS, ECONOMY,
@@ -574,7 +575,8 @@ export class Panels {
         const go = { diario: () => { this.tabs.bag = 'diario'; this.open('inventario'); }, forgia: () => { this.tabs.forge = 'crea'; this.open('forgia'); }, castoni: () => { this.tabs.forge = 'castoni'; this.open('forgia'); },
             sartoria: () => this.open('sartoria'), bazar: () => this.open('bazar'), bacheca: () => this.open('bacheca'), altare: () => this.open('altare'),
             tombe: () => { this.tabs.tombe = 'prato'; this.open('tombe'); }, veglia: () => { this.tabs.tombe = 'veglia'; this.open('tombe'); }, pedaggio: () => this.open('pedaggio'),
-            faro: () => { this.close(); app.travel('faro'); }, relitto: () => { this.close(); app.travel('relitto'); }, baratto: () => this.open('baratto'), canna: () => this.open('canna'), pet: () => this.open('pet'), tavole: () => this.open('tavole'), riva: () => { this.close(); app.travel('riva'); }, molo: () => { this.close(); app.travel('molo'); } };
+            faro: () => { this.close(); app.travel('faro'); }, relitto: () => { this.close(); app.travel('relitto'); }, baratto: () => this.open('baratto'), canna: () => this.open('canna'), pet: () => this.open('pet'), tavole: () => this.open('tavole'), riva: () => { this.close(); app.travel('riva'); }, molo: () => { this.close(); app.travel('molo'); },
+            dispensa: () => this.open('dispensa'), cucina: () => (app.cucina ? app.cucina.open() : this.open('dispensa')) };
         const portrait = h('canvas', { class: 'npc-portrait', width: 220, height: 220 });
         requestAnimationFrame(() => { try { portrait.getContext('2d').drawImage(app.studio.portrait(N.app, N.look || {}, 220, 'bust'), 0, 0); } catch { /* ok */ } });
         this.set('talk', N.name,
@@ -588,9 +590,24 @@ export class Panels {
                     arg.learned != null ? h('div', { class: 'npc-learn', html: iconSVG('quill') }, h('b', {}, 'Ti ha insegnato una risposta per il Pedaggio dello Spettro: '), `«${INSULTS[arg.learned][1]}»`) : null,
                     arg.first && arg.xp ? h('p', { class: 'muted small' }, `Prima chiacchierata: +${arg.xp} esperienza.`) : null,
                     h('div', { class: 'btn-row' },
-                        N.actions.filter(([k]) => k !== 'riva' || l2At(app.me?.libro2) >= L2AT(5, 2)).map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto', faro: 'lantern', relitto: 'wave', riva: 'lantern', molo: 'wave', baratto: 'handshake', canna: 'rod', pet: 'raven', tavole: 'map' }[k] })),
+                        N.actions.filter(([k]) => k !== 'riva' || l2At(app.me?.libro2) >= L2AT(5, 2)).map(([k, label]) => btn(label, () => go[k]?.(), { cls: 'btn-primary', ic: { diario: 'openbook', forgia: 'anvil', castoni: 'runestone', sartoria: 'needle', bazar: 'scales', bacheca: 'scroll', altare: 'altar', tombe: 'skull', veglia: 'skull', pedaggio: 'ecto', faro: 'lantern', relitto: 'wave', riva: 'lantern', molo: 'wave', baratto: 'handshake', canna: 'rod', pet: 'raven', tavole: 'map', dispensa: 'cauldron', cucina: 'flask' }[k] })),
                         btn('Altro?', () => { this.render(); app.npcSay(id); }, { ic: 'talk' }),
                         btn('Arrivederci', () => this.close(), { ic: 'close' })))));
+    }
+
+    // --- LA DISPENSA DI NONNA LUX (Libro IV): quello che hai raccolto, pescato, portato dalla Riva ---
+    p_dispensa() {
+        const D = this.app.me?.dispensa || {};
+        const row = (id) => { const I = INGR[id]; return h('div', { class: 'row' }, h('span', { class: 'mat-ic', style: { color: '#ffd76a' }, html: iconSVG(I.icon) }),
+            h('div', { class: 'grow' }, h('div', { class: 'nm' }, I.name, h('span', { class: 'muted small' }, ' · ne hai ' + (D[id] || 0))), h('div', { class: 'sub' }, I.where))); };
+        const group = (title, ids) => ids.length ? [sect('cauldron', title), h('div', { class: 'list' }, ids.map(row))] : null;
+        const fish = INGR_IDS.filter(id => INGR[id].fish && (D[id] || 0) > 0);
+        this.set('cauldron', 'La dispensa di Nonna Lux', h('div', { class: 'parchment' },
+            lore('«Quello che porti, io lo scrivo. Quello che scrivo, non si perde.» Al massimo ' + DISPENSA_MAX + ' per ingrediente.'),
+            group('Dal bosco', ['funghi', 'erbe', 'bacche', 'acqua_nebbia']),
+            group('Dal Molo', fish),
+            fish.length ? null : h('p', { class: 'muted small' }, 'Nessun pesce, per ora: quelli che peschi al Molo finiscono anche qui.'),
+            group('Dalla Riva di Là', ['pane_tobia'])));
     }
 
     // =================================================================
