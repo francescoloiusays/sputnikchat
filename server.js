@@ -31,7 +31,7 @@ import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENC
 import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
 import { gente, genteAt, premio, bottinoOggetto, GENTI_PER_DAY, GENTI_FIGHT_DAILY } from './public/js/shared/genti.js';
 import { islandNight } from './public/js/shared/clock.js';
-import { INGR, BOSCO_NODES, BOSCO_GATHER, addIngr, hasIngr, takeIngr, dawn, minutesToDawn, RICETTE, COOK, cookStars } from './public/js/shared/cucina.js';
+import { INGR, BOSCO_NODES, BOSCO_GATHER, addIngr, hasIngr, takeIngr, dawn, minutesToDawn, RICETTE, COOK, cookStars, foodMods } from './public/js/shared/cucina.js';
 // è notte quando è notte sull'isola: conta solo il ciclo del gioco (24 minuti), mai l'ora vera
 const nightNow = () => islandNight() || process.env.SPUTNIK_NOTTE === '1';
 import { RIVA_GAMES, rivaPrize } from './public/js/shared/riva-vita.js';
@@ -577,7 +577,7 @@ function duelWeapon(p, rent) {
 }
 function fighterSetup(p, rent) {
     const W = duelWeapon(p, rent);
-    return { id: p.id, name: p.name, element: p.card.element, weapon: W.spec, dur: W.dur, reserve: reserveOf(p), pet: petDuel(p.pet), level: levelOf(p), talents: p.talents, gear: gearOf(p), gearPlus: gearPlusOf(p), seals: p.sealsOn, gym: p.gym?.lv || 0 };
+    return { id: p.id, name: p.name, element: p.card.element, weapon: W.spec, dur: W.dur, reserve: reserveOf(p), pet: petDuel(p.pet), level: levelOf(p), talents: p.talents, gear: gearOf(p), gearPlus: gearPlusOf(p), seals: p.sealsOn, gym: p.gym?.lv || 0, food: foodMods(p.food) };
 }
 // lo SputnikPet cresce giocando e si stanca: forze in meno, esperienza in più
 function petGain(p, xp, what) {

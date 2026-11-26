@@ -1243,3 +1243,4 @@ body.building #hud > :not(#toasts), body.building #vignette, body.building #pane
 .cook-stars { color: #ffd76a; letter-spacing: 1px; }
 .cook-food { background: rgba(255, 215, 106, 0.18); padding: 6px 8px; border-radius: 3px; }
 @media (max-width: 820px) { #cook-hud { width: min(340px, 94vw); bottom: 70px; } #cook-hud .cook-bar { width: min(300px, 86vw); } }
+.dh-food svg.gi { width: 16px; height: 16px; color: #ffd76a; margin: 0 4px; vertical-align: -2px; filter: drop-shadow(0 0 4px #ffb347); }

@@ -37,7 +37,7 @@ import { INSULTS, TABLETS, NPCS } from './shared/lore.js';
 import { VEGLIA, PHONE_SPOT, FOUNTAIN, RESERVE_WEAPON, weaponWearLeft } from './shared/catalog.js';
 import { Environment, Precipitation, applySky, clockText } from './sky.js';
 import { Atlas } from './atlas.js';
-import { INGR } from './shared/cucina.js';
+import { INGR, foodMods } from './shared/cucina.js';
 import { Cucina } from './cucina-ui.js';
 import { Prologue } from './prologue.js';
 import { SkyProbe, ContactShade } from './realism.js';
@@ -859,7 +859,7 @@ class Game {
         return { dur: W.dur, reserve: W.reserve, pet: this.me?.offline ? null : petDuel(this.me?.pet), petSp: this.me?.pet?.sp, ...this._fighterInfo(look) };
     }
     _fighterInfo(look) {
-        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look, element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), gearPlus: this.gearPlus(), seals: this.me.sealsOn || [], grade: this.me.grade || 0, cardImage: this.local.cardImage, gym: this.me.gym?.lv || 0 };
+        return { id: this.me.id, name: this.me.name, appearance: this.me.appearance, look, element: this.me.card?.element || 'palude', rating: this.me.rating, level: this.me.level || 1, talents: this.me.talents, gear: this.gear(), gearPlus: this.gearPlus(), seals: this.me.sealsOn || [], grade: this.me.grade || 0, cardImage: this.local.cardImage, gym: this.me.gym?.lv || 0, food: foodMods(this.me.food) };
     }
     enterDuel(info, role, side) {
         this.fishing?.stop(true);

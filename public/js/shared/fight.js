@@ -67,7 +67,13 @@ function makeFighter(setup, side) {
     if (pm.hp) st.hpMax = Math.round(st.hpMax * (1 + pm.hp));
     if (pm.meter) st.meterGain *= 1 + pm.meter;
     if (pm.spd) st.spd *= 1 + pm.spd;
-    if (setup.gym) { st.hpMax = Math.round(st.hpMax * (1 + 0.015 * setup.gym)); st.atk *= 1 + 0.01 * setup.gym; }   // la Palestra di Lorenzone (shared/palestra.js)
+    if (setup.gym) { st.hpMax = Math.round(st.hpMax * (1 + 0.015 * setup.gym)); st.atk *= 1 + 0.01 * setup.gym; }
+    // il piatto di Nonna Lux (shared/cucina.js, foodMods): già pesato sulle stelle
+    const fm = setup.food || {};
+    if (fm.atk) st.atk *= 1 + fm.atk;
+    if (fm.hp) st.hpMax = Math.round(st.hpMax * (1 + fm.hp));
+    if (fm.meter) st.meterGain *= 1 + fm.meter;
+    if (fm.regen) st.regen = (st.regen || 0) + fm.regen;   // la Palestra di Lorenzone (shared/palestra.js)
     if (setup.boss) { st.hpMax = Math.round(st.hpMax * (setup.boss.hp || 1)); st.atk *= setup.boss.atk || 1; }
     // l'arma di riserva: se quella in mano si rompe, si continua con questa (stessa carta, stessi talenti)
     const rv = setup.dur != null ? computeStats({ ...setup, weapon: setup.reserve || RESERVE_WEAPON }) : null;
@@ -141,6 +147,8 @@ export const SAME_CLASH = { name: 'Risonanza', desc: 'Due SUPER dello stesso sem
 export const clashKey = (a, b) => [a, b].sort().join('+');
 export function clashOf(a, b) { return a === b ? SAME_CLASH : CLASHES[clashKey(a, b)] || null; }
 
+// dalle informazioni di un combattente (main.js fighterInfo, o quelle dell'avversario) al setup del duello giocato nel browser
+export const duelSetup = (x) => ({ id: x.id, name: x.name, element: x.element, weapon: x.look?.weapon, dur: x.dur, reserve: x.reserve, pet: x.pet, level: x.level || 1, talents: x.talents, gear: x.gear, gearPlus: x.gearPlus, seals: x.seals, boss: x.boss, gym: x.gym || 0, food: x.food || null });
 export function createDuel(setupA, setupB, seed = (Math.random() * 2 ** 31) | 0) {
     const S = {
         phase: 'intro', pt: 0, round: 1, timer: FIGHT.ROUND_TIME, time: 0, rs: seed | 0,

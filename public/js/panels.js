@@ -1,7 +1,7 @@
 // =====================================================================
 //  FINESTRE DEL GIOCO: bisaccia, botteghe, Bazar, Albo, Compagnia...
 // =====================================================================
-import { INGR, INGR_IDS, DISPENSA_MAX } from './shared/cucina.js';
+import { INGR, INGR_IDS, DISPENSA_MAX, RICETTE } from './shared/cucina.js';
 import { h, $, coin, fmt, toast, SOCKET_URL, loadImage, store } from './util.js';
 import {
     ITEMS, SLOTS, SLOT_NAMES, WEAPON_TYPES, MATERIALS, HANDLES, GEMS, ELEMENTS, ECONOMY,
@@ -364,7 +364,9 @@ export class Panels {
                     h('span', { class: 'muted small' }, me.respecs ? h('span', {}, 'Costo ', coin(RESPEC_COST)) : 'La prima volta è gratis'),
                     btn('Celebra il rito', async () => { const r = await this.act('talent:reset', {}, "Il rito è compiuto: i tuoi punti sono liberi"); if (r.ok) this.app.audio.play('special'); }, { cls: 'btn-danger', ic: 'rune', disabled: off || !spent || (me.respecs > 0 && me.coins < RESPEC_COST) })))
             : h('p', { class: 'muted small' }, "Per ridistribuire i punti si celebra il Rito dell'Oblio all'Altare della Cappella in Rovina.");
-        this.set('star', 'Libro della Maestria', off ? this.needOnline() : null, head,
+        // il piatto di Nonna Lux che hai in corpo (Libro IV): quanto dura ancora
+        const food = me.food && me.food.until > Date.now() ? h('p', { class: 'cook-food' }, h('b', {}, 'In forze: '), `${RICETTE[me.food.dish].name} ${'★'.repeat(me.food.stars)} · ancora ${Math.ceil((me.food.until - Date.now()) / 60000)} minuti nei duelli`) : null;
+        this.set('star', 'Libro della Maestria', off ? this.needOnline() : null, head, food,
             h('div', { class: 'paths' }, TALENT_IDS.map(path)),
             h('div', { class: 'split', style: { marginTop: '16px' } },
                 h('div', {}, sect('star', 'Le tue statistiche'), stats, sect('crystal', 'La Ruota dei Semi'), wheel),

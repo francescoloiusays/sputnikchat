@@ -9,7 +9,7 @@ import { makeSky, makeWaterMaterial, glowTexture } from './world.js';
 import { FireSet, Gallery } from './decor.js';
 import { buildColosseum } from './arena.js';
 import { applySky, Precipitation } from './sky.js';
-import { FIGHT, IN, HELD_MASK, createDuel, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration, moveStart, clashOf } from './shared/fight.js';
+import { FIGHT, IN, HELD_MASK, createDuel, duelSetup, stepDuel, snapshotDuel, readFighter, createBot, botInput, moveDuration, moveStart, clashOf } from './shared/fight.js';
 import { ELEMENTS, ECONOMY, weaponStats, seedRelation, MATS, RESERVE_WEAPON, RENTALS, weaponLevel, weaponDurability, weaponWearLeft } from './shared/catalog.js';
 
 // Come si guardano i due semi sulla Ruota (riga sotto le barre e nella schermata delle scommesse)
@@ -101,8 +101,7 @@ export class DuelView {
         this.buildHud();
         this.bindInput();
         if (this.role === 'local') {
-            const setup = (x) => ({ id: x.id, name: x.name, element: x.element, weapon: x.look?.weapon, dur: x.dur, reserve: x.reserve, pet: x.pet, level: x.level || 1, talents: x.talents, gear: x.gear, gearPlus: x.gearPlus, seals: x.seals, boss: x.boss });
-            this.sim = createDuel(setup(info.a), setup(info.b));
+            this.sim = createDuel(duelSetup(info.a), duelSetup(info.b));   // con palestra e piatto di Lux (prima la palestra qui si perdeva)
             this.bot = createBot(opts.botLevel || 1);
             this.acc = 0;
             this.pushSnap(snapshotDuel(this.sim, [{ t: 'round', n: 1 }]));
@@ -176,6 +175,8 @@ export class DuelView {
             const rounds = $(`#dh-rounds-${s}`); rounds.dataset.rw = '0';
             rounds.replaceChildren(...Array.from({ length: FIGHT.WIN_ROUNDS }, () => h('div', { class: 'dh-round' })));
             $(`#dh-name-${s}`).replaceChildren(...(s === 'a' ? [elIcon(f.element), f.name] : [f.name, elIcon(f.element)]));
+            // il piatto di Nonna Lux: una fiaschetta accanto al nome, finché dura
+            if (f.food) $(`#dh-name-${s}`).append(h('span', { class: 'dh-food', title: 'Ha mangiato da Nonna Lux: è in forze', html: iconSVG('flask') }));
             const img = $(`#dh-portrait-${s}`);
             if (f.cardImage) { img.src = f.cardImage; img.classList.remove('hidden'); } else img.classList.add('hidden');
         }
