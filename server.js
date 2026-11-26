@@ -224,6 +224,11 @@ function progress(p, ev, amt = 1, data = {}) {
 // --- IL ROMANZO DELLA NEBBIA ---
 // Libro II: si passa al passo dopo; finito l'ultimo passo, il capitolo si chiude e paga
 const l2Of = p => (p.libro2 = fixL2(p.libro2));
+// le bottiglie salgono più spesso finché il diario non è finito, o finché la Cartografa aspetta le Pergamene
+function bottleBoost(p) {
+    const S = l2Step(l2Of(p));
+    return ((p.diary || []).length < DIARY.length) || (S?.k === 'give' && S.mat === 'pergamena') ? 2.5 : 1;
+}
 function l2Advance(p, out) {
     const st = l2Of(p), C = L2_CHAPTERS[st.ch];
     st.i++; st.got = []; st.cnt = 0;
@@ -1401,7 +1406,7 @@ io.on('connection', (socket) => {
         if (Math.hypot(me.pos[0] - FISH_SPOT.x, me.pos[2] - FISH_SPOT.z) > FISH_SPOT.r + 1.5) return fail(reply, 'Si pesca in fondo al molo');
         const now = Date.now();
         if (me.fishing && now - me.fishing.at < 1200) return fail(reply, 'Piano, la lenza è ancora in acqua');
-        const rod = rodOf(me.p), pf = petFish(me.p.pet), night = nightNow(), fish = rollFish(night, Math.random, rod.luck + (pf.luck || 0));
+        const rod = rodOf(me.p), pf = petFish(me.p.pet), night = nightNow(), fish = rollFish(night, Math.random, rod.luck + (pf.luck || 0), { special: bottleBoost(me.p) });
         me.fishing = { id: uid(), fish, at: now, bite: Math.round((1800 + Math.random() * 4200) * rod.bite) };
         reply({ ok: true, id: me.fishing.id, bite: me.fishing.bite, diff: FISH[fish].diff, move: FISH[fish].move, night, left: Math.max(0, fishDaily(me.p) - dayc(me.p).fish) });
     });
@@ -1422,11 +1427,12 @@ io.on('connection', (socket) => {
         if (f.rar === 'special') {
             // le bottiglie portano le pagine del Diario del Naufrago, in ordine; quando è finito, Pergamene Benedette
             const next = DIARY.findIndex((_, i) => !p.diary.includes(i));
+            const L2 = l2Step(l2Of(p)), needPerg = L2?.k === 'give' && L2.mat === 'pergamena' && ((p.mats || {}).pergamena || 0) < L2.n;
             if (next >= 0) {
                 p.diary.push(next); out.page = next;
                 if (next === 7 && !p.recipes.includes('lancio')) { p.recipes.push('lancio'); out.recipe = 'lancio'; }
                 if (p.diary.length === DIARY.length) out.seal = giveSeal(p, 'naufrago');
-                if (Math.random() < 0.2) out.loot.pergamena = addMat(p, 'pergamena', 1);
+                if (needPerg || Math.random() < 0.2) out.loot.pergamena = addMat(p, 'pergamena', 1);   // se la Cartografa le aspetta, la bottiglia ne porta sempre una
             } else out.loot.pergamena = addMat(p, 'pergamena', 1);
             if (!out.seal && Math.random() < SEAL_CHANCE) out.seal = giveSeal(p, 'marea');
             out.xp = full ? grantXp(p, 10) : 0;

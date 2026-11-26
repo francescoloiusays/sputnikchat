@@ -717,7 +717,7 @@ export const FISH_RARITY = {
     epi: { name: 'Epico', color: '#b37aff', w: 2, xp: 55, coins: 30, perla: 3 },
     special: { name: 'Messaggio', color: '#ffe9a8', w: 4 },
 };
-// when: 'day' dalle 6 alle 20 (ora italiana), 'night' dalle 20 alle 6, 'any' sempre
+// when: 'day' / 'night' secondo il ciclo dell'isola (shared/clock.js: islandNight), 'any' sempre
 export const FISH = {
     alborella: { name: 'Alborella Grigia', rar: 'com', when: 'any', size: [8, 16], diff: 0.2, move: 'calm', desc: 'Piccola, argentata e convinta di essere uno squalo.' },
     carpa: { name: 'Carpa di Laguna', rar: 'com', when: 'any', size: [25, 62], diff: 0.32, move: 'sink', desc: 'Ha visto passare tre re e non si è mai scomposta.' },
@@ -735,17 +735,17 @@ export const FISH_IDS = Object.keys(FISH);
 // Le pagine del Diario del Naufrago, ritrovate nelle bottiglie
 export const DIARY = [
     { t: 'Giorno uno', x: 'Mi sono svegliato sul molo con una carta in mano. Il Traghettatore dice che è la mia, che l\'ho sempre avuta. Non ricordo di averla mai vista. È fredda come la laguna.' },
-    { t: 'Le stelle sbagliate', x: 'Qui in cielo mancano sette stelle, dice il vecchio della Forgia. Sono cadute tutte la stessa notte e si sono piantate nel fango. Lui le chiama semi. Io le chiamo storie da osteria, ma non riesco a smettere di guardare in alto.' },
+    { t: 'Le stelle sbagliate', x: "Qui in cielo mancano sette stelle, dice Mastro Brace, alla Forgia. Sono cadute tutte la stessa notte e si sono piantate nel fango. Lui le chiama semi. Io le chiamo storie da osteria, ma non riesco a smettere di guardare in alto." },
     { t: 'La corona in Sartoria', x: 'Ho visto la Corona Spettrale in Sartoria. La Sarta giura che è solo una copia. Allora perché, quando l\'ho toccata, ho sentito l\'acqua salire fino alle ginocchia?' },
     { t: 'La notte del castello', x: 'Il re voleva tutti e sette i semi e li fece incastonare in una corona. Ma il Fuoco non sopporta la Pietra, e la Palude non sopporta lo Spettro. La notte in cui la corona fu completa il castello si spezzò a metà. Lo racconta il Becchino a chiunque gli offra da bere.' },
-    { t: 'La Stanza Bianca', x: 'In cima al mastio c\'è una stanza tutta bianca. Due tizi parlano per ore seduti in poltrona e un ratto porta via i loro messaggi. Dicono di essere cronisti. Ho chiesto cosa raccontano. «Tutto», mi hanno risposto. Anche questo diario, immagino.' },
+    { t: 'La Stanza Bianca', x: "Su nel mastio c'è una stanza tutta bianca. Due tizi parlano per ore seduti in poltrona e un ratto porta via i loro messaggi. Dicono di essere cronisti. Ho chiesto cosa raccontano. «Tutto», mi hanno risposto. Anche questo diario, immagino." },
     { t: 'Il canto delle pietre', x: 'Al Cerchio di Pietre le rune cantano quando nessuno ascolta. Ne ho contate sette: Brace, Brina, Radice, Masso, Tuono, Eco e Melma. Mastro Brace dice che, messe in fila dentro un\'arma, formano una parola. Non mi ha voluto dire quale.' },
-    { t: 'Ogni seme ha un padrone', x: 'Ho perso un duello contro un ragazzo di Ghiaccio: le mie fiamme gli scivolavano addosso. Poi una ragazza di Tempesta l\'ha steso in un minuto, e con me non ha avuto pietà. Ogni seme ha il suo padrone. Nessuno è il padrone di tutti.' },
+    { t: 'Ogni seme ha un padrone', x: "Ho battuto un ragazzo di Ghiaccio: le mie fiamme lo scioglievano come neve al sole. Poi uno Spettro mi ha steso in un minuto, e io il Fuoco ce l'ho nelle mani. Contro una ragazza di Pietra, invece, nessuno dei due riusciva a colpire: le mosse sfrigolavano a vuoto, come acqua sulla brace. Ogni seme ha il suo padrone. Nessuno è il padrone di tutti." },
     { t: 'Tre volte Melma', x: 'Una storia dei pescatori: tre volte Melma, dentro un pugnale, e l\'arma ricorda com\'era il gioco sull\'isola quando bastava una palla di fango per vincere. Ridono tutti quando la racconto. Io ci credo.' },
-    { t: 'L\'anguilla', x: 'Di notte, sotto il molo, nuota un\'anguilla fatta di nebbia. Chi la prende, dicono, vede la propria carta accendersi di tutti i colori. La Custode dell\'altare non conferma e non smentisce. Non ha la faccia per farlo.' },
-    { t: 'Ultima pagina', x: 'Il Traghettatore mi ha chiesto se voglio tornare indietro. Gli ho detto di no. Se qualcuno trova questa bottiglia: il re non è morto. Dorme sotto la laguna e aspetta che qualcuno rimetta insieme la corona. Non fatelo.' },
+    { t: 'Perché le bottiglie', x: "Ho deciso di affidare queste pagine alle bottiglie. Il mare intorno all'isola gira in tondo, come la nebbia: quello che butti dal molo, prima o poi, il molo lo riprende. Il Traghettatore le ripesca, le legge e le ributta. Dice che non sono per lui. Allora per chi?" },
+    { t: 'Ultima pagina', x: "Il Traghettatore mi ha chiesto se voglio tornare indietro, in barca. Gli ho detto di no: chi va in barca dimentica, e io voglio ricordarmi tutto, anche la strada. Torno a nuoto, stanotte. Se qualcuno trova questa bottiglia: il re non è morto. Dorme sotto la laguna e aspetta che qualcuno rimetta insieme la corona. Non fatelo." },
 ];
-// Ora italiana: di notte abboccano pesci diversi
+// (vecchio) ora italiana: la pesca ora segue la notte dell'isola, vedi server.js nightNow()
 export function isNight(date = new Date()) {
     let h;
     try { h = +new Intl.DateTimeFormat('it-IT', { hour: 'numeric', hour12: false, timeZone: 'Europe/Rome' }).format(date); } catch { h = date.getHours(); }
@@ -753,10 +753,10 @@ export function isNight(date = new Date()) {
 }
 // Sceglie il pesce che abbocca (rnd = funzione 0..1; luck = la fortuna della canna: più rari ed epici, meno rottami)
 const LUCK_K = { rar: 1, epi: 1.5 };
-export function rollFish(night, rnd = Math.random, luck = 0) {
+export function rollFish(night, rnd = Math.random, luck = 0, boost = {}) {   // boost: { rarità: moltiplicatore }
     const pool = FISH_IDS.filter(id => FISH[id].when === 'any' || FISH[id].when === (night ? 'night' : 'day'));
     const lk = (r) => (r === 'junk' ? 1 / (1 + luck) : 1 + luck * (LUCK_K[r] || 0));
-    const w = id => FISH_RARITY[FISH[id].rar].w * lk(FISH[id].rar) / pool.filter(x => FISH[x].rar === FISH[id].rar).length * (night && FISH[id].when === 'night' ? 1.6 : 1);
+    const w = id => FISH_RARITY[FISH[id].rar].w * lk(FISH[id].rar) * (boost[FISH[id].rar] || 1) / pool.filter(x => FISH[x].rar === FISH[id].rar).length * (night && FISH[id].when === 'night' ? 1.6 : 1);
     let tot = pool.reduce((s, id) => s + w(id), 0), r = rnd() * tot;
     for (const id of pool) { r -= w(id); if (r <= 0) return id; }
     return pool[0];
