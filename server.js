@@ -31,7 +31,8 @@ import { PETS, PET_LEVEL, PET_MAX_LV, PET_ADOPT, PET_MAX_ENCH, PET_ENCH, PET_ENC
 import { ERRANTI, erranteAt } from './public/js/shared/erranti.js';
 import { gente, genteAt, premio, bottinoOggetto, GENTI_PER_DAY, GENTI_FIGHT_DAILY } from './public/js/shared/genti.js';
 import { islandNight } from './public/js/shared/clock.js';
-import { INGR, BOSCO_NODES, BOSCO_GATHER, addIngr, hasIngr, takeIngr, dawn, minutesToDawn, RICETTE, COOK, cookStars, foodMods } from './public/js/shared/cucina.js';
+import { INGR, BOSCO_NODES, BOSCO_GATHER, addIngr, hasIngr, takeIngr, dawn, minutesToDawn, RICETTE, COOK, cookStars, foodMods, cookGate, missingFish } from './public/js/shared/cucina.js';
+import { inInn } from './public/js/shared/bosco.js';
 // è notte quando è notte sull'isola: conta solo il ciclo del gioco (24 minuti), mai l'ora vera
 const nightNow = () => islandNight() || process.env.SPUTNIK_NOTTE === '1';
 import { RIVA_GAMES, rivaPrize } from './public/js/shared/riva-vita.js';
@@ -230,6 +231,12 @@ const l2Of = p => (p.libro2 = fixL2(p.libro2));
 function bottleBoost(p) {
     const S = l2Step(l2Of(p));
     return ((p.diary || []).length < DIARY.length) || (S?.k === 'give' && S.mat === 'pergamena') ? 2.5 : 1;
+}
+// Libro IV: il pesce che serve per il piatto del libro abbocca più spesso, finché non ce l'hai
+function fishBoost(p) {
+    const S = l2Step(l2Of(p)), out = {};
+    if (S?.k === 'cook') for (const id of missingFish(S.dish, p)) out[id] = 5;
+    return out;
 }
 function l2Advance(p, out) {
     const st = l2Of(p), C = L2_CHAPTERS[st.ch];
@@ -1424,14 +1431,15 @@ io.on('connection', (socket) => {
         reply({ ok: true, kind: n.kind, ingr: true, got, xp, full, name: INGR[n.kind].name });
     }
     // --- LA CUCINA DI NONNA LUX: il gioco ai fornelli (la prima volta, o quando lo chiede il libro) ---
-    const atLux = () => nearNpcId('lux', 6);
+    const atLux = () => nearNpcId('lux', 6) && inInn(me.pos[0], me.pos[2]);
     const storyDish = (p) => { const S = l2Step(l2Of(p)); return S?.k === 'cook' ? S.dish : null; };
     on('cook:start', (d, reply) => {
         const p = me.p, dish = String(d.dish), R = RICETTE[dish];
         if (!R) return fail(reply, 'Questa ricetta non esiste');
         if (me.duelId) return fail(reply, 'Non durante un duello');
         if (!atLux()) return fail(reply, 'Si cucina da Nonna Lux, al Tofu della Nebbia');
-        if (storyDish(p) !== dish && !(p.ricette || []).includes(dish)) return fail(reply, 'Questa ricetta Lux non te l\'ha ancora insegnata');
+        const gate = cookGate({ dish, storyDish: storyDish(p), learned: p.ricette || [], used: dayc(p).cook || 0 });
+        if (gate.err) return fail(reply, gate.err);
         const miss = hasIngr(p, R.need);
         if (miss) return fail(reply, 'Ti manca: ' + miss);
         me.cooking = { id: uid(), dish, at: Date.now() };
@@ -1442,9 +1450,13 @@ io.on('connection', (socket) => {
         if (!C || C.id !== d.id) return fail(reply, 'Il fuoco si è spento');
         me.cooking = null;
         if (Date.now() - C.at < COOK.minMs) return fail(reply, 'Troppo in fretta: Lux scuote la testa');
+        if (me.duelId || !atLux()) return fail(reply, 'Il fuoco si è spento: sei andat' + (p.appearance?.sex === 'f' ? 'a' : 'o') + ' via dai fornelli');
+        const gate = cookGate({ dish: C.dish, storyDish: storyDish(p), learned: p.ricette || [], used: dayc(p).cook || 0 });
+        if (gate.err) return fail(reply, gate.err);
         const R = RICETTE[C.dish], miss = hasIngr(p, R.need);
         if (miss) return fail(reply, 'Ti manca: ' + miss);
         takeIngr(p, R.need);
+        if (gate.counts) dayc(p).cook = (dayc(p).cook || 0) + 1;   // rifatto da te: conta nei tre piatti al giorno
         const stars = cookStars(Number(d.score) || 0), out = {};
         const learned = !(p.ricette ||= []).includes(C.dish);
         if (learned) p.ricette.push(C.dish);
@@ -1461,10 +1473,10 @@ io.on('connection', (socket) => {
     on('cook:lux', (d, reply) => {
         const p = me.p, dish = String(d.dish), R = RICETTE[dish];
         if (!R) return fail(reply, 'Questa ricetta non esiste');
+        if (me.duelId) return fail(reply, 'Non durante un duello');
         if (!atLux()) return fail(reply, 'Si cucina da Nonna Lux, al Tofu della Nebbia');
-        if (!(p.ricette || []).includes(dish)) return fail(reply, 'Questa ricetta Lux non te l\'ha ancora insegnata');
-        const c = dayc(p);
-        if ((c.cook || 0) >= COOK.daily) return fail(reply, 'Per oggi basta: Lux dice che a tavola si torna domani');
+        const c = dayc(p), gate = cookGate({ dish, storyDish: null, learned: p.ricette || [], used: c.cook || 0 });
+        if (gate.err) return fail(reply, gate.err);
         const miss = hasIngr(p, R.need);
         if (miss) return fail(reply, 'Ti manca: ' + miss);
         takeIngr(p, R.need);
@@ -1492,7 +1504,7 @@ io.on('connection', (socket) => {
         if (Math.hypot(me.pos[0] - FISH_SPOT.x, me.pos[2] - FISH_SPOT.z) > FISH_SPOT.r + 1.5) return fail(reply, 'Si pesca in fondo al molo');
         const now = Date.now();
         if (me.fishing && now - me.fishing.at < 1200) return fail(reply, 'Piano, la lenza è ancora in acqua');
-        const rod = rodOf(me.p), pf = petFish(me.p.pet), night = nightNow(), fish = rollFish(night, Math.random, rod.luck + (pf.luck || 0), { special: bottleBoost(me.p) });
+        const rod = rodOf(me.p), pf = petFish(me.p.pet), night = nightNow(), fish = rollFish(night, Math.random, rod.luck + (pf.luck || 0), { special: bottleBoost(me.p), ...fishBoost(me.p) });
         me.fishing = { id: uid(), fish, at: now, bite: Math.round((1800 + Math.random() * 4200) * rod.bite) };
         reply({ ok: true, id: me.fishing.id, bite: me.fishing.bite, diff: FISH[fish].diff, move: FISH[fish].move, night, left: Math.max(0, fishDaily(me.p) - dayc(me.p).fish) });
     });

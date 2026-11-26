@@ -67,6 +67,17 @@ export const RICETTE_IDS = Object.keys(RICETTE);
 // il gioco ai fornelli: tre fasi; dalla seconda volta cucina Lux, al massimo tre piatti al giorno
 export const COOK = { phases: ['taglia', 'mescola', 'fuoco'], minMs: 6000, daily: 3, durMs: 30 * 60 * 1000, star: [0.8, 0.9, 1] };
 export const cookStars = (score) => (score >= 0.85 ? 3 : score >= 0.5 ? 2 : 1);
+// chi può cucinare cosa: il piatto che chiede il libro si cucina sempre (e non conta);
+// i piatti già imparati, rifatti da te o da Lux, contano nei tre al giorno
+export function cookGate({ dish, storyDish, learned = [], used = 0 }) {
+    if (!RICETTE[dish]) return { err: 'Questa ricetta non esiste', counts: false };
+    if (dish === storyDish) return { err: null, counts: false };
+    if (!learned.includes(dish)) return { err: "Questa ricetta Lux non te l'ha ancora insegnata", counts: false };
+    if (used >= COOK.daily) return { err: 'Per oggi basta: Lux dice che a tavola si torna domani', counts: true };
+    return { err: null, counts: true };
+}
+// i pesci che mancano nella dispensa per un piatto (il Molo li fa abboccare più spesso)
+export const missingFish = (dish, p) => Object.keys(RICETTE[dish]?.need || {}).filter(id => INGR[id]?.fish && (p.dispensa?.[id] || 0) < RICETTE[dish].need[id]);
 // gli effetti del piatto che hai mangiato (null se è finito)
 export function foodMods(food, now = Date.now()) {
     if (!food || !RICETTE[food.dish] || now >= food.until) return null;

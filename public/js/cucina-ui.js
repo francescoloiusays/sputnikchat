@@ -33,8 +33,13 @@ export class Cucina {
             h('div', { class: 'btn-row mid' }, h('button', { class: 'btn btn-sm', onclick: () => this.stop(), html: iconSVG('close') }, 'Lascia stare')));
         document.body.append(this.hud);
         const down = () => { if (!this.on) return; this.holding = true; this.press(); };
-        addEventListener('keydown', (e) => { if (!this.on) return; if (e.code === 'Space' || e.code === 'KeyE') { e.preventDefault(); if (!e.repeat) down(); } else if (e.code === 'Escape') this.stop(); });
-        addEventListener('keyup', (e) => { if (e.code === 'Space' || e.code === 'KeyE') this.holding = false; });
+        // ai fornelli i tasti sono tutti della cucina: catturati prima del mondo (niente salti, passi o dialoghi)
+        addEventListener('keydown', (e) => {
+            if (!this.on || e.target.closest?.('input, textarea')) return;
+            e.preventDefault(); e.stopPropagation();
+            if (e.code === 'Space' || e.code === 'KeyE') { if (!e.repeat) down(); } else if (e.code === 'Escape') this.stop();
+        }, true);
+        addEventListener('keyup', (e) => { if (!this.on) return; e.stopPropagation(); if (e.code === 'Space' || e.code === 'KeyE') this.holding = false; }, true);
         this.canvas.addEventListener('mousedown', down);
         this.canvas.addEventListener('touchstart', (e) => { e.preventDefault(); down(); }, { passive: false });
         addEventListener('mouseup', () => { this.holding = false; });
@@ -86,6 +91,7 @@ export class Cucina {
         document.exitPointerLock?.();
         Object.assign(this, { on: true, id: r.id, dish: id, phases: r.phases, pi: -1, scores: [], holding: false });
         this.hud.classList.remove('hidden');
+        this.app.keys = {};   // chi stava camminando si ferma ai fornelli
         this.next();
         let last = performance.now();
         const loop = (t) => { if (!this.on) return; const dt = Math.min(0.05, (t - last) / 1000); last = t; this.step(dt); this.draw(); requestAnimationFrame(loop); };

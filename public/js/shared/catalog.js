@@ -753,10 +753,10 @@ export function isNight(date = new Date()) {
 }
 // Sceglie il pesce che abbocca (rnd = funzione 0..1; luck = la fortuna della canna: più rari ed epici, meno rottami)
 const LUCK_K = { rar: 1, epi: 1.5 };
-export function rollFish(night, rnd = Math.random, luck = 0, boost = {}) {   // boost: { rarità: moltiplicatore }
+export function rollFish(night, rnd = Math.random, luck = 0, boost = {}) {   // boost: { rarità o pesce: moltiplicatore }
     const pool = FISH_IDS.filter(id => FISH[id].when === 'any' || FISH[id].when === (night ? 'night' : 'day'));
     const lk = (r) => (r === 'junk' ? 1 / (1 + luck) : 1 + luck * (LUCK_K[r] || 0));
-    const w = id => FISH_RARITY[FISH[id].rar].w * lk(FISH[id].rar) * (boost[FISH[id].rar] || 1) / pool.filter(x => FISH[x].rar === FISH[id].rar).length * (night && FISH[id].when === 'night' ? 1.6 : 1);
+    const w = id => FISH_RARITY[FISH[id].rar].w * lk(FISH[id].rar) * (boost[FISH[id].rar] || 1) * (boost[id] || 1) / pool.filter(x => FISH[x].rar === FISH[id].rar).length * (night && FISH[id].when === 'night' ? 1.6 : 1);
     let tot = pool.reduce((s, id) => s + w(id), 0), r = rnd() * tot;
     for (const id of pool) { r -= w(id); if (r <= 0) return id; }
     return pool[0];

@@ -16,6 +16,8 @@ export const INN = { x: -206, z: 8, ry: Math.PI / 2, y: 2.4, w: 14, d: 10, h: 4.
 
 // dalla sala (lx lungo la larghezza, lz verso la porta) al mondo
 export const innPt = (lx, lz) => [INN.x + lx * Math.cos(INN.ry) + lz * Math.sin(INN.ry), INN.z - lx * Math.sin(INN.ry) + lz * Math.cos(INN.ry)];
+// dentro la sala della locanda?
+export const inInn = (x, z) => { const dx = x - INN.x, dz = z - INN.z, lx = dx * Math.cos(INN.ry) - dz * Math.sin(INN.ry), lz = dx * Math.sin(INN.ry) + dz * Math.cos(INN.ry); return Math.abs(lx) < INN.w / 2 && Math.abs(lz) < INN.d / 2; };
 // com'è messa la sala: il bancone e la cucina in fondo a sinistra, due tavoli lunghi a destra
 export const INN_ROOM = {
     counter: { lx: -2.4, lz: -2.9, w: 5.4, d: 0.8 },             // il bancone aperto sulla cucina
