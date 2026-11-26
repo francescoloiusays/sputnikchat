@@ -898,7 +898,7 @@ export const TOLL = { level: 4, coins: 40, xp: 25, wins: 3, losses: 3, spot: { x
 
 // --- IN ONDA! (Stanza Bianca) ---
 export const WHITE_ROOM = { x: 0, z: -118.8, w: 10, d: 8, floor: 7.6 };
-export const inWhiteRoom = (x, y, z) => Math.abs(x - WHITE_ROOM.x) < WHITE_ROOM.w / 2 + 0.3 && Math.abs(z - WHITE_ROOM.z) < WHITE_ROOM.d / 2 + 0.3 && y > WHITE_ROOM.floor - 1;
+export const inWhiteRoom = (x, y, z) => Math.abs(x - WHITE_ROOM.x) < WHITE_ROOM.w / 2 + 0.3 && Math.abs(z - WHITE_ROOM.z) < WHITE_ROOM.d / 2 + 0.3 && y > WHITE_ROOM.floor - 1 && y < WHITE_ROOM.floor + 3.9;   // sopra c'è la palestra
 export const PHONE_SPOT = { x: 2.67, z: -117.65 };
 // I quadri delle puntate nel cortile del castello: la prima volta che apri una puntata 10 monete,
 // poi 1 o 2 ogni volta che la riapri (dopo almeno un minuto, fino a 20 monete al giorno)

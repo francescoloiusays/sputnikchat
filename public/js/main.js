@@ -347,7 +347,7 @@ class Game {
         this.casaEditor = new CasaEditor(this);
         this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
         this.erranti = new Erranti(this);
-        this.palestra = new Palestra(this);   // la Palestra di Sansone, nelle Terre Nuove
+        this.palestra = new Palestra(this);   // la Palestra di Sansone, al secondo piano del mastio
         this.genti = new Genti(this);        // le genti di passaggio: nascono ogni giorno dal motore dei personaggi    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
         this.storySpots = buildStorySpots(this);
         // luce di riempimento: il personaggio non resta mai in controluce
@@ -1592,7 +1592,7 @@ class Game {
             this.mmT = 0.08;
             this.drawMinimap();
             this.updateVoiceVolumes();
-            const zone = this.interior?.name || this.world.zoneName(this.player.pos.x, this.player.pos.z);
+            const zone = this.interior?.name || this.world.zoneName(this.player.pos.x, this.player.pos.z, this.player.pos.y);
             if (zone !== this.zone) { this.zone = zone; $('#zone-name').textContent = zone; this.zoneSince = performance.now(); this.zoneShown = false; }
             else if (!this.zoneShown && performance.now() - this.zoneSince > 700) { this.zoneShown = true; this.showZoneBanner(zone); }
             this.updatePrompt();

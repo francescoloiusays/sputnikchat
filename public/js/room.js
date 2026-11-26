@@ -4,6 +4,9 @@
 //  pareti bianche, letto matrimoniale, armadio con le magliette ufficiali,
 //  poltrone con il tavolino del logo giallo e le finestre sul giardino.
 //  Ci si sale con la scala di pietra addossata al lato ovest del mastio.
+//  Sopra ancora, al secondo piano, la Palestra di Sansone: dal pianerottolo
+//  della Stanza Bianca parte una seconda rampa che torna indietro verso
+//  sud e arriva al ballatoio della sua porta.
 // =====================================================================
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -11,6 +14,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { WORLD, wallBox, place, rng } from './world.js';
 import { shPrintTexture } from './character.js';
 import { ITEMS } from './shared/catalog.js';
+import { PALESTRA } from './shared/palestra.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const BX = (w, h, d) => new THREE.BoxGeometry(w, h, d);
@@ -216,10 +220,19 @@ export function buildKeep(world, geos) {
     const xW = K.x - K.w / 2, xE = K.x + K.w / 2, zN = K.z - K.d / 2, zS = K.z + K.d / 2;
     world.roomMats ||= makeMats();
     const M = world.roomMats;
-    // blocco sotto la stanza (il suo tetto è il pavimento) e blocco sopra il soffitto
+    // blocco sotto la stanza (il suo tetto è il pavimento), il solaio della palestra e il blocco sopra di lei
+    const GY = PALESTRA.y, GH = PALESTRA.h, GC = GY + GH;
     geos.push(place(wallBox(K.w, FY - y0, K.d), K.x, (y0 + FY) / 2, K.z));
-    geos.push(place(wallBox(K.w, top - CEIL, K.d), K.x, (CEIL + top) / 2, K.z));
+    geos.push(place(wallBox(K.w, GY - CEIL, K.d), K.x, (CEIL + GY) / 2, K.z));
+    geos.push(place(wallBox(K.w, top - GC, K.d), K.x, (GC + top) / 2, K.z));
     world.addBox(K.x, K.z, K.w, K.d, y0 - 2, FY);
+    world.addBox(K.x, K.z, K.w, K.d, CEIL, GY);
+    // i muri della palestra: nord, est e sud pieni; a ovest la porta, sul ballatoio
+    const gz = PALESTRA.door, segA = gz - DOOR.hw - zN, segB = zS - gz - DOOR.hw;
+    const gw = [[K.x, zN + T / 2, K.w, T], [K.x, zS - T / 2, K.w, T], [xE - T / 2, K.z, T, K.d - 2 * T], [xW + T / 2, zN + segA / 2, T, segA], [xW + T / 2, zS - segB / 2, T, segB]];
+    for (const [x, z, w, d] of gw) { geos.push(place(wallBox(w, GH, d), x, GY + GH / 2, z)); world.addBox(x, z, w, d, GY - 0.2, GC); }
+    geos.push(place(wallBox(T, GH - DOOR.h, DOOR.hw * 2), xW + T / 2, GY + DOOR.h + (GH - DOOR.h) / 2, gz));
+    geos.push(place(wallBox(0.24, 0.3, DOOR.hw * 2 + 0.5), xW - 0.07, GY + DOOR.h + 0.15, gz));
     // muri della stanza: nord ed est pieni, angoli del muro sud
     geos.push(place(wallBox(K.w, RH, T), K.x, FY + RH / 2, zN + T / 2));
     geos.push(place(wallBox(T, RH, K.d - 2 * T), xE - T / 2, FY + RH / 2, K.z));
@@ -259,10 +272,32 @@ export function buildKeep(world, geos) {
     const zl0 = STAIRS.z0 - STAIRS.n * STAIRS.tread, zlc = zl0 - STAIRS.landing / 2, zl1 = zl0 - STAIRS.landing;
     geos.push(place(wallBox(STAIRS.w, FY - y0 + 0.2, STAIRS.landing), sx, (FY + y0 - 0.2) / 2, zlc));
     world.addBox(sx, zlc, STAIRS.w, STAIRS.landing, y0 - 1, FY);
-    geos.push(place(wallBox(0.26, 0.9, STAIRS.landing), px, FY + 0.45, zlc));
-    world.addBox(px, zlc, 0.26, STAIRS.landing, FY - 0.1, FY + 0.9, 0, { noWalk: true });
+    // (a ovest il pianerottolo è aperto: lì comincia la seconda rampa, verso la palestra)
     geos.push(place(wallBox(STAIRS.w - 0.26, 0.9, 0.26), sx + 0.13, FY + 0.45, zl1 + 0.13));
     world.addBox(sx + 0.13, zl1 + 0.13, STAIRS.w - 0.26, 0.26, FY - 0.1, FY + 0.9, 0, { noWalk: true });
+
+    // --- SECONDA RAMPA: dal pianerottolo torna verso sud, accanto alla prima, fino al ballatoio della palestra ---
+    const rail = (x, z, w, d, yb) => { geos.push(place(wallBox(w, 0.9, d), x, yb + 0.45, z)); world.addBox(x, z, w, d, yb - 0.1, yb + 0.9, 0, { noWalk: true }); };
+    const s2 = sx - STAIRS.w, n2 = 14, rise2 = (GY - FY) / n2, T2 = STAIRS.tread, bz0 = gz - DOOR.hw - 0.15, bz1 = STAIRS.z0 - 1.4, z2 = zl1 + 1.4;   // z2: il primo gradino; prima c'è un pezzo di pianerottolo in piano
+    geos.push(place(wallBox(STAIRS.w, FY - y0 + 0.2, z2 - zl1), s2, (FY + y0 - 0.2) / 2, (zl1 + z2) / 2));
+    world.addBox(s2, (zl1 + z2) / 2, STAIRS.w, z2 - zl1, y0 - 1, FY);
+    for (let i = 0; i < n2; i++) {
+        const top_ = FY + rise2 * (i + 1), zc = z2 + (i + 0.5) * T2;
+        geos.push(place(wallBox(STAIRS.w, top_ - y0 + 0.2, T2), s2, (top_ + y0 - 0.2) / 2, zc));
+        world.addBox(s2, zc, STAIRS.w, T2, y0 - 1, top_);
+        rail(s2 - STAIRS.w / 2 + 0.13, zc, 0.26, T2, top_);                          // la ringhiera fuori, verso il giardino
+        if (zc > zl0 && zc < bz0) rail(s2 + STAIRS.w / 2 - 0.13, zc, 0.26, T2, top_); // e quella verso la prima rampa, dove c'è il vuoto
+    }
+    // il ballatoio: sopra la prima rampa (alto abbastanza per passarci sotto) fino alla porta
+    rail(s2, zl1 + 0.13, STAIRS.w, 0.26, FY);                                    // in fondo al pianerottolo, verso il muro
+    rail(s2 - STAIRS.w / 2 + 0.13, (zl1 + z2) / 2, 0.26, z2 - zl1, FY);
+    const zt = z2 + n2 * T2, slab = (x0, x1, z0, z1) => { const w = x1 - x0, d = z1 - z0; geos.push(place(wallBox(w, 0.35, d), (x0 + x1) / 2, GY - 0.175, (z0 + z1) / 2)); world.addBox((x0 + x1) / 2, (z0 + z1) / 2, w, d, GY - 0.35, GY); };
+    slab(sx - STAIRS.w / 2, xW, bz0, bz1);                       // sopra la prima rampa
+    slab(s2 - STAIRS.w / 2, sx - STAIRS.w / 2, zt, bz1);         // in cima alla seconda
+    rail(s2 - STAIRS.w / 2 + 0.13, (zt + bz1) / 2, 0.26, bz1 - zt, GY);
+    rail((s2 - STAIRS.w / 2 + xW) / 2, bz1 - 0.13, xW - s2 + STAIRS.w / 2, 0.26, GY);
+    rail((sx - STAIRS.w / 2 + xW) / 2, bz0 + 0.13, xW - sx + STAIRS.w / 2, 0.26, GY);
+    world.addTorch(xW, GY + 2.2, gz + DOOR.hw + 0.75, false, 1.0, { wall: -Math.PI / 2 });
     // torce a muro lungo la salita e accanto alla porta
     world.addTorch(xW, y0 + 4.6, -114.6, false, 1.0, { wall: -Math.PI / 2 });
     world.addTorch(xW, FY + 2.2, K.z - DOOR.hw - 0.75, false, 1.0, { wall: -Math.PI / 2 });   // senza luce vera: passerebbe il muro
@@ -514,7 +549,7 @@ function shadeHex(hex, f) { const c = new THREE.Color(hex); c.multiplyScalar(f);
 // =====================================================================
 export const GARDENS = [
     { x0: 7.0, x1: 17.6, z0: -121.8, z1: -109.8 },
-    { x0: -17.6, x1: -9.0, z0: -121.8, z1: -109.8 },
+    { x0: -17.6, x1: -10.8, z0: -121.8, z1: -109.8 },
 ];
 export function buildGarden(world) {
     const C = WORLD.CASTLE, y0 = C.base, M = world.roomMats, S = world.scene;
@@ -573,8 +608,8 @@ export function buildGarden(world) {
         benches.push({ x, z, ry });
         avoid.push([x, z, 1.1]);
     };
-    blossom(9.4, -112.4, 3); blossom(15.6, -118.2, 7); blossom(-10.6, -112.0, 11); blossom(-15.6, -118.2, 13);
-    cypress(16.9, -113.6); cypress(7.5, -120.6, 0.9); cypress(-16.9, -113.6); cypress(-10.3, -120.8, 0.9);
+    blossom(9.4, -112.4, 3); blossom(15.6, -118.2, 7); blossom(-12.2, -111.4, 11); blossom(-15.6, -118.2, 13);
+    cypress(16.9, -113.6); cypress(7.5, -120.6, 0.9); cypress(-16.9, -113.6); cypress(-11.8, -121.0, 0.9);
     bench(12.4, -112.4, Math.PI); bench(-13.0, -111.4, 0);
     // fontana con l'acqua che luccica
     const fx = 12.4, fz = -115.6, fput = B.at(fx, y0, fz);

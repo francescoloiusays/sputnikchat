@@ -35,7 +35,7 @@ import { islandNight } from './public/js/shared/clock.js';
 const nightNow = () => islandNight() || process.env.SPUTNIK_NOTTE === '1';
 import { RIVA_GAMES, rivaPrize } from './public/js/shared/riva-vita.js';
 import { nearRiva } from './public/js/shared/riva.js';
-import { PALESTRA, ATTREZZI, GYM_DAILY, GYM_MAX, GYM_MIN_MS, gymToNext, gymReward, GYM_NPC_DAILY, GYM_NPC_MAX, npcGymCost, npcFighters, npcLevel } from './public/js/shared/palestra.js';
+import { PALESTRA, ATTREZZI, GYM_DAILY, GYM_MAX, GYM_MIN_MS, gymToNext, gymReward, npcForma, npcFighters, npcLevel, inPalestra } from './public/js/shared/palestra.js';
 import { casaDiRob, cleanCasa, casaValue, casaCount, bauleUsed, inCasa, BAULE_SLOTS } from './public/js/shared/casa.js';
 import { ROB_CHAPTERS, ROB_SPOTS, ROB_LEVEL, newRob, robStep } from './public/js/shared/rob.js';
 import { RESERVE_WEAPON, RENTALS, weaponDurability, weaponWearLeft, repairCost } from './public/js/shared/catalog.js';
@@ -364,7 +364,7 @@ function privateView(p) {
         inventory: p.inventory, equipment: p.equipment,
         mats: p.mats, grade: p.grade || 0, cardWins: p.cardWins || 0, seals: p.seals, sealsOn: p.sealsOn,
         fishLog: p.fishLog, diary: p.diary, gather: p.gather, blessUntil: p.blessing?.until || 0, blessedToday: p.blessing?.day === d,
-        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), gym: p.gym || { lv: 0, pts: 0 }, gymLeft: Math.max(0, GYM_DAILY - (dayc(p).gym || 0)), gymNpcLeft: Math.max(0, GYM_NPC_DAILY - (dayc(p).gymNpc || 0)), rivaLeft: Object.fromEntries(Object.entries(RIVA_GAMES).map(([k, G]) => [k, Math.max(0, G.daily - (dayc(p).riva?.[k] || 0))])), rivaBest: p.rivaBest || {}, npcForma: store.world().npcForma || {}, casa: p.casa || null, baule: p.baule || { inv: [], mats: {} }, cuccia: p.cuccia || [], errToday: dayc(p).err || {}, gentiToday: gentiToday(p), pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
+        fishLeft: Math.max(0, fishDaily(p) - dayc(p).fish), rod: p.rod || 0, reserve: p.reserve || null, rob: p.rob || newRob(), gym: p.gym || { lv: 0, pts: 0 }, gymLeft: Math.max(0, GYM_DAILY - (dayc(p).gym || 0)), rivaLeft: Object.fromEntries(Object.entries(RIVA_GAMES).map(([k, G]) => [k, Math.max(0, G.daily - (dayc(p).riva?.[k] || 0))])), rivaBest: p.rivaBest || {}, npcForma: npcForma(), casa: p.casa || null, baule: p.baule || { inv: [], mats: {} }, cuccia: p.cuccia || [], errToday: dayc(p).err || {}, gentiToday: gentiToday(p), pet: p.pet || null, petTrain: Math.max(0, TRAIN.daily - (dayc(p).petTrain || 0)),
         gatherLeft: { frammento: Math.max(0, GATHER.daily.frammento - dayc(p).frammento), ecto: Math.max(0, GATHER.daily.ecto - dayc(p).ecto) },
         titles: p.titles, titleOn: p.titleOn, comebacks: p.comebacks, tablets: p.tablets, recipes: p.recipes, npcs: p.npcs,
         episodes: p.episodes || 0, charisma: p.charisma || 0, rebirths: p.rebirths || 0, frames: p.frames, peakLeague: p.peakLeague || 0,
@@ -914,6 +914,19 @@ function awardFriday() {
     }
 }
 setInterval(awardFriday, 10 * 60 * 1000);
+// gli abitanti si allenano da soli: quando uno sale di livello, lo sa tutta l'isola
+function gymNews() {
+    const W = store.world(), L = W.npcLv ||= {};
+    let changed = false;
+    for (const id of npcFighters()) {
+        const lv = npcLevel(id);
+        if (L[id] == null) { L[id] = lv; changed = true; continue; }
+        if (lv > L[id]) { L[id] = lv; changed = true; io.emit('notify', { text: `${ERRANTI[id].name} si è allenat${id === 'marta' ? 'a' : 'o'} da Sansone: ora è di livello ${lv}`, kind: 'info' }); }
+    }
+    if (changed) store.saveWorld();
+}
+setTimeout(gymNews, 20 * 1000);
+setInterval(gymNews, 15 * 60 * 1000);
 
 // profili di prima: si aggiornano all'avvio (qui sotto tutti gli aiuti sono già pronti)
 // i profili di prova creati durante i collaudi: tolti una volta per tutte (codice e nome devono coincidere)
@@ -1503,10 +1516,10 @@ io.on('connection', (socket) => {
     });
 
     // --- LA PALESTRA DI SANSONE ---
-    const atGym = () => me.pos && Math.hypot(me.pos[0] - PALESTRA.x, me.pos[2] - PALESTRA.z) < 12;
+    const atGym = () => me.pos && inPalestra(me.pos[0], me.pos[1], me.pos[2]);
     on('gym:start', (d, reply) => {
         const p = me.p, c = dayc(p);
-        if (!atGym()) return fail(reply, 'La palestra è nelle Terre Nuove, sul sentiero della Tavola Lunga');
+        if (!atGym()) return fail(reply, 'La palestra è al secondo piano del mastio, sopra la Stanza Bianca');
         if (!ATTREZZI[d.a]) return fail(reply, 'Questo attrezzo non c\'è');
         if ((c.gym || 0) >= GYM_DAILY) return fail(reply, 'Per oggi basta: Sansone dice che i muscoli crescono dormendo');
         me.gymRun = { a: d.a, t: Date.now() };
@@ -1526,27 +1539,6 @@ io.on('connection', (socket) => {
         save(p); sendMe(me);
         reply({ ok: true, xp: gained, pts, up: G.lv - before, lv: G.lv });
     });
-    // un allenamento pagato a un abitante: la sua forma cresce per tutti
-    on('gym:npc', (d, reply) => {
-        const p = me.p, c = dayc(p), id = String(d.id || '');
-        if (!atGym()) return fail(reply, 'Gli abitanti si allenano in palestra');
-        if (!npcFighters().includes(id)) return fail(reply, 'Questo abitante non fa duelli');
-        if ((c.gymNpc || 0) >= GYM_NPC_DAILY) return fail(reply, `Al giorno puoi pagare ${GYM_NPC_DAILY} allenamenti`);
-        const W = store.world(), F = W.npcForma ||= {};
-        if ((F[id] || 0) >= GYM_NPC_MAX) return fail(reply, 'È già in forma smagliante: più di così non migliora');
-        const cost = npcGymCost(npcLevel(id, F));
-        if (p.coins < cost) return fail(reply, `Servono ${cost} monete per la paga di Sansone`);
-        p.coins -= cost; c.gymNpc = (c.gymNpc || 0) + 1;
-        const before = npcLevel(id, F);
-        F[id] = (F[id] || 0) + 1;
-        store.saveWorld();
-        grantXp(p, 10);
-        save(p); sendMe(me);
-        const up = npcLevel(id, F) - before;
-        if (up) io.emit('notify', { text: `${ERRANTI[id].name} si è allenat${id === 'marta' ? 'a' : 'o'} da Sansone: ora è di livello ${npcLevel(id, F)}`, kind: 'info' });
-        reply({ ok: true, cost, forma: F[id], level: npcLevel(id, F), up });
-    });
-
     // --- IL BAULE DI CASA: metti via e riprendi oggetti e materiali ---
     const atHome = () => me.p.casa && me.pos && inCasa(me.pos[0], me.pos[2]);
     on('baule:move', (d, reply) => {

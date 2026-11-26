@@ -1591,7 +1591,7 @@ export class World {
         ];
     }
 
-    zoneName(x, z) {
+    zoneName(x, z, y = 0) {
         if (Math.hypot(x - WORLD.FARO.x, z - WORLD.FARO.z) < WORLD.FARO.r + 10) return 'Il Faro Spento';
         if (Math.hypot(x - WORLD.RELITTO.x, z - WORLD.RELITTO.z) < WORLD.RELITTO.r + 14) return 'La Secca del Relitto';
         if (nearRiva(x, z)) return 'La Riva di Là';
@@ -1599,7 +1599,7 @@ export class World {
         const C = WORLD.CASTLE;
         if (Math.abs(x - C.x) < C.half && Math.abs(z - C.z) < C.half) {
             const K = WORLD.KEEP;
-            if (Math.abs(x - K.x) < K.w / 2 && Math.abs(z - K.z) < K.d / 2) return 'La Stanza Bianca';
+            if (Math.abs(x - K.x) < K.w / 2 && Math.abs(z - K.z) < K.d / 2) return y > 10.5 ? 'La Palestra di Sansone' : 'La Stanza Bianca';
             if (GARDENS.some(r => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1)) return 'Giardino del Castello';
             return Math.hypot(x - WORLD.ARENA.x, z - WORLD.ARENA.z) < WORLD.ARENA.r + 2 ? "Arena dei Duelli" : 'Cortile del Castello';
         }
