@@ -109,7 +109,7 @@ Ogni capitolo finisce con una **pagina del libro**: il ricordo tornato, scritto 
    - Tutti e cinque cucinano insieme, con il giocatore e Nonna Lux, il piatto di Pippo, fatto con gli ingredienti di tutto il libro.
    - **Il ricordo torna solo a metà:** Pippo sorride, dice "c'era qualcuno che…", e si ferma. Nessuno insiste. Si mangia.
    - **Passo `answer`:** Nonna Lux chiede al giocatore che cosa vuole che lei scriva in margine. La risposta resta nel libro.
-   - **Fine:** Mentre i cinque mangiano, il giocatore sfoglia il quaderno di Nonna Lux. In fondo c'è una ricetta senza nome, con la sua grafia e in margine nessun ricordo. Lux la guarda a lungo e dice soltanto: «Questa non mi ricordo di averla scritta.» Poi sorride e va a sparecchiare. "Fine del Libro IV." È l'aggancio per il libro dopo, che parte da Lux: che cosa abbia dimenticato lei, la sola che non dimentica niente, resta di Francesco.
+   - **Fine:** Mentre i cinque mangiano, il giocatore sfoglia il quaderno di Nonna Lux. In fondo c'è una ricetta senza nome, con la sua grafia: ingredienti che il giocatore non ha mai sentito, e in margine un ricordo che non riesce a capire di chi sia. Lux se la ricorda benissimo. Gli toglie il quaderno dalle mani, piano, e dice soltanto: «Quella la cuciniamo un'altra volta.» Poi sorride e va a sparecchiare. "Fine del Libro IV." È l'aggancio per il libro dopo, che parte da Lux: lei sa tutto, è il giocatore che non sa ancora come leggerla. Che cosa sia quella ricetta resta di Francesco.
 
 ## La cucina
 
