@@ -4,7 +4,7 @@
 //  pareti bianche, letto matrimoniale, armadio con le magliette ufficiali,
 //  poltrone con il tavolino del logo giallo e le finestre sul giardino.
 //  Ci si sale con la scala di pietra addossata al lato ovest del mastio.
-//  Sopra ancora, al secondo piano, la Palestra di Sansone: dal pianerottolo
+//  Sopra ancora, al secondo piano, la Palestra di Lorenzone: dal pianerottolo
 //  della Stanza Bianca parte una seconda rampa che torna indietro verso
 //  sud e arriva al ballatoio della sua porta.
 // =====================================================================

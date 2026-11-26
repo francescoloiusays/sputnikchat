@@ -348,7 +348,7 @@ class Game {
         this.casaEditor = new CasaEditor(this);
         this.petF = new PetFollower(this);   // lo SputnikPet che ti viene dietro
         this.erranti = new Erranti(this);
-        this.palestra = new Palestra(this);   // la Palestra di Sansone, al secondo piano del mastio
+        this.palestra = new Palestra(this);   // la Palestra di Lorenzone, al secondo piano del mastio
         this.genti = new Genti(this);        // le genti di passaggio: nascono ogni giorno dal motore dei personaggi    // gli abitanti che vanno e vengono dal borgo delle Terre Nuove
         this.storySpots = buildStorySpots(this);
         // luce di riempimento: il personaggio non resta mai in controluce

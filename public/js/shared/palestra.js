@@ -1,7 +1,7 @@
 // =====================================================================
-//  LA PALESTRA DI SANSONE (client + server)
+//  LA PALESTRA DI LORENZONE (client + server)
 //  Al secondo piano del mastio, sopra la Stanza Bianca: ci si sale con
-//  la seconda rampa della scala di pietra. Sansone il Gigante allena
+//  la seconda rampa della scala di pietra. Lorenzone il Gigante allena
 //  tutti: vivi, morti e mezzi.
 //  - Tu: tre attrezzi (il sacco, i pesi, la corda), ognuno un piccolo
 //    gioco di riflessi. Ogni allenamento dà esperienza e «forma»; la
@@ -36,7 +36,7 @@ export const ATTREZZI = {
 
 // --- gli abitanti si allenano da soli: la loro forma cresce col tempo, uguale per tutti ---
 export const GYM_NPC_MAX = 36;         // forma massima di un abitante (+12 livelli)
-export const GYM_EPOCH = Date.UTC(2026, 10, 16);   // il giorno che Sansone ha aperto la palestra
+export const GYM_EPOCH = Date.UTC(2026, 10, 16);   // il giorno che Lorenzone ha aperto la palestra
 // quanta forma prende ognuno in un giorno (Marta è una macchina, Lino si distrae)
 export const NPC_RITMO = { tito: 1.0, marta: 1.4, lino: 0.75 };
 // a che ora (dell'isola) ognuno va in palestra: [dalle, alle]

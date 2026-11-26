@@ -1,6 +1,6 @@
 // =====================================================================
-//  LA PALESTRA DI SANSONE nel mondo (solo client)
-//  La sala al secondo piano del mastio, gli attrezzi, Sansone il Gigante;
+//  LA PALESTRA DI LORENZONE nel mondo (solo client)
+//  La sala al secondo piano del mastio, gli attrezzi, Lorenzone il Gigante;
 //  i tre piccoli giochi degli attrezzi (il sacco, i pesi, la corda) e il
 //  pannello con il tuo livello di palestra e la forma degli abitanti
 //  (che si allenano da soli).
@@ -15,8 +15,8 @@ import { ERRANTI } from './shared/erranti.js';
 import { h, toast } from './util.js';
 import { iconSVG } from './icons.js';
 
-const SANSONE = {
-    name: 'Sansone il Gigante',
+const LORENZONE = {
+    name: 'Lorenzone il Gigante',
     app: { sex: 'm', species: 'umano', build: 'robusto', height: 1.22, skin: '#c8906a', eyes: 'fieri', eyeColor: '#3a2a1a', mouth: 'sorriso', hair: 'calvo', hairColor: '#2a1a10', beard: 'folta', topStyle: 'tunica', top: '#8a2a24', bottom: '#2e2a30', shoes: '#2a1a10' },
     lines: [
         'Benvenuto in palestra! Qui si allenano tutti: i vivi, i morti e quelli che non hanno ancora deciso.',
@@ -57,7 +57,7 @@ export class Palestra {
         const sign = canvasTex(1024, 192, (c, w, hh) => {
             c.fillStyle = '#2a1a10'; c.fillRect(0, 0, w, hh); c.strokeStyle = '#c8963a'; c.lineWidth = 8; c.strokeRect(10, 10, w - 20, hh - 20);
             c.fillStyle = '#f2e2b8'; c.textAlign = 'center'; c.textBaseline = 'middle';
-            c.font = 'bold 82px Cinzel, Georgia, serif'; c.fillText('PALESTRA DI SANSONE', w / 2, hh / 2 - 18, w - 70);
+            c.font = 'bold 82px Cinzel, Georgia, serif'; c.fillText('PALESTRA DI LORENZONE', w / 2, hh / 2 - 18, w - 70);
             c.fillStyle = '#c8963a'; c.font = 'italic 36px Georgia, serif'; c.fillText('— vivi, morti e mezzi —', w / 2, hh / 2 + 46, w - 70);
         });
         const signM = new THREE.MeshStandardMaterial({ map: sign, roughness: 0.8 });
@@ -105,14 +105,14 @@ export class Palestra {
             put(new THREE.CylinderGeometry(0.12, 0.15, 0.3, 8), new THREE.MeshStandardMaterial({ color: '#ffd890', emissive: '#ffb347', emissiveIntensity: 1.2 }), x, H - 0.55, 0.6);
             lamp(x, H - 0.75, 0.6, '#ffc870', 10, 11); W.lights[W.lights.length - 1].out = false;
         }
-        // Sansone, in mezzo alla sala, guarda la porta
-        this.san = new Character(SANSONE.app, { torso: 'cotta' }, { name: SANSONE.name, sub: 'Il maestro della palestra', color: '#ffb070' });
+        // Lorenzone, in mezzo alla sala, guarda la porta
+        this.san = new Character(LORENZONE.app, { torso: 'cotta' }, { name: LORENZONE.name, sub: 'Il maestro della palestra', color: '#ffb070' });
         const sx = P.x + 1.4, sz = P.z + 1.4;
         this.san.root.position.set(sx, P.y, sz); this.san.root.rotation.y = -Math.PI / 2;
         app.scene.add(this.san.root);
         W.addCirc(sx, sz, 0.45, P.y - 0.2, P.y + 2.4);
-        // gli attrezzi e Sansone si usano con E
-        W.interactables.push({ id: 'palestra', x: sx, z: sz, y: P.y, r: 2.6, label: 'Parla con Sansone il Gigante' });
+        // gli attrezzi e Lorenzone si usano con E
+        W.interactables.push({ id: 'palestra', x: sx, z: sz, y: P.y, r: 2.6, label: 'Parla con Lorenzone il Gigante' });
         for (const [k, A] of Object.entries(ATTREZZI)) W.interactables.push({ id: 'gym', k, x: P.x + A.at[0], z: P.z + A.at[1] + 1.1, y: P.y, r: 1.7, label: () => `${A.name}: allenati (${this.app.me?.gymLeft ?? GYM_DAILY} rimasti oggi)` });
     }
     update(dt, camPos) {
@@ -133,7 +133,7 @@ export class Palestra {
     async train(k) {
         const app = this.app, A = ATTREZZI[k];
         if (!A || this.game) return;
-        if ((app.me?.gymLeft ?? GYM_DAILY) <= 0) return toast('Per oggi basta: Sansone dice che i muscoli crescono dormendo', { kind: 'bad' });
+        if ((app.me?.gymLeft ?? GYM_DAILY) <= 0) return toast('Per oggi basta: Lorenzone dice che i muscoli crescono dormendo', { kind: 'bad' });
         const r = await app.net.request('gym:start', { a: k });
         if (!r.ok) return toast(r.msg, { kind: 'bad' });
         document.exitPointerLock?.();
@@ -272,18 +272,18 @@ class GymGame {
     }
 }
 
-// --- il pannello di Sansone: il tuo livello, gli abitanti da allenare ---
+// --- il pannello di Lorenzone: il tuo livello, gli abitanti da allenare ---
 export function palestraView(panels) {
     const app = panels.app, me = app.me || {};
-    if (!app.net.connected) return panels.set('fist', 'La Palestra di Sansone', panels.needOnline());
+    if (!app.net.connected) return panels.set('fist', 'La Palestra di Lorenzone', panels.needOnline());
     const G = me.gym || { lv: 0, pts: 0 }, need = gymToNext(G.lv), M = gymMods(G.lv), F = me.npcForma || npcForma();
-    const n = (panels.gymLine = ((panels.gymLine ?? -1) + 1)) % SANSONE.lines.length;
+    const n = (panels.gymLine = ((panels.gymLine ?? -1) + 1)) % LORENZONE.lines.length;
     const bar = (v, max) => h('div', { class: 'gym-bar' }, h('i', { style: { width: `${Math.round(Math.min(1, v / max) * 100)}%` } }));
-    panels.set('fist', 'La Palestra di Sansone', h('div', { class: 'parchment' },
-        h('p', { class: 'npc-say' }, `«${SANSONE.lines[n]}»`),
+    panels.set('fist', 'La Palestra di Lorenzone', h('div', { class: 'parchment' },
+        h('p', { class: 'npc-say' }, `«${LORENZONE.lines[n]}»`),
         h('h3', { class: 'sect', html: iconSVG('fist') }, 'Il tuo allenamento'),
         h('div', { class: 'gym-row' }, h('b', {}, `Livello di palestra ${G.lv} / ${GYM_MAX}`),
-            G.lv < GYM_MAX ? h('span', { class: 'muted small' }, ` · forma ${G.pts} / ${need}`) : h('span', { class: 'muted small' }, ' · il massimo: Sansone ti saluta come un collega')),
+            G.lv < GYM_MAX ? h('span', { class: 'muted small' }, ` · forma ${G.pts} / ${need}`) : h('span', { class: 'muted small' }, ' · il massimo: Lorenzone ti saluta come un collega')),
         G.lv < GYM_MAX ? bar(G.pts, need) : null,
         h('p', { class: 'small' }, G.lv ? `In duello: +${(M.hp * 100).toFixed(1)}% di vita, +${Math.round(M.atk * 100)}% di forza.` : 'Ogni livello di palestra vale in duello un po\' di vita e un po\' di forza in più.'),
         h('p', { class: 'muted small' }, `Allenamenti rimasti oggi: ${me.gymLeft ?? GYM_DAILY} di ${GYM_DAILY}. Gli attrezzi sono nella sala: il sacco, i pesi, la corda (avvicinati e premi E).`),

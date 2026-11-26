@@ -67,7 +67,7 @@ function makeFighter(setup, side) {
     if (pm.hp) st.hpMax = Math.round(st.hpMax * (1 + pm.hp));
     if (pm.meter) st.meterGain *= 1 + pm.meter;
     if (pm.spd) st.spd *= 1 + pm.spd;
-    if (setup.gym) { st.hpMax = Math.round(st.hpMax * (1 + 0.015 * setup.gym)); st.atk *= 1 + 0.01 * setup.gym; }   // la Palestra di Sansone (shared/palestra.js)
+    if (setup.gym) { st.hpMax = Math.round(st.hpMax * (1 + 0.015 * setup.gym)); st.atk *= 1 + 0.01 * setup.gym; }   // la Palestra di Lorenzone (shared/palestra.js)
     if (setup.boss) { st.hpMax = Math.round(st.hpMax * (setup.boss.hp || 1)); st.atk *= setup.boss.atk || 1; }
     // l'arma di riserva: se quella in mano si rompe, si continua con questa (stessa carta, stessi talenti)
     const rv = setup.dur != null ? computeStats({ ...setup, weapon: setup.reserve || RESERVE_WEAPON }) : null;

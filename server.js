@@ -921,7 +921,7 @@ function gymNews() {
     for (const id of npcFighters()) {
         const lv = npcLevel(id);
         if (L[id] == null) { L[id] = lv; changed = true; continue; }
-        if (lv > L[id]) { L[id] = lv; changed = true; io.emit('notify', { text: `${ERRANTI[id].name} si è allenat${id === 'marta' ? 'a' : 'o'} da Sansone: ora è di livello ${lv}`, kind: 'info' }); }
+        if (lv > L[id]) { L[id] = lv; changed = true; io.emit('notify', { text: `${ERRANTI[id].name} si è allenat${id === 'marta' ? 'a' : 'o'} da Lorenzone: ora è di livello ${lv}`, kind: 'info' }); }
     }
     if (changed) store.saveWorld();
 }
@@ -1515,13 +1515,13 @@ io.on('connection', (socket) => {
         reply({ ok: true, coins: P.coins, xp, mats: P.mats, best });
     });
 
-    // --- LA PALESTRA DI SANSONE ---
+    // --- LA PALESTRA DI LORENZONE ---
     const atGym = () => me.pos && inPalestra(me.pos[0], me.pos[1], me.pos[2]);
     on('gym:start', (d, reply) => {
         const p = me.p, c = dayc(p);
         if (!atGym()) return fail(reply, 'La palestra è al secondo piano del mastio, sopra la Stanza Bianca');
         if (!ATTREZZI[d.a]) return fail(reply, 'Questo attrezzo non c\'è');
-        if ((c.gym || 0) >= GYM_DAILY) return fail(reply, 'Per oggi basta: Sansone dice che i muscoli crescono dormendo');
+        if ((c.gym || 0) >= GYM_DAILY) return fail(reply, 'Per oggi basta: Lorenzone dice che i muscoli crescono dormendo');
         me.gymRun = { a: d.a, t: Date.now() };
         reply({ ok: true });
     });
@@ -1529,7 +1529,7 @@ io.on('connection', (socket) => {
         const p = me.p, c = dayc(p), R = me.gymRun;
         if (!R || R.a !== d.a) return fail(reply, 'Prima comincia l\'allenamento');
         me.gymRun = null;
-        if (Date.now() - R.t < GYM_MIN_MS) return fail(reply, 'Troppo in fretta: Sansone non ci crede');
+        if (Date.now() - R.t < GYM_MIN_MS) return fail(reply, 'Troppo in fretta: Lorenzone non ci crede');
         if ((c.gym || 0) >= GYM_DAILY) return fail(reply, 'Per oggi basta');
         c.gym = (c.gym || 0) + 1;
         const { xp, pts } = gymReward(d.score);
