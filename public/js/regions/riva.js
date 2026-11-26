@@ -332,8 +332,11 @@ export function buildRiva(app) {
 
     // =================================================================
     //  IL VILLAGGIO DEI SENZA NOME: cinque case di pietra, porta verso il cippo
+    //  Quattro sono chiuse (le porte sbarrate aspettano chi è partito);
+    //  la quinta, quella di Tobia, è il forno del villaggio e si entra.
     // =================================================================
     const huts = [];
+    let bakeryMouth = null;
     {
         const Wd = 4.2, D = 4.2, Ht = 2.3, T = 0.3, DOOR = 1.2;
         for (const [i, [u, v, yaw]] of HUTS.entries()) {
@@ -344,13 +347,61 @@ export function buildRiva(app) {
             wall(T, Ht, D, -Wd / 2, Ht / 2, 0); wall(T, Ht, D, Wd / 2, Ht / 2, 0);
             wall((Wd - DOOR) / 2, Ht, T, -(Wd + DOOR) / 4, Ht / 2, D / 2); wall((Wd - DOOR) / 2, Ht, T, (Wd + DOOR) / 4, Ht / 2, D / 2);
             wall(DOOR, 0.4, T, 0, Ht - 0.2, D / 2);
+            const bakery = i === 4;
+            if (!bakery) {
+                // la porta chiusa: assi, due traverse, la maniglia di ferro
+                wall(DOOR - 0.04, Ht - 0.42, 0.08, 0, (Ht - 0.4) / 2, D / 2 - 0.02, plank);
+                for (const y of [0.5, 1.45]) wall(DOOR - 0.1, 0.12, 0.05, 0, y, D / 2 + 0.04, wood);
+                add(new THREE.Mesh(geo(new THREE.TorusGeometry(0.06, 0.012, 5, 12)), tin), 0.38, 1.0, D / 2 + 0.08, hg);
+            }
             const roof = add(new THREE.Mesh(geo(new THREE.ConeGeometry(3.6, 1.9, 4, 1)), thatch), 0, Ht + 0.9, 0, hg);
             roof.rotation.y = Math.PI / 4;
             if (i === 1) { roof.rotation.z = 0.09; roof.position.y += 0.12; }   // una ha il tetto un po' storto (di più, attraversava il muro)
-            // dentro: un tavolo, uno sgabello
-            wall(1.0, 0.08, 0.7, 0, 0.75, -1.2, wood);
-            wall(0.08, 0.72, 0.6, -0.45, 0.36, -1.2, wood); wall(0.08, 0.72, 0.6, 0.45, 0.36, -1.2, wood);
-            wall(0.4, 0.45, 0.4, 1.1, 0.22, -0.6, wood);
+            if (bakery) {
+                // IL FORNO DI TOBIA: il forno di mattoni in fondo, il banco col pane, gli scaffali, i sacchi di farina
+                const brick = mat({ color: '#8a4a32', roughness: 0.9, flatShading: true });
+                const crust = mat({ color: '#c88a3e', roughness: 0.7 }), crust2 = mat({ color: '#a8682a', roughness: 0.75 });
+                const sack = mat({ color: '#d8ccb0', roughness: 1, flatShading: true });
+                const tiles = add(new THREE.Mesh(geo(new THREE.PlaneGeometry(Wd - 0.1, D - 0.1)), mat({ color: '#7a5240', roughness: 0.95 })), 0, 0.03, 0, hg);
+                tiles.rotation.x = -Math.PI / 2; tiles.castShadow = false;   // il pavimento di cotto (dentro, il prato della Riva si spegne)
+                wall(1.5, 0.7, 1.1, -1.15, 0.35, -1.45, brick);
+                const dome = add(new THREE.Mesh(geo(new THREE.SphereGeometry(0.7, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2)), brick), -1.15, 0.7, -1.45, hg);
+                dome.scale.set(1, 0.85, 0.75);
+                bakeryMouth = add(new THREE.Mesh(geo(new THREE.CircleGeometry(0.22, 10, 0, Math.PI)), mat({ color: '#1a0f08', emissive: '#ff6a1a', emissiveIntensity: 1.2, roughness: 1 })), -1.15, 0.72, -0.92, hg);
+                wall(0.08, 1.4, 0.08, -1.55, 1.4, -1.6, darkStone);   // la canna fumaria
+                // il banco, con le pagnotte
+                wall(0.7, 0.9, 1.7, 1.45, 0.45, -0.1, wood);
+                wall(0.8, 0.05, 1.8, 1.45, 0.92, -0.1, plank);
+                for (let k = 0; k < 5; k++) {
+                    const l = add(new THREE.Mesh(geo(new THREE.SphereGeometry(0.13, 10, 6)), k % 2 ? crust : crust2), 1.4 + (k % 2) * 0.12, 1.0, -0.8 + k * 0.33, hg);
+                    l.scale.set(1, 0.6, 1.5);
+                }
+                // gli scaffali sul muro di fondo, a destra, pieni di pane
+                for (const y of [0.9, 1.5]) {
+                    wall(1.3, 0.05, 0.35, 0.9, y, -1.88, plank);
+                    for (let k = 0; k < 4; k++) { const l = add(new THREE.Mesh(geo(new THREE.SphereGeometry(0.11, 8, 5)), k % 2 ? crust2 : crust), 0.45 + k * 0.3, y + 0.08, -1.88, hg); l.scale.set(1.4, 0.65, 1); }
+                }
+                // i sacchi di farina vicino alla porta
+                for (const [sx, sz] of [[-1.55, 0.9], [-1.25, 1.35]]) { const s = add(new THREE.Mesh(geo(new THREE.CylinderGeometry(0.2, 0.26, 0.55, 8)), sack), sx, 0.27, sz, hg); s.rotation.y = sx; }
+                const wbx = (lx, lz, w, d, h) => { const [x, z] = local(cx, cz, yaw, lx, lz); box(x, z, w, d, y0 - 0.5, y0 + h, -yaw); };
+                wbx(-1.15, -1.45, 1.5, 1.1, 1.3); wbx(1.45, -0.1, 0.7, 1.7, 1.0); wbx(-1.4, 1.1, 0.7, 0.9, 0.6);
+                // l'insegna: una targa di legno sul muro davanti, a destra della porta (sotto la gronda, non sporge sul passaggio)
+                const sc = document.createElement('canvas'); sc.width = 512; sc.height = 256;
+                const c2 = sc.getContext('2d');
+                c2.fillStyle = '#3a2414'; c2.fillRect(0, 0, 512, 256); c2.strokeStyle = '#d8a050'; c2.lineWidth = 10; c2.strokeRect(12, 12, 488, 232);
+                c2.fillStyle = '#f6e2b0'; c2.textAlign = 'center'; c2.textBaseline = 'middle';
+                c2.font = 'bold 92px Cinzel, Georgia, serif'; c2.fillText('IL FORNO', 256, 104, 460);
+                c2.fillStyle = '#d8a050'; c2.font = 'italic 50px Georgia, serif'; c2.fillText('di Tobia', 256, 186, 460);
+                const stx = new THREE.CanvasTexture(sc); stx.colorSpace = THREE.SRGBColorSpace; stx.anisotropy = 4; disposables.push(stx);
+                wall(1.12, 0.6, 0.04, 1.35, 1.5, D / 2 + T / 2 + 0.02, plank);
+                const sg = add(new THREE.Mesh(geo(new THREE.PlaneGeometry(1.04, 0.52)), mat({ map: stx, roughness: 0.85 })), 1.35, 1.5, D / 2 + T / 2 + 0.045, hg);
+                sg.castShadow = false;
+            } else {
+                // dentro: un tavolo, uno sgabello
+                wall(1.0, 0.08, 0.7, 0, 0.75, -1.2, wood);
+                wall(0.08, 0.72, 0.6, -0.45, 0.36, -1.2, wood); wall(0.08, 0.72, 0.6, 0.45, 0.36, -1.2, wood);
+                wall(0.4, 0.45, 0.4, 1.1, 0.22, -0.6, wood);
+            }
             // la finestra (sul fianco): resta buia finché qualcuno non riprende il suo nome
             const wm = i === 4 ? windowTobia : windowLit;
             const f = add(new THREE.Mesh(geo(new THREE.PlaneGeometry(0.6, 0.5)), wm), Wd / 2 + T / 2 + 0.02, 1.5, 0, hg);
@@ -361,8 +412,8 @@ export function buildRiva(app) {
             const wbox = (lx, lz, w, d) => { const [x, z] = local(cx, cz, yaw, lx, lz); box(x, z, w, d, y0 - 0.5, y0 + Ht + 0.5, -yaw); };
             wbox(0, -D / 2, Wd, T); wbox(-Wd / 2, 0, T, D); wbox(Wd / 2, 0, T, D);
             wbox(-(Wd + DOOR) / 4, D / 2, (Wd - DOOR) / 2, T); wbox((Wd + DOOR) / 4, D / 2, (Wd - DOOR) / 2, T);
-            wbox(0, -1.2, 1.0, 0.7);
-            interiors.push(app.interiors?.add({ name: i === 4 ? 'La casa di Tobia' : 'Una casa vuota', outName: 'Il villaggio dei Senza Nome', x: cx, z: cz, ry: yaw, y: y0, w: Wd, d: D, h: Ht, groups: [hg], camDist: 2.4 }));
+            if (bakery) interiors.push(app.interiors?.add({ name: 'Il Forno di Tobia', outName: 'Il villaggio dei Senza Nome', x: cx, z: cz, ry: yaw, y: y0, w: Wd, d: D, h: Ht, groups: [hg], camDist: 2.4 }));
+            else wbox(0, D / 2, DOOR, T);   // la porta sbarrata
         }
     }
     // il forno di Tobia: una cupola di pietra; dopo il suo nome si riaccende e fuma
@@ -492,7 +543,8 @@ export function buildRiva(app) {
         const held = at >= L2AT(7);
         mapSheet.material.map = held ? mapTex : null; mapSheet.material.color.set(held ? '#ffffff' : '#e8e0c4'); mapSheet.material.needsUpdate = true;
         windowLit.emissiveIntensity = names ? 1.5 : 0;
-        for (const hh of huts) hh.cl.intensity = hh.i === 4 ? (tobia ? 6 : 0) : names ? 4 : 0;
+        for (const hh of huts) hh.cl.intensity = hh.i === 4 ? (tobia ? 7 : 3) : names ? 4 : 0;   // il forno ha sempre un po' di brace
+        if (bakeryMouth) bakeryMouth.material.emissiveIntensity = tobia ? 1.6 : 0.5;
         // la casa 4 è quella di Tobia
         windowTobia.emissiveIntensity = tobia ? 1.6 : 0;
         ovenLight.intensity = tobia ? 8 : 0;

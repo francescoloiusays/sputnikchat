@@ -15,7 +15,7 @@
 
 import { RP, rivaPt, hutInside } from './riva.js';
 const R3 = (k) => rivaPt(...RP[k]);
-const HUT3 = (i) => rivaPt(...hutInside(i));
+const HUT3 = (i) => rivaPt(...hutInside(i, 3.1));   // sulla soglia: le case vuote sono chiuse
 
 // i luoghi che si toccano: «glow» = un bagliore verde li segnala mentre servono
 export const L2_SPOTS = {
@@ -38,9 +38,9 @@ export const L2_SPOTS = {
     cippo_spiaggia: { x: R3('spiaggia')[0], z: R3('spiaggia')[1], glow: 'cippo', name: 'Il cippo della spiaggia', hint: 'sulla spiaggia lunga della Riva, dalla parte del villaggio', label: 'Tocca il cippo della spiaggia', msg: 'Una pietra alta come un bambino, con una freccia incisa che punta verso il faro. È calda, come se qualcuno ci avesse appena appoggiato la mano.' },
     cippo_villaggio: { x: R3('village')[0], z: R3('village')[1], glow: 'cippo', name: 'Il cippo del villaggio', hint: 'in mezzo al villaggio dei Senza Nome', label: 'Tocca il cippo del villaggio', msg: 'Sulla pietra ci sono decine di tacche, una sopra l\'altra. Ognuna, forse, una persona arrivata.' },
     cippo_monte: { x: R3('monte')[0], z: R3('monte')[1], r: 4, glow: 'cippo', name: 'Il cippo del Monte Storto', hint: 'in cima al Monte Storto', label: 'Tocca il cippo della cima', msg: 'Da quassù si vede tutto: la riva, il villaggio, il pozzo che fuma. E lontano, piccolissimo, il faro d\'oro.' },
-    ricordo_nodo: { x: HUT3(0)[0], z: HUT3(0)[1], glow: 'ricordo', name: 'Un nodo da marinaio', hint: 'in una delle case vuote del villaggio', label: 'Prendi il nodo da marinaio', msg: 'Una corda annodata così stretta che non si scioglie più. Profuma di sale e di tabacco.' },
-    ricordo_scarpa: { x: HUT3(2)[0], z: HUT3(2)[1], glow: 'ricordo', name: 'Una scarpa piccola', hint: 'in un\'altra casa vuota del villaggio', label: 'Prendi la scarpa piccola', msg: 'Una scarpa da bambina, con la fibbia rotta e la suola consumata solo da una parte, come chi saltava sempre sullo stesso piede.' },
-    ricordo_pane: { x: HUT3(3)[0], z: HUT3(3)[1], glow: 'ricordo', name: 'Un odore di pane', hint: 'nell\'ultima casa vuota del villaggio', label: 'Raccogli l\'odore di pane', msg: 'Non c\'è niente sul tavolo. Ma l\'aria sopra il tavolo è tiepida, e sa di pane appena sfornato. La chiudi nel pugno.' },
+    ricordo_nodo: { x: HUT3(0)[0], z: HUT3(0)[1], glow: 'ricordo', name: 'Un nodo da marinaio', hint: 'davanti alla porta di una delle case vuote del villaggio', label: 'Prendi il nodo da marinaio', msg: 'Una corda annodata così stretta che non si scioglie più. Profuma di sale e di tabacco.' },
+    ricordo_scarpa: { x: HUT3(2)[0], z: HUT3(2)[1], glow: 'ricordo', name: 'Una scarpa piccola', hint: 'davanti alla porta di un\'altra casa vuota del villaggio', label: 'Prendi la scarpa piccola', msg: 'Una scarpa da bambina, con la fibbia rotta e la suola consumata solo da una parte, come chi saltava sempre sullo stesso piede.' },
+    ricordo_pane: { x: HUT3(3)[0], z: HUT3(3)[1], glow: 'ricordo', name: 'Un odore di pane', hint: 'sulla soglia dell\'ultima casa vuota del villaggio', label: 'Raccogli l\'odore di pane', msg: 'La porta è chiusa, e non c\'è niente sulla soglia. Ma l\'aria davanti alla porta è tiepida, e sa di pane appena sfornato. La chiudi nel pugno.' },
     pozzo: { x: R3('pozzo')[0], z: R3('pozzo')[1], r: 4, night: true, name: 'Il Pozzo dei Nomi', hint: 'ai piedi del Monte Storto, di notte', msg: '' },
 };
 
@@ -184,9 +184,9 @@ export const L2_CHAPTERS = [
         steps: [
             { k: 'talk', who: 'fornaio', t: 'Al villaggio dei Senza Nome: parla con l\'uomo che impasta senza farina',
                 say: ['Buongiorno. O buonasera. Qui non si capisce mai.', 'Come mi chiamo? Lo avevo ieri. Lo tenevo in tasca, come una chiave. Adesso la tasca è bucata.',
-                    'Mi restano tre cose, che ho nascosto nelle case vuote per non perderle: un nodo da marinaio, una scarpa piccola, un odore di pane. Me le riporti? Forse, tutte insieme, fanno un nome.'],
+                    'Mi restano tre cose, che ho lasciato sulle soglie delle case vuote per non perderle: un nodo da marinaio, una scarpa piccola, un odore di pane. Me le riporti? Forse, tutte insieme, fanno un nome.'],
                 btn: 'Te le riporto' },
-            { k: 'find', spots: ['ricordo_nodo', 'ricordo_scarpa', 'ricordo_pane'], t: 'Ritrova nelle case vuote i tre ricordi dell\'uomo senza nome' },
+            { k: 'find', spots: ['ricordo_nodo', 'ricordo_scarpa', 'ricordo_pane'], t: 'Ritrova davanti alle case vuote i tre ricordi dell\'uomo senza nome' },
             { k: 'talk', who: 'fornaio', t: 'Riporta i tre ricordi all\'uomo senza nome',
                 say: ['Il nodo. Lo faceva mio padre, sul molo, per legare le barche. La scarpa era di mia figlia: saltava sempre sullo stesso piede. E il pane lo facevo io, la mattina presto, prima che salisse la nebbia.',
                     'Il mio nome però non c\'è. Era scritto da qualche parte. Lo scriveva un uomo con la barca, quando partivamo, in un libro grosso.'],

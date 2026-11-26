@@ -67,7 +67,10 @@ export class Interiors {
     leave(now) {
         const app = this.app, I = this.cur;
         const done = () => {
-            if (this.saved) for (const o of app.scene.children) o.visible = this.saved.has(o) ? this.saved.get(o) : true;
+            if (this.saved) {
+                for (const [o, v] of this.saved) o.visible = v;
+                for (const o of app.scene.children) if (!this.saved.has(o)) o.visible = true;
+            }
             this.saved = null; this.cur = null; app.interior = null;
             if (this.prevDist) app.cam.wantDist = this.prevDist;
         };
@@ -80,6 +83,15 @@ export class Interiors {
         const I = this.cur, app = this.app;
         if (!I) return;
         const keep = new Set([...(I.groups || []), app.myChar?.root, app.petF?.g].filter(Boolean));
+        // una stanza dentro il gruppo di una regione (la Riva): resta visibile la sua catena di genitori, il resto del gruppo si spegne
+        for (const G of I.groups || []) {
+            let c = G;
+            while (c.parent && c.parent !== app.scene) {
+                const A = c.parent;
+                for (const s of A.children) if (s !== c && !s.isLight && !keep.has(s)) { if (!this.saved.has(s)) this.saved.set(s, s.visible); s.visible = false; }
+                keep.add(A); c = A;
+            }
+        }
         const p = { x: 0, y: 0, z: 0 };
         for (const o of app.scene.children) {
             if (o.isLight || keep.has(o)) continue;
