@@ -26,3 +26,7 @@ test('un sentiero porta dal collo alla locanda', () => {
     assert.ok(pathDistBosco(-70, 16) < 3);
     assert.ok(pathDistBosco(...BP.soglia) < 3);
 });
+test('il collo di terra è dentro il bosco', () => {
+    assert.equal(inBosco(-100, 13), true);
+    assert.ok(boscoMask(-60, 15) > 0.2);
+});

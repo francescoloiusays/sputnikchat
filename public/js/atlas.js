@@ -32,7 +32,7 @@ const ROUTES = [
 ];
 
 const BASE = 2048;                                   // lato della carta disegnata, in pixel
-const { MIN_X, MAX_X, MIN_Z } = WORLD;
+const { MIN_X, MAX_X, MIN_Z, MAX_Z } = WORLD;
 const PPM = BASE / (MAX_X - MIN_X);                  // pixel di carta per metro
 const bx = (x) => (x - MIN_X) * PPM, bz = (z) => (z - MIN_Z) * PPM;
 const INK = '#2b1a0e', PAPER = '#efe2bd', RED = '#8a2416';
@@ -654,7 +654,7 @@ export class Atlas {
         return c;
     }
     washes(g, W) {
-        const N = 360, wc = document.createElement('canvas'); wc.width = wc.height = N;
+        const N = MAX_X - MIN_X, wc = document.createElement('canvas'); wc.width = wc.height = N;
         const wg = wc.getContext('2d'), img = wg.createImageData(N, N), C = WORLD.CASTLE;
         for (let py = 0; py < N; py++) for (let px = 0; px < N; px++) {
             const x = MIN_X + px + 0.5, z = MIN_Z + py + 0.5, t = W.terrainAt(x, z);
@@ -678,7 +678,7 @@ export class Atlas {
     }
     waves(g, W, R) {
         g.save(); g.strokeStyle = '#2f4f50'; g.lineWidth = 1.4; g.globalAlpha = 0.42;
-        for (let z = MIN_Z + 8; z < MIN_Z + 352; z += 13) for (let x = MIN_X + 8; x < MAX_X - 8; x += 15) {
+        for (let z = MIN_Z + 8; z < MAX_Z - 8; z += 13) for (let x = MIN_X + 8; x < MAX_X - 8; x += 15) {
             const px = x + (R() - 0.5) * 9, pz = z + (R() - 0.5) * 7;
             if (W.terrainAt(px, pz) > -3.6 || R() < 0.35) continue;
             const X = bx(px), Y = bz(pz), w = 9 + R() * 6;

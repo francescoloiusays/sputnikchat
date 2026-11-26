@@ -15,6 +15,7 @@ import { addSkyExtras, addSnowCover, SNOW_COVER } from './sky.js';
 import { rivaHeight, rivaShore, nearRiva, RIVA, RP, HUTS, RIVA_PATHS, rivaPt, rivaUV } from './shared/riva.js';
 import { buildBazar, buildBarca, buildStalla } from './bancarelle.js';
 import { terreMask, terreRelief, PADS, TERRE_PATHS, nearTerreBuild, inTerre } from './shared/terre.js';
+import { BOSCO, boscoMask, boscoRelief, BOSCO_PADS, BOSCO_PATHS, nearBoscoBuild, inBosco } from './shared/bosco.js';
 import { buildTerre } from './terre.js';
 import { Relief, tileHeights, roughRock } from './realism.js';
 import { Grass } from './grass.js';
@@ -22,7 +23,9 @@ import { buildWeapon } from './character.js';
 
 // --- LAYOUT (metri) ---
 export const WORLD = {
-    MIN_X: -180, MAX_X: 180, MIN_Z: -200, MAX_Z: 160, SEG: 200,
+    // Libro IV: la mappa si allarga a ovest per il Bosco che Profuma; resta quadrata (480 m), così carte e minimappa non si deformano
+    MIN_X: -300, MAX_X: 180, MIN_Z: -260, MAX_Z: 220, SEG: 266,
+    BOSCO,
     MAIN: { x: 0, z: 20, r: 74 },
     ISLET: { x: 0, z: -104, r: 34 },
     // Libro II: lo scoglio del Faro Spento, a nord-est nella laguna (ci si arriva in barca)
@@ -45,7 +48,7 @@ export const WORLD = {
     MIRROR: { x: 13, z: 2 },
     CEMETERY: { x: -33, z: 40 },
     PATH: [[0, 92], [0, 32], [0, 14], [0, -33]],
-    SIDE_PATHS: [[[0, 14], [-17, 10]], [[0, 14], [17, 10]], [[0, 32], [13, 36]], [[0, 32], [-26, 40]], ...TERRE_PATHS],   // + i sentieri delle Terre Nuove (shared/terre.js)
+    SIDE_PATHS: [[[0, 14], [-17, 10]], [[0, 14], [17, 10]], [[0, 32], [13, 36]], [[0, 32], [-26, 40]], ...TERRE_PATHS, ...BOSCO_PATHS],   // + i sentieri delle Terre Nuove (shared/terre.js)
 };
 
 // il faro e il sentiero dal molo alla porta restano sgombri (niente alberi, rocce o canne)
@@ -103,7 +106,7 @@ function islandMask(x, z) {
     // la secca: lunga e storta, come un banco di sabbia lasciato dalla corrente
     const R = WORLD.RELITTO, rx = x - R.x, rz = z - R.z, ra = Math.atan2(rz, rx);
     const rR = R.r * (1 + 0.28 * Math.cos(2 * (ra - 0.5)) + 0.07 * Math.sin(ra * 5 + 1));
-    return Math.max(1 - Math.hypot(ax, az) / rM, 1 - Math.hypot(bx, bz) / rI, 1 - Math.hypot(fx, fz) / rF, 1 - Math.hypot(rx, rz) / rR, terreMask(x, z));
+    return Math.max(1 - Math.hypot(ax, az) / rM, 1 - Math.hypot(bx, bz) / rI, 1 - Math.hypot(fx, fz) / rF, 1 - Math.hypot(rx, rz) / rR, terreMask(x, z), boscoMask(x, z));
 }
 
 function computeHeight(x, z) {
@@ -112,7 +115,7 @@ function computeHeight(x, z) {
     if (m < -0.15) base = Math.max(-9, -1.6 + (m + 0.15) * 30);
     else base = -1.6 + smooth(-0.15, 0.32, m) * 2.5;
     const hills = (fbm(x * 0.022, z * 0.022) * 0.5 + 0.5) * 4.6 * smooth(0.18, 0.62, m) + fbm(x * 0.09 + 7, z * 0.09) * 0.35 * smooth(0.05, 0.3, m);
-    let h = base + hills + terreRelief(x, z) * smooth(0.05, 0.35, m);   // il colle e lo sperone delle Terre Nuove
+    let h = base + hills + (terreRelief(x, z) + boscoRelief(x, z)) * smooth(0.05, 0.35, m);   // il colle e lo sperone delle Terre Nuove
     // sentieri più dolci
     const pd = pathDist(x, z);
     h = lerp(h, base + 0.35 + hills * 0.25, (1 - smooth(2.5, 7, pd)) * smooth(0.0, 0.25, m));
@@ -128,6 +131,7 @@ function computeHeight(x, z) {
     h = lerp(h, C.base, 1 - smooth(25, 31, dq));
     // gli spiazzi delle Terre Nuove: studio, Tavola Lunga, borgo, cantiere
     for (const P of PADS) h = lerp(h, P.h, 1 - smooth(P.r, P.r + 6, Math.hypot(x - P.at[0], z - P.at[1])));
+    for (const P of BOSCO_PADS) h = lerp(h, P.h, 1 - smooth(P.r, P.r + 7, Math.hypot(x - P.at[0], z - P.at[1])));   // lo spiazzo della locanda
     // spiazzo piano ai piedi del faro
     const F = WORLD.FARO;
     h = lerp(h, F.pad, 1 - smooth(5.5, 10, Math.hypot(x - F.x, z - F.z)));
@@ -593,7 +597,7 @@ export class World {
             m *= smooth(27, 32, Math.pow(Math.pow(Math.abs(x - C.x), 4) + Math.pow(Math.abs(z - C.z), 4), 0.25));
             m *= 1 - smooth(0.4, 0.75, Math.hypot(hx, hz) / this.cw);
             if (Math.abs(x - 30) < 4.6 && Math.abs(z - 52) < 7) m *= 0.12;   // dentro la cappella: lastre, solo qualche ciuffo tra le fughe
-            if (nearTerreBuild(x, z, -1.5)) m *= 0.15;   // dentro le case delle Terre Nuove
+            if (nearTerreBuild(x, z, -1.5) || nearBoscoBuild(x, z, -5)) m *= 0.15;   // dentro le case delle Terre Nuove
             // (la casa e i pavimenti del giardino si tolgono l'erba da soli: Grass.setHoles)
             return m * (0.55 + 0.45 * smooth(-0.35, 0.3, fbm(x * 0.11 + 3, z * 0.11)));   // a chiazze, non un prato all'inglese
         };
@@ -731,7 +735,7 @@ export class World {
             const h = this.terrainAt(x, z);
             if (h < minH) return false;
             if (pathDist(x, z) < 4) return false;
-            if (nearFaroWay(x, z, 1) || nearRelitto(x, z) || nearTerreBuild(x, z, 1, true)) return false;
+            if (nearFaroWay(x, z, 1) || nearRelitto(x, z) || nearTerreBuild(x, z, 1, true) || nearBoscoBuild(x, z, 1)) return false;
             if (Math.hypot(x - WORLD.PLAZA.x, z - WORLD.PLAZA.z) < WORLD.PLAZA.r + 4) return false;
             for (const s of Object.values(WORLD.SHOPS)) if (Math.hypot(x - s.x, z - s.z) < 10) return false;
             if (Math.abs(x - WORLD.CASTLE.x) < 30 && Math.abs(z - WORLD.CASTLE.z) < 30) return false;
@@ -799,7 +803,7 @@ export class World {
             const x = WORLD.MIN_X + r() * (WORLD.MAX_X - WORLD.MIN_X), z = WORLD.MIN_Z + r() * (WORLD.MAX_Z - WORLD.MIN_Z);
             const h = this.terrainAt(x, z);
             if (h < -1.2 || h > 5) continue;
-            if (pathDist(x, z) < 3.5 || this.onBridge(x, z) || Math.abs(x) < 3 && z > 80 || nearFaroWay(x, z, 0.5) || nearRelitto(x, z) || nearTerreBuild(x, z, 0, true)) continue;
+            if (pathDist(x, z) < 3.5 || this.onBridge(x, z) || Math.abs(x) < 3 && z > 80 || nearFaroWay(x, z, 0.5) || nearRelitto(x, z) || nearTerreBuild(x, z, 0, true) || nearBoscoBuild(x, z, 0.5)) continue;
             if (Math.abs(x - WORLD.CASTLE.x) < 22 && Math.abs(z - WORLD.CASTLE.z) < 22) continue;
             if (h > 0.6 && !okSpot(x, z, 0.6)) continue;
             rocks.push([x, h, z, 0.3 + r() * (h < 0.4 ? 1.3 : 0.8)]);
@@ -826,7 +830,7 @@ export class World {
         while (reeds.length < 700 && tries++ < 20000) {
             const x = WORLD.MIN_X + r() * (WORLD.MAX_X - WORLD.MIN_X), z = WORLD.MIN_Z + r() * (WORLD.MAX_Z - WORLD.MIN_Z);
             const h = this.terrainAt(x, z);
-            if (h < -0.9 || h > 0.25 || this.onBridge(x, z) || Math.abs(x) < 4 && z > 84 || nearFaroWay(x, z) || nearRelitto(x, z) || nearTerreBuild(x, z, 0, true)) continue;
+            if (h < -0.9 || h > 0.25 || this.onBridge(x, z) || Math.abs(x) < 4 && z > 84 || nearFaroWay(x, z) || nearRelitto(x, z) || nearTerreBuild(x, z, 0, true) || inBosco(x, z)) continue;
             for (let k = 0; k < 4 && reeds.length < 700; k++) reeds.push([x + (r() - 0.5) * 1.2, h, z + (r() - 0.5) * 1.2, 0.7 + r() * 0.9]);
         }
         const reedG = new THREE.ConeGeometry(0.025, 1.4, 4); reedG.translate(0, 0.7, 0);
@@ -1633,6 +1637,7 @@ export class World {
         if (Math.hypot(x - WORLD.FARO.x, z - WORLD.FARO.z) < WORLD.FARO.r + 10) return 'Il Faro Spento';
         if (Math.hypot(x - WORLD.RELITTO.x, z - WORLD.RELITTO.z) < WORLD.RELITTO.r + 14) return 'La Secca del Relitto';
         if (nearRiva(x, z)) return 'La Riva di Là';
+        if (inBosco(x, z)) return 'Il Bosco che Profuma';
         if (inTerre(x, z)) return 'Le Terre Nuove';
         const C = WORLD.CASTLE;
         if (Math.abs(x - C.x) < C.half && Math.abs(z - C.z) < C.half) {

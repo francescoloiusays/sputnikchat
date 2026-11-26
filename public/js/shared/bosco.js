@@ -9,7 +9,7 @@
 
 export const BOSCO = { x: -200, z: 10, r: 70 };
 // il collo di terra che lo lega all'isola grande (a = lato isola, b = lato bosco)
-export const NECK_B = { a: [-68, 16], b: [-138, 10], w: 12 };
+export const NECK_B = { a: [-46, 17], b: [-138, 10], w: 12 };
 
 // la locanda: la porta (lato +z locale) guarda a est, verso il collo di terra
 export const INN = { x: -206, z: 8, ry: Math.PI / 2, y: 2.4, w: 14, d: 10, h: 4.2 };
@@ -58,7 +58,7 @@ export function boscoRelief(x, z) {
     return poggio + dosso;
 }
 export const pathDistBosco = (x, z) => { let d = Infinity; for (const [a, b] of BOSCO_PATHS) d = Math.min(d, distSeg(x, z, a[0], a[1], b[0], b[1])); return d; };
-export const inBosco = (x, z) => x < -120 && Math.hypot(x - BOSCO.x, z - BOSCO.z) < BOSCO.r * 1.3;
+export const inBosco = (x, z) => x < -74 && boscoMask(x, z) > -0.15;   // anche il collo di terra, dove finisce l'isola grande
 // vicino alla locanda o a un sentiero del bosco: niente alberi, rocce, canne o erba alta
 export function nearBoscoBuild(x, z, m = 0) {
     for (const P of BOSCO_PADS) if (Math.hypot(x - P.at[0], z - P.at[1]) < P.r + m) return true;
